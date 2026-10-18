@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sky Explorer 3D - 3D 비행기 게임</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <!-- 3D WebGL Canvas Container -->
+  <div id="game-container"></div>
+
+  <!-- HUD Overlay -->
+  <div id="hud">
+    <!-- Top Bar: Flight Phase, Passengers, Score, Time -->
+    <div class="hud-top">
+      <div class="hud-card glass flight-status-card">
+        <span class="label">FLIGHT STATUS</span>
+        <span id="flight-phase-display" class="value status-highlight">게이트 탑승 중</span>
+      </div>
+      <div class="hud-card glass">
+        <span class="label">PASSENGERS</span>
+        <span id="pax-display" class="value">285 <small>명</small></span>
+      </div>
+      <div class="hud-card glass">
+        <span class="label">SCORE</span>
+        <span id="score-display" class="value">0</span>
+      </div>
+      <div class="hud-card glass">
+        <span class="label">TIME</span>
+        <span id="time-display" class="value">00:00</span>
+      </div>
+    </div>
+
+    <!-- Target Ring / Runway Direction Indicator -->
+    <div id="target-indicator" class="target-indicator">
+      <div class="arrow"></div>
+      <span id="target-dist" class="dist-text">활주로 36L (150m)</span>
+    </div>
+
+    <!-- Master Warning / GPWS Warning Banner -->
+    <div id="gpws-banner" class="gpws-banner hidden">
+      <div id="gpws-icon" class="gpws-icon">⚠️</div>
+      <div id="gpws-text" class="gpws-text">PULL UP</div>
+      <div id="gpws-subtext" class="gpws-subtext">TERRAIN AHEAD</div>
+    </div>
+
+    <!-- Flight Instruments (Attitude Indicator, Speed, Altitude, VSI, Throttle, Hull) -->
+    <div class="hud-bottom-left glass flight-instruments">
+      <!-- Miniature Primary Flight Display (Attitude Indicator) -->
+      <div class="pfd-attitude-container">
+        <div class="pfd-title">ATTITUDE / HORIZON</div>
+        <div class="attitude-bezel">
+          <div id="attitude-horizon" class="attitude-horizon">
+            <div class="sky-half"></div>
+            <div class="pitch-ladder">
+              <span class="pitch-line p20">+20</span>
+              <span class="pitch-line p10">+10</span>
+              <span class="pitch-line zero">——</span>
+              <span class="pitch-line m10">-10</span>
+              <span class="pitch-line m20">-20</span>
+            </div>
+            <div class="ground-half"></div>
+          </div>
+          <div class="aircraft-symbol">
+            <div class="symbol-wing left"></div>
+            <div class="symbol-dot"></div>
+            <div class="symbol-wing right"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gauge">
+        <div class="gauge-header">
+          <span class="gauge-title">SPEED (V_stall: 160)</span>
+          <span id="speed-status-badge" class="badge-status normal">NORMAL</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div class="stall-zone-stripe"></div>
+          <div id="speed-bar" class="gauge-bar-fill"></div>
+        </div>
+        <span id="speed-val" class="gauge-val">0 km/h (지상 대기)</span>
+      </div>
+      <div class="gauge">
+        <div class="gauge-header">
+          <span class="gauge-title">ALTITUDE & VSI</span>
+          <span id="vsi-val" class="vsi-text">+0.0 m/s</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div id="alt-bar" class="gauge-bar-fill"></div>
+        </div>
+        <span id="alt-val" class="gauge-val">0 m (지상)</span>
+      </div>
+      <div class="gauge">
+        <span class="gauge-title">THROTTLE [키 0~9]</span>
+        <div class="gauge-bar-bg boost-bg">
+          <div id="boost-bar" class="gauge-bar-fill boost-fill"></div>
+        </div>
+        <span id="boost-val" class="gauge-val">0% [IDLE]</span>
+      </div>
+      <div class="gauge">
+        <span class="gauge-title">기체 내구도 (HULL INTEGRITY)</span>
+        <div class="gauge-bar-bg hull-bg">
+          <div id="hull-bar" class="gauge-bar-fill hull-fill"></div>
+        </div>
+        <span id="hull-val" class="gauge-val">100% (정상)</span>
+      </div>
+    </div>
+
+    <!-- Top Right Controls (Plane Switcher, Gear, Camera, Sound) -->
+    <div class="hud-top-right">
+      <button id="gear-btn" class="icon-btn glass" title="랜딩 기어 접기/내리기 (단축키 G)">🛞 <span id="gear-text">기어 DOWN</span></button>
+      <button id="plane-toggle-btn" class="icon-btn glass" title="비행기 기종 변경 (단축키 P)">✈ <span id="plane-name-text">DC-10 삼발기</span></button>
+      <button id="cam-toggle-btn" class="icon-btn glass" title="카메라 시점 변경 (단축키 C)">🎥 <span id="cam-mode-text">3인칭</span></button>
+      <button id="sound-btn" class="icon-btn glass" title="사운드 온/오프">🔊</button>
+      <button id="help-btn" class="icon-btn glass" title="조작 방법">❓</button>
+    </div>
+
+    <!-- Mobile On-Screen Controls (Shown only on touch devices) -->
+    <div id="mobile-controls">
+      <!-- Virtual Joystick for Pitch & Roll -->
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-stick"></div>
+        </div>
+      </div>
+
+      <!-- Action Buttons (Boost & Brake) -->
+      <div class="action-buttons">
+        <button id="btn-boost" class="touch-btn boost-action-btn">
+          <span>BOOST</span>
+          <small>가속</small>
+        </button>
+        <button id="btn-brake" class="touch-btn brake-action-btn">
+          <span>BRAKE</span>
+          <small>감속</small>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Crosshair for Aiming -->
+    <div class="crosshair">
+      <div class="cross-dot"></div>
+      <div class="cross-line left"></div>
+      <div class="cross-line right"></div>
+      <div class="cross-line top"></div>
+      <div class="cross-line bottom"></div>
+    </div>
+
+    <!-- Combo / Message Popup Notification -->
+    <div id="popup-msg" class="popup-msg"></div>
+  </div>
+
+  <!-- Start / Game Over Modal -->
+  <div id="overlay-screen" class="overlay">
+    <div class="modal-card glass">
+      <div class="badge">AIRPORT TAXI, TAKEOFF & LANDING SIMULATOR</div>
+      <h1 id="modal-title">AIRPORT FLIGHT OPERATIONS</h1>
+      <p id="modal-desc">
+        게이트에서 승객을 태우고, 유도로(Taxiway)를 따라 활주로로 이동해 이륙하세요!<br>
+        하늘을 비행하여 목적지 공항에 안전하게 착륙한 뒤 게이트까지 주행을 완료하세요.
+      </p>
+
+      <!-- Airplane Model Selector -->
+      <div class="plane-selector-box">
+        <label class="plane-select-label">조종할 제트 여객기 선택</label>
+        <div class="plane-selector-buttons">
+          <button id="select-dc10" class="plane-choice-btn active" type="button">
+            <strong>DC-10 삼발기</strong>
+            <span>주익 2기 + 꼬리날개 관통 1기 제트엔진</span>
+          </button>
+          <button id="select-md80" class="plane-choice-btn" type="button">
+            <strong>MD-80 쌍발기</strong>
+            <span>후방 동체 2기 제트엔진 + T-Tail</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="controls-guide">
+        <h3>🎮 조작키 및 운항 매뉴얼</h3>
+        <div class="guide-grid">
+          <div class="guide-item">
+            <span class="key">0 ~ 9 키</span>
+            <span>엔진 출력 조절 (0: 정지/아이들 ~ 9: 90%, Shift: 100% 전출력)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">A / D 키</span>
+            <span>방향 조절 (공중: 좌우 롤 및 선회 / 지상: 앞바퀴 조향)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">↓ 아래 화살표</span>
+            <span>기수 상승 (Pitch Up) / 220km/h 이륙 시 당겨서 띄우기</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">↑ 위 화살표</span>
+            <span>기수 하강 (Pitch Down)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">W / S 키</span>
+            <span>W: 고속 가속 / S: 지상 제동 및 착륙 역추진</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">G 키</span>
+            <span>랜딩 기어 접기/내리기 (Gear Up / Down)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">💥 충돌/파손</span>
+            <span>살짝 부딪히면 앞쪽 찌그러짐 / 거친 착륙시 기어 파손 / 고속 추락시 대폭발</span>
+          </div>
+          <div class="guide-item mobile-item">
+            <span class="key">📱 모바일</span>
+            <span>화면 왼쪽 가상 조이스틱 + 오른쪽 가속/감속 버튼</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px;">
+        <button id="takeoff-direct-btn" class="btn-primary" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);">🛫 활주로에서 즉시 이륙하기 (추천)</button>
+        <button id="start-btn" class="btn-secondary">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

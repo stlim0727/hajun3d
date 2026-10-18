@@ -1,0 +1,854 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #0d1b2a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  touch-action: none;
+}
+
+#game-container {
+  width: 100vw;
+  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+/* Glassmorphism Common */
+.glass {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border-radius: 12px;
+  color: #f8fafc;
+}
+
+/* HUD Overlay */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Top Stats Bar */
+.hud-top {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  pointer-events: auto;
+}
+
+.hud-card {
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 90px;
+}
+
+.hud-card .label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.hud-card .value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #38bdf8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hud-card .value small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.flight-status-card {
+  min-width: 140px;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.status-highlight {
+  color: #facc15 !important;
+  text-shadow: 0 0 12px rgba(250, 204, 21, 0.6) !important;
+  font-size: 17px !important;
+}
+
+/* Top Right Buttons */
+.hud-top-right {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.icon-btn {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.icon-btn:hover {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: #38bdf8;
+  transform: translateY(-2px);
+}
+
+.icon-btn:active {
+  transform: scale(0.96);
+}
+
+/* Flight Flight Instruments (Bottom Left) */
+.flight-instruments {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 220px;
+  pointer-events: auto;
+}
+
+/* Miniature Primary Flight Display (Attitude Indicator) */
+.pfd-attitude-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.pfd-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #38bdf8;
+}
+
+.attitude-bezel {
+  width: 96px;
+  height: 68px;
+  background: #0f172a;
+  border: 2px solid #38bdf8;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+.attitude-horizon {
+  width: 160px;
+  height: 160px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin-top: -80px;
+  margin-left: -80px;
+  transform-origin: center center;
+  transition: transform 0.05s linear;
+}
+
+.sky-half {
+  width: 100%;
+  height: 50%;
+  background: linear-gradient(180deg, #0284c7 0%, #38bdf8 100%);
+  border-bottom: 1.5px solid #ffffff;
+}
+
+.ground-half {
+  width: 100%;
+  height: 50%;
+  background: linear-gradient(180deg, #b45309 0%, #78350f 100%);
+}
+
+.pitch-ladder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+  font-size: 8px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.aircraft-symbol {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.symbol-wing {
+  width: 12px;
+  height: 3px;
+  background: #facc15;
+  box-shadow: 0 0 4px #000;
+}
+
+.symbol-dot {
+  width: 5px;
+  height: 5px;
+  background: #facc15;
+  border-radius: 50%;
+  margin: 0 3px;
+  box-shadow: 0 0 4px #000;
+}
+
+.gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.badge-status {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.badge-status.normal {
+  background: rgba(16, 185, 129, 0.25);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.badge-status.stall {
+  background: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  border: 1px solid #ef4444;
+  animation: stall-pulse 0.4s infinite alternate;
+}
+
+@keyframes stall-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); box-shadow: 0 0 8px #ef4444; }
+}
+
+.stall-zone-stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20%;
+  height: 100%;
+  background: repeating-linear-gradient(45deg, #ef4444, #ef4444 3px, #7f1d1d 3px, #7f1d1d 6px);
+  opacity: 0.7;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.vsi-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-val {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: #f1f5f9;
+}
+
+/* Target Ring Compass Indicator */
+.target-indicator {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.target-indicator .arrow {
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 22px solid #facc15;
+  filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.8));
+  transition: transform 0.1s linear;
+}
+
+.target-indicator .dist-text {
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.6);
+  color: #facc15;
+  padding: 3px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* Crosshair in Center */
+.crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.cross-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: #38bdf8;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+.cross-line {
+  position: absolute;
+  background: rgba(56, 189, 248, 0.5);
+}
+
+.cross-line.left {
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.cross-line.right {
+  top: 50%;
+  right: 0;
+  width: 10px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.cross-line.top {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 10px;
+  transform: translateX(-50%);
+}
+
+.cross-line.bottom {
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  height: 10px;
+  transform: translateX(-50%);
+}
+
+/* Master Warning / GPWS Warning Banner */
+.gpws-banner {
+  position: absolute;
+  top: 24%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 12px 36px;
+  background: rgba(220, 38, 38, 0.92);
+  border: 3px solid #fecaca;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.95), inset 0 0 16px rgba(0, 0, 0, 0.6);
+  border-radius: 10px;
+  text-align: center;
+  z-index: 100;
+  pointer-events: none;
+  animation: gpws-flash 0.38s infinite alternate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.gpws-banner.caution {
+  background: rgba(217, 119, 6, 0.92);
+  border-color: #fef08a;
+  box-shadow: 0 0 35px rgba(245, 158, 11, 0.95), inset 0 0 16px rgba(0, 0, 0, 0.6);
+}
+
+.gpws-banner.gear-warn {
+  background: rgba(185, 28, 28, 0.94);
+  border-color: #fca5a5;
+  box-shadow: 0 0 40px rgba(220, 38, 38, 0.95);
+}
+
+.gpws-banner.stall-warn {
+  background: rgba(153, 27, 27, 0.95);
+  border-color: #ef4444;
+  box-shadow: 0 0 45px rgba(239, 68, 68, 1.0);
+}
+
+.gpws-banner.hidden {
+  display: none !important;
+}
+
+.gpws-icon {
+  font-size: 24px;
+}
+
+.gpws-text {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ffffff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+.gpws-subtext {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #fef08a;
+}
+
+@keyframes gpws-flash {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0.35; transform: translate(-50%, -50%) scale(1.05); }
+}
+
+/* Popup Message / Combo */
+.popup-msg {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  font-size: 28px;
+  font-weight: 900;
+  color: #facc15;
+  text-shadow: 0 0 20px rgba(250, 204, 21, 0.8), 0 2px 4px rgba(0,0,0,0.5);
+  pointer-events: none;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.popup-msg.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+/* Mobile Controls */
+#mobile-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 180px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 24px;
+  pointer-events: none;
+}
+
+#joystick-zone {
+  width: 140px;
+  height: 140px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#joystick-base {
+  width: 120px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#joystick-stick {
+  width: 50px;
+  height: 50px;
+  background: radial-gradient(circle, #38bdf8 0%, #0284c7 100%);
+  border: 2px solid #bae6fd;
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  position: absolute;
+  transform: translate(0, 0);
+  transition: transform 0.05s linear;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 16px;
+  pointer-events: auto;
+}
+
+.touch-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.2s ease;
+  outline: none;
+  touch-action: manipulation;
+}
+
+.boost-action-btn {
+  background: radial-gradient(circle, #f97316 0%, #c2410c 100%);
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.5);
+}
+
+.boost-action-btn:active, .boost-action-btn.active {
+  transform: scale(0.92);
+  background: radial-gradient(circle, #fb923c 0%, #ea580c 100%);
+  box-shadow: 0 0 24px rgba(251, 146, 60, 0.8);
+}
+
+.brake-action-btn {
+  background: radial-gradient(circle, #64748b 0%, #334155 100%);
+  box-shadow: 0 0 12px rgba(100, 116, 139, 0.5);
+  width: 65px;
+  height: 65px;
+  font-size: 12px;
+}
+
+.brake-action-btn:active, .brake-action-btn.active {
+  transform: scale(0.92);
+  background: radial-gradient(circle, #94a3b8 0%, #475569 100%);
+}
+
+.touch-btn small {
+  font-size: 10px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+/* Modal Overlay */
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 100;
+  background: rgba(10, 15, 29, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.modal-card {
+  max-width: 500px;
+  width: 100%;
+  padding: 36px 32px;
+  text-align: center;
+  animation: modalIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalIn {
+  from {
+    transform: scale(0.9) translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-card .badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  margin-bottom: 12px;
+}
+
+.modal-card h1 {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #ffffff;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #ffffff 40%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.modal-card p {
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+/* Plane Selector Box */
+.plane-selector-box {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.plane-select-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #38bdf8;
+  margin-bottom: 10px;
+}
+
+.plane-selector-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.plane-choice-btn {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  color: #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.plane-choice-btn:hover {
+  background: rgba(51, 65, 85, 0.9);
+  border-color: #38bdf8;
+}
+
+.plane-choice-btn.active {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.4) 0%, rgba(37, 99, 235, 0.4) 100%);
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.plane-choice-btn strong {
+  font-size: 13px;
+  color: #ffffff;
+}
+
+.plane-choice-btn span {
+  font-size: 10px;
+  color: #94a3b8;
+  line-height: 1.3;
+}
+
+.controls-guide {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 28px;
+  text-align: left;
+}
+
+.controls-guide h3 {
+  font-size: 13px;
+  color: #38bdf8;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.guide-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.guide-item .key {
+  background: #334155;
+  border: 1px solid #475569;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+  min-width: 70px;
+  text-align: center;
+  display: inline-block;
+}
+
+.guide-item.mobile-item {
+  margin-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  padding-top: 8px;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.5);
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.7);
+  background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 13px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #cbd5e1;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.btn-secondary:hover {
+  background: rgba(51, 65, 85, 0.95);
+  color: #ffffff;
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .flight-instruments {
+    bottom: 190px;
+    left: 16px;
+    width: 170px;
+    padding: 12px;
+  }
+  .hud-top {
+    top: 12px;
+    gap: 8px;
+  }
+  .hud-card {
+    padding: 6px 12px;
+    min-width: 65px;
+  }
+  .hud-card .value {
+    font-size: 16px;
+  }
+  .hud-card .label {
+    font-size: 9px;
+  }
+  .modal-card {
+    padding: 24px 20px;
+  }
+  .modal-card h1 {
+    font-size: 26px;
+  }
+}

@@ -1,0 +1,30 @@
+# Flutter & Dart
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+
+# Android
+**/android/.gradle
+**/android/local.properties
+**/android/gradle/
+**/android/.idea
+**/android/*.iml
+**/android/app/*.iml
+
+# iOS
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Generated.xcconfig
+**/ios/Pods/
+**/ios/Runner.xcworkspace/xcuserdata/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.log
