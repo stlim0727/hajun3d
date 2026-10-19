@@ -25,6 +25,21 @@ html, body {
   z-index: 1;
 }
 
+/* High-Speed Radial Motion Vignette Overlay */
+.speed-vignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 5;
+  background: radial-gradient(circle at center, transparent 48%, rgba(56, 189, 248, 0.05) 72%, rgba(2, 132, 199, 0.24) 100%);
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+  mix-blend-mode: screen;
+}
+
 /* Glassmorphism Common */
 .glass {
   background: rgba(15, 23, 42, 0.65);
@@ -682,7 +697,7 @@ html, body {
 
 .plane-selector-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
 }
 
@@ -693,6 +708,8 @@ html, body {
   padding: 10px;
   color: #e2e8f0;
   cursor: pointer;
+  pointer-events: auto !important;
+  touch-action: manipulation;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -781,6 +798,8 @@ html, body {
   border: none;
   border-radius: 10px;
   cursor: pointer;
+  pointer-events: auto !important;
+  touch-action: manipulation;
   box-shadow: 0 4px 20px rgba(37, 99, 235, 0.5);
   transition: all 0.2s ease;
   outline: none;
@@ -807,6 +826,8 @@ html, body {
   border: 1.5px solid rgba(255, 255, 255, 0.18);
   border-radius: 10px;
   cursor: pointer;
+  pointer-events: auto !important;
+  touch-action: manipulation;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
   outline: none;

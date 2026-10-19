@@ -12,6 +12,9 @@
   <!-- 3D WebGL Canvas Container -->
   <div id="game-container"></div>
 
+  <!-- High-Speed Motion Blur / Wind Vignette Overlay -->
+  <div id="speed-vignette" class="speed-vignette"></div>
+
   <!-- HUD Overlay -->
   <div id="hud">
     <!-- Top Bar: Flight Phase, Passengers, Score, Time -->
@@ -167,13 +170,25 @@
       <div class="plane-selector-box">
         <label class="plane-select-label">조종할 제트 여객기 선택</label>
         <div class="plane-selector-buttons">
-          <button id="select-dc10" class="plane-choice-btn active" type="button">
+          <button id="select-dc10" class="plane-choice-btn active" type="button" onclick="window.switchPlane('dc10')">
             <strong>DC-10 삼발기</strong>
-            <span>주익 2기 + 꼬리날개 관통 1기 제트엔진</span>
+            <span>주익 2기 + 꼬리 1기</span>
           </button>
-          <button id="select-md80" class="plane-choice-btn" type="button">
+          <button id="select-md80" class="plane-choice-btn" type="button" onclick="window.switchPlane('md80')">
             <strong>MD-80 쌍발기</strong>
-            <span>후방 동체 2기 제트엔진 + T-Tail</span>
+            <span>후방 2기 + T-Tail</span>
+          </button>
+          <button id="select-a320" class="plane-choice-btn" type="button" onclick="window.switchPlane('a320')">
+            <strong>A320 제트기</strong>
+            <span>샤클렛 + 트윈 터보팬</span>
+          </button>
+          <button id="select-b747" class="plane-choice-btn" type="button" onclick="window.switchPlane('b747')">
+            <strong>B747-400 점보</strong>
+            <span>2층 덱 + 4발 제트엔진</span>
+          </button>
+          <button id="select-concorde" class="plane-choice-btn" type="button" onclick="window.switchPlane('concorde')">
+            <strong>콩코드 초음속기</strong>
+            <span>마하 2.0 델타익 + 드룹노즈</span>
           </button>
         </div>
       </div>
@@ -217,8 +232,8 @@
       </div>
 
       <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px;">
-        <button id="takeoff-direct-btn" class="btn-primary" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);">🛫 활주로에서 즉시 이륙하기 (추천)</button>
-        <button id="start-btn" class="btn-secondary">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
+        <button id="takeoff-direct-btn" class="btn-primary" type="button" onclick="window.startDirectTakeoff()" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);">🛫 활주로에서 즉시 이륙하기 (추천)</button>
+        <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
       </div>
     </div>
   </div>

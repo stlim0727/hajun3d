@@ -28,6 +28,8 @@ class AirplaneGame {
     this.isNoseDented = false;
     this.isGearCollapsed = false;
     this.isBellySliding = false;
+    this.isWaterLanding = false; // 바다 비상착수 수면 활주/부유 상태
+    this.waterBobPhase = 0.0;
 
     // 비행 물리 변수
     this.speed = 0.0;            // 전진 속도 단위
@@ -93,12 +95,23 @@ class AirplaneGame {
     this.turbineWhine = null;
     this.gpwsSirenGain = null;
 
+    // 속도감 및 동적 시각/오디오 효과 (Sense of Speed & Dynamic Camera Effects)
+    this.speedLinesGroup = null;
+    this.speedLineData = [];
+    this.speedLineMaterial = null;
+    this.oceanTexture = null;
+    this.speedVignetteEl = null;
+    this.jetWindSrc = null;
+    this.cockpitWindFilter = null;
+    this.cockpitWindGain = null;
+
     this.initThree();
     this.initLights();
     this.initTerrainAndSky();
     this.initAirports();
     this.initTrees();
     this.buildAircraft(this.currentPlaneType);
+    this.initSpeedEffects();
     this.initAudio();
     this.initUI();
     this.setupEvents();
@@ -160,23 +173,172 @@ class AirplaneGame {
   }
 
   // ----------------------------------------------------------------
-  // 2. 현실적인 자연 지형, 산맥, 해안선, 입체 구름
+  // 2. 현실적인 자연 지형, 산맥, 해안선, 입체 구름 및 해상 참조물
   // ----------------------------------------------------------------
+  createOceanCanvasTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // 베이스 딥 오션 컬러
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 부드러운 해류 그라데이션
+    const grad = ctx.createLinearGradient(0, 0, 512, 512);
+    grad.addColorStop(0, 'rgba(3, 105, 161, 0.45)');
+    grad.addColorStop(0.5, 'rgba(14, 165, 233, 0.4)');
+    grad.addColorStop(1, 'rgba(2, 132, 199, 0.45)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 물결 패턴 & 포말 (Wave foam lines)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+
+    for (let y = 12; y < 512; y += 24) {
+      ctx.beginPath();
+      for (let x = 0; x < 512; x += 32) {
+        const offset = Math.sin((x + y) * 0.06) * 7;
+        ctx.bezierCurveTo(x + 10, y + offset, x + 22, y - offset, x + 32, y + offset * 0.5);
+      }
+      ctx.stroke();
+    }
+
+    // 미세 백색 포말 물보라 점들
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    for (let i = 0; i < 280; i++) {
+      const px = Math.random() * 512;
+      const py = Math.random() * 512;
+      const pr = 0.8 + Math.random() * 1.8;
+      ctx.beginPath();
+      ctx.arc(px, py, pr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(160, 160);
+    return tex;
+  }
+
   initTerrainAndSky() {
-    // 바다 (물결 광택 재질)
-    const seaGeo = new THREE.PlaneGeometry(32000, 32000, 16, 16);
-    const seaMat = new THREE.MeshStandardMaterial({
+    // 1. 바다 (절차적 물결 포말 텍스처 적용 - 비행 시 맹렬히 지나가는 속도감 제공)
+    this.oceanTexture = this.createOceanCanvasTexture();
+    const seaGeo = new THREE.PlaneGeometry(36000, 36000, 16, 16);
+    this.oceanMaterial = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
-      roughness: 0.15,
-      metalness: 0.8
+      map: this.oceanTexture,
+      roughness: 0.18,
+      metalness: 0.35
     });
-    const sea = new THREE.Mesh(seaGeo, seaMat);
+    const sea = new THREE.Mesh(seaGeo, this.oceanMaterial);
     sea.rotation.x = -Math.PI / 2;
     sea.position.y = -2;
     sea.receiveShadow = true;
     this.scene.add(sea);
 
-    // 원경 산맥 (Mountain Ranges in distance)
+    // 2. 해상 섬 군락 (Islands along flight path - 속도 체감 시각적 이정표)
+    this.islandsGroup = new THREE.Group();
+    const sandMat = new THREE.MeshLambertMaterial({ color: 0xfde047 });
+    const grassMat = new THREE.MeshLambertMaterial({ color: 0x15803d, flatShading: true });
+    const palmTrunkMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
+    const palmLeafMat = new THREE.MeshLambertMaterial({ color: 0x16a34a });
+
+    const islandDefs = [
+      { x: -350, z: -1800, r: 85, h: 28 },
+      { x: 380, z: -2300, r: 110, h: 35 },
+      { x: -180, z: -3200, r: 95, h: 30 },
+      { x: 420, z: -3900, r: 120, h: 42 },
+      { x: -500, z: -4600, r: 130, h: 48 },
+    ];
+
+    islandDefs.forEach(isl => {
+      const island = new THREE.Group();
+      // 해변 모래사장
+      const beach = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 1.15, 3.5, 18), sandMat);
+      beach.position.y = 0.5;
+      beach.receiveShadow = true;
+      island.add(beach);
+
+      // 녹색 중앙 언덕
+      const hill = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.75, isl.h, 12), grassMat);
+      hill.position.y = isl.h / 2 + 1;
+      hill.castShadow = true;
+      hill.receiveShadow = true;
+      island.add(hill);
+
+      // 야자수 몇 그루
+      for (let p = 0; p < 5; p++) {
+        const pAng = (p / 5) * Math.PI * 2 + Math.random() * 0.5;
+        const pDist = isl.r * 0.45;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 7, 5), palmTrunkMat);
+        trunk.position.set(Math.cos(pAng) * pDist, 3.5, Math.sin(pAng) * pDist);
+        trunk.rotation.z = (Math.random() - 0.5) * 0.2;
+        island.add(trunk);
+
+        const leaf = new THREE.Mesh(new THREE.ConeGeometry(3.5, 2.2, 5), palmLeafMat);
+        leaf.position.set(Math.cos(pAng) * pDist, 7.5, Math.sin(pAng) * pDist);
+        island.add(leaf);
+      }
+
+      island.position.set(isl.x, 0, isl.z);
+      this.islandsGroup.add(island);
+    });
+    this.scene.add(this.islandsGroup);
+
+    // 3. 해상 대형 화물선 (Cargo Ships with foam wake)
+    this.shipsGroup = new THREE.Group();
+    const shipHullMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.6 });
+    const shipDeckMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
+    const wakeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.65 });
+
+    const shipDefs = [
+      { x: 180, z: -1500, rot: 0.1 },
+      { x: -280, z: -2700, rot: -0.25 },
+      { x: 120, z: -3600, rot: 0.05 },
+    ];
+
+    shipDefs.forEach(s => {
+      const ship = new THREE.Group();
+      // 선체
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(16, 7, 75), shipHullMat);
+      hull.position.y = 2.0;
+      hull.castShadow = true;
+      ship.add(hull);
+
+      // 상부 선교
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(12, 10, 18), shipDeckMat);
+      bridge.position.set(0, 8.5, 22);
+      ship.add(bridge);
+
+      // 컨테이너 화물 박스들
+      const colors = [0x2563eb, 0x16a34a, 0xd97706, 0xdc2626];
+      for (let cz = -26; cz <= 8; cz += 11) {
+        for (let cx of [-4, 4]) {
+          const cMat = new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random() * colors.length)] });
+          const cont = new THREE.Mesh(new THREE.BoxGeometry(6.5, 5.5, 9.5), cMat);
+          cont.position.set(cx, 6.5, cz);
+          ship.add(cont);
+        }
+      }
+
+      // 후방 항적 포말 (Wake Foam trail)
+      const wake = new THREE.Mesh(new THREE.PlaneGeometry(24, 120), wakeMat);
+      wake.rotation.x = -Math.PI / 2;
+      wake.position.set(0, 0.05, 75);
+      ship.add(wake);
+
+      ship.position.set(s.x, 0, s.z);
+      ship.rotation.y = s.rot;
+      this.shipsGroup.add(ship);
+    });
+    this.scene.add(this.shipsGroup);
+
+    // 4. 원경 산맥 (Mountain Ranges in distance)
     this.mountainsGroup = new THREE.Group();
     const mountainMat1 = new THREE.MeshLambertMaterial({ color: 0x2d6a4f, flatShading: true });
     const mountainMat2 = new THREE.MeshLambertMaterial({ color: 0x40916c, flatShading: true });
@@ -205,7 +367,7 @@ class AirplaneGame {
     });
     this.scene.add(this.mountainsGroup);
 
-    // 하늘 3D 뭉게구름 (Fluffy Volumetric Clouds)
+    // 5. 하늘 3D 뭉게구름 & 저고도 스침 구름 (Speed Passing Clouds)
     this.cloudsGroup = new THREE.Group();
     const cloudMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
@@ -230,6 +392,17 @@ class AirplaneGame {
       cloud.position.set(Math.cos(angle) * dist, 320 + Math.random() * 550, Math.sin(angle) * dist - 2000);
       this.cloudsGroup.add(cloud);
     }
+
+    // 비행기 순항 고도 부근 저고도 스침 구름 (Low Altitude Speed Clouds: Y=70~140)
+    for (let c = 0; c < 28; c++) {
+      const lowCloud = new THREE.Mesh(new THREE.DodecahedronGeometry(20 + Math.random() * 24, 1), cloudMat);
+      const cDist = -800 - Math.random() * 3800;
+      const cSide = (Math.random() - 0.5) * 800;
+      lowCloud.position.set(cSide, 85 + Math.random() * 95, cDist);
+      lowCloud.scale.set(1.8, 0.65, 1.4);
+      this.cloudsGroup.add(lowCloud);
+    }
+
     this.scene.add(this.cloudsGroup);
   }
 
@@ -584,7 +757,11 @@ class AirplaneGame {
   // 5. 고해상도 3D 제트 여객기 (DC-10 & MD-80) & 가동 조종면
   // ----------------------------------------------------------------
   buildAircraft(type) {
+    let savedPos = null;
+    let savedQuat = null;
     if (this.planeGroup) {
+      savedPos = this.planeGroup.position.clone();
+      savedQuat = this.planeGroup.quaternion.clone();
       this.scene.remove(this.planeGroup);
     }
 
@@ -743,40 +920,47 @@ class AirplaneGame {
         const wing = new THREE.Group();
         const sign = isLeft ? -1 : 1;
 
-        // 주익 본체 (Swept Tapered Wing)
-        const mainW = new THREE.Mesh(new THREE.BoxGeometry(16, 0.45, 4.8), wingMat);
-        mainW.position.set(sign * 9.5, 0, 0);
-        mainW.rotation.y = -sign * 0.36;
-        mainW.rotation.z = sign * 0.06; // 상반각 (Dihedral)
-        mainW.castShadow = true;
-        wing.add(mainW);
+        // 주익 본체: 내측 와이드 루트 + 외측 테이퍼드 팁 에어포일 듀얼 세그먼트
+        const rootW = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.48, 5.6), wingMat);
+        rootW.position.set(sign * 5.2, 0, 0);
+        rootW.rotation.y = -sign * 0.36;
+        rootW.rotation.z = sign * 0.06;
+        rootW.castShadow = true;
+        wing.add(rootW);
 
-        // 크롬 전연 슬랫 (Chrome Leading Edge)
-        const slat = new THREE.Mesh(new THREE.BoxGeometry(16, 0.48, 0.6), chromeMat);
-        slat.position.set(sign * 9.5, 0, -2.4);
+        const tipW = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.36, 3.8), wingMat);
+        tipW.position.set(sign * 13.2, 0.48, sign * -2.9);
+        tipW.rotation.y = -sign * 0.36;
+        tipW.rotation.z = sign * 0.06;
+        tipW.castShadow = true;
+        wing.add(tipW);
+
+        // 크롬 전연 슬랫
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(17.5, 0.46, 0.55), chromeMat);
+        slat.position.set(sign * 9.5, 0.24, sign * -1.5 - 2.4);
         slat.rotation.y = -sign * 0.36;
         slat.rotation.z = sign * 0.06;
         wing.add(slat);
 
-        // 윙렛 (Wingtip Fence) & 항행등 (Nav Light)
-        const winglet = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 1.8), cheatlineMat);
-        winglet.position.set(sign * 17.5, 1.1, sign * -1.8);
+        // 윙렛 & 항행등
+        const winglet = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.5, 1.8), cheatlineMat);
+        winglet.position.set(sign * 17.6, 1.15, sign * -4.5);
         winglet.rotation.y = -sign * 0.36;
         wing.add(winglet);
 
         const navLight = new THREE.Mesh(
-          new THREE.SphereGeometry(0.25, 8, 8),
-          new THREE.MeshBasicMaterial({ color: isLeft ? 0xef4444 : 0x10b981 }) // 좌현 적색 / 우현 녹색
+          new THREE.SphereGeometry(0.24, 8, 8),
+          new THREE.MeshBasicMaterial({ color: isLeft ? 0xef4444 : 0x10b981 })
         );
-        navLight.position.set(sign * 17.6, 0.2, sign * -1.6);
+        navLight.position.set(sign * 17.8, 0.2, sign * -4.2);
         wing.add(navLight);
 
-        // ★ 가동 에일러론 (Movable Aileron on Trailing Edge)
+        // ★ 가동 에일러론 (주익 외측 후연 힌지에 딱 맞물린 플랩)
         const aileronPivot = new THREE.Group();
-        aileronPivot.position.set(sign * 13.5, 0, sign * 1.5 + 2.2);
+        aileronPivot.position.set(sign * 13.2, 0.48, sign * -1.5 + 1.8);
 
-        const aileronMesh = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.28, 1.4), wingMat);
-        aileronMesh.position.set(0, 0, 0.7);
+        const aileronMesh = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.26, 1.35), wingMat);
+        aileronMesh.position.set(0, 0, 0.65);
         aileronMesh.rotation.y = -sign * 0.36;
         aileronPivot.add(aileronMesh);
         wing.add(aileronPivot);
@@ -861,14 +1045,15 @@ class AirplaneGame {
       const hStabGroup = new THREE.Group();
       hStabGroup.position.set(0, 1.5, 16.5);
 
-      const hStabMesh = new THREE.Mesh(new THREE.BoxGeometry(14.5, 0.38, 3.8), wingMat);
+      const hStabMesh = new THREE.Mesh(new THREE.BoxGeometry(15.2, 0.35, 3.8), wingMat);
       hStabMesh.rotation.y = -0.28;
+      hStabMesh.castShadow = true;
       hStabGroup.add(hStabMesh);
 
       // ★ 가동 승강타 (Movable Elevators)
       const elevatorPivot = new THREE.Group();
       elevatorPivot.position.set(0, 0, 1.8);
-      const elevMesh = new THREE.Mesh(new THREE.BoxGeometry(14.2, 0.28, 1.4), wingMat);
+      const elevMesh = new THREE.Mesh(new THREE.BoxGeometry(14.8, 0.24, 1.4), wingMat);
       elevMesh.position.set(0, 0, 0.7);
       elevatorPivot.add(elevMesh);
       hStabGroup.add(elevatorPivot);
@@ -1019,12 +1204,699 @@ class AirplaneGame {
       makeGear(0, -0.6, -14.2, true);
       makeGear(-4.1, -0.6, 1.5);
       makeGear(4.1, -0.6, 1.5);
+
+    } else if (type === 'a320') {
+      // ------------------------------------------------------------
+      // [A320 최신 여객기] 에어버스 협동체 베스트셀러 트윈 제트
+      // ------------------------------------------------------------
+      // 1. 유선형 원통 동체 (Fuselage: 길이 28, 직경 2.35)
+      const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(2.35, 2.35, 28, 32), fuselageMat);
+      fuselage.rotation.x = Math.PI / 2;
+      fuselage.castShadow = true;
+      this.planeGroup.add(fuselage);
+      this.fuselageMesh = fuselage;
+
+      // 노즈 콘
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(2.35, 24, 20, 0, Math.PI * 2, 0, Math.PI / 2), fuselageMat);
+      nose.rotation.x = -Math.PI / 2;
+      nose.position.set(0, 0, -14);
+      nose.scale.set(1, 0.95, 1.4);
+      nose.castShadow = true;
+      this.planeGroup.add(nose);
+      this.noseMesh = nose;
+
+      // 조종석 윈드실드 (Airbus A320 특유의 4면 곡면 글래스)
+      const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.05, 2.2), glassMat);
+      windshield.position.set(0, 1.45, -13.2);
+      windshield.rotation.x = 0.4;
+      this.planeGroup.add(windshield);
+
+      // 객실 창문 열 (Rows of Cabin Windows)
+      for (let side of [-1, 1]) {
+        for (let w = -10; w <= 10; w += 1.05) {
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.58), cabinWindowMat);
+          win.position.set(side * 2.36, 0.5, w);
+          win.rotation.y = side * Math.PI / 2;
+          this.planeGroup.add(win);
+        }
+      }
+
+      // 에어버스 블루 치트라인
+      const cheatline = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.36, 2.36, 24, 32, 1, true, -Math.PI * 0.45, Math.PI * 0.9),
+        cheatlineMat
+      );
+      cheatline.rotation.x = Math.PI / 2;
+      cheatline.position.set(0, 0, -1);
+      this.planeGroup.add(cheatline);
+
+      // 2. 주익 & 정밀 테이퍼드 에어포일 & 샤클렛(Sharklet) & 가동 에일러론
+      const mainWingsGroup = new THREE.Group();
+
+      const makeA320Wing = (isLeft) => {
+        const wing = new THREE.Group();
+        const sign = isLeft ? -1 : 1;
+
+        // 내측 루트 섹션
+        const rootW = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.48, 5.2), wingMat);
+        rootW.position.set(sign * 5.2, 0, 0);
+        rootW.rotation.y = -sign * 0.38;
+        rootW.rotation.z = sign * 0.07;
+        rootW.castShadow = true;
+        wing.add(rootW);
+
+        // 외측 팁 섹션
+        const tipW = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.35, 3.4), wingMat);
+        tipW.position.set(sign * 12.8, 0.52, sign * -2.8);
+        tipW.rotation.y = -sign * 0.38;
+        tipW.rotation.z = sign * 0.07;
+        tipW.castShadow = true;
+        wing.add(tipW);
+
+        // 크롬 전연 슬랫
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(16.5, 0.44, 0.55), chromeMat);
+        slat.position.set(sign * 9.0, 0.26, sign * -1.5 - 2.2);
+        slat.rotation.y = -sign * 0.38;
+        slat.rotation.z = sign * 0.07;
+        wing.add(slat);
+
+        // ★ A320 시그니처: 수직으로 솟구친 샤클렛 (Sharklet 윙팁 펜스)
+        const sharkletGroup = new THREE.Group();
+        sharkletGroup.position.set(sign * 16.8, 0.85, sign * -4.2);
+
+        const finUpper = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.8, 1.6), cheatlineMat);
+        finUpper.position.set(0, 1.25, 0);
+        finUpper.rotation.x = -0.22;
+        finUpper.rotation.z = sign * 0.12;
+        sharkletGroup.add(finUpper);
+
+        const finLower = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.9), cheatlineMat);
+        finLower.position.set(0, -0.35, 0.1);
+        sharkletGroup.add(finLower);
+
+        const navLight = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 8, 8),
+          new THREE.MeshBasicMaterial({ color: isLeft ? 0xef4444 : 0x10b981 })
+        );
+        navLight.position.set(sign * 0.15, 0.1, -0.6);
+        sharkletGroup.add(navLight);
+        wing.add(sharkletGroup);
+
+        // 가동 에일러론
+        const aileronPivot = new THREE.Group();
+        aileronPivot.position.set(sign * 13.0, 0.52, sign * -1.5 + 1.6);
+        const aileronMesh = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.24, 1.25), wingMat);
+        aileronMesh.position.set(0, 0, 0.62);
+        aileronMesh.rotation.y = -sign * 0.38;
+        aileronPivot.add(aileronMesh);
+        wing.add(aileronPivot);
+
+        if (isLeft) this.controlSurfaces.leftAileron = aileronPivot;
+        else this.controlSurfaces.rightAileron = aileronPivot;
+
+        return wing;
+      };
+
+      mainWingsGroup.add(makeA320Wing(true));
+      mainWingsGroup.add(makeA320Wing(false));
+      mainWingsGroup.position.set(0, -0.5, 0);
+      this.planeGroup.add(mainWingsGroup);
+      this.wingsMesh = mainWingsGroup;
+
+      // 3. 트윈 고바이패스 터보팬 엔진 (CFM56)
+      [-6.8, 6.8].forEach(x => {
+        const eng = new THREE.Group();
+        const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.4, 3.6), fuselageMat);
+        pylon.position.set(0, 1.1, 0.3);
+        pylon.castShadow = true;
+        eng.add(pylon);
+
+        const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.25, 5.4, 24), fuselageMat);
+        nacelle.rotation.x = Math.PI / 2;
+        nacelle.castShadow = true;
+        eng.add(nacelle);
+
+        const lip = new THREE.Mesh(new THREE.TorusGeometry(1.28, 0.14, 12, 24), chromeMat);
+        lip.position.set(0, 0, -2.7);
+        eng.add(lip);
+
+        const intakeDisk = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.15, 1.15, 0.22, 24),
+          new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9, metalness: 0.2 })
+        );
+        intakeDisk.rotation.x = Math.PI / 2;
+        intakeDisk.position.set(0, 0, -2.4);
+        eng.add(intakeDisk);
+
+        const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.85, 14), chromeMat);
+        spinner.rotation.x = -Math.PI / 2;
+        spinner.position.set(0, 0, -2.35);
+        eng.add(spinner);
+
+        const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.2, 14), chromeMat);
+        exhaust.rotation.x = Math.PI / 2;
+        exhaust.position.set(0, 0, 3.0);
+        eng.add(exhaust);
+
+        eng.position.set(x, -2.0, 1.2);
+        this.planeGroup.add(eng);
+        this.engineExhaustPoints.push(new THREE.Vector3(x, -2.0, 4.6));
+      });
+
+      // 4. 수직 꼬리날개 & 가동 방향타
+      const finGroup = new THREE.Group();
+      const finMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 8.2, 5.4), fuselageMat);
+      finMesh.position.set(0, 5.6, 12.8);
+      finMesh.rotation.x = -0.34;
+      finMesh.castShadow = true;
+      finGroup.add(finMesh);
+
+      const rudderPivot = new THREE.Group();
+      rudderPivot.position.set(0, 5.6, 15.4);
+      const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 7.6, 1.8), cheatlineMat);
+      rudderMesh.position.set(0, 0, 0.9);
+      rudderMesh.rotation.x = -0.34;
+      rudderPivot.add(rudderMesh);
+      finGroup.add(rudderPivot);
+      this.controlSurfaces.rudder = rudderPivot;
+      this.planeGroup.add(finGroup);
+
+      // 5. 수평 꼬리날개 & 가동 승강타
+      const hStabGroup = new THREE.Group();
+      hStabGroup.position.set(0, 1.4, 14.5);
+      const hStab = new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.35, 3.6), wingMat);
+      hStab.rotation.y = -0.28;
+      hStab.castShadow = true;
+      hStabGroup.add(hStab);
+
+      const elevatorPivot = new THREE.Group();
+      elevatorPivot.position.set(0, 0, 1.7);
+      const elevMesh = new THREE.Mesh(new THREE.BoxGeometry(13.2, 0.25, 1.3), wingMat);
+      elevMesh.position.set(0, 0, 0.65);
+      elevatorPivot.add(elevMesh);
+      hStabGroup.add(elevatorPivot);
+      this.controlSurfaces.leftElevator = elevatorPivot;
+      this.controlSurfaces.rightElevator = elevatorPivot;
+
+      this.planeGroup.add(hStabGroup);
+
+      // 랜딩기어
+      makeGear(0, -0.6, -12.5, true);
+      makeGear(-4.8, -0.6, 2.0);
+      makeGear(4.8, -0.6, 2.0);
+
+    } else if (type === 'b747') {
+      // ------------------------------------------------------------
+      // [B747-400 점보기] 하늘의 여왕 퀸 오브 더 스카이 (4발 대형 여객기)
+      // ------------------------------------------------------------
+      // 1. 거대한 와이드바디 동체 (직경 3.4, 전장 36)
+      const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 36, 32), fuselageMat);
+      fuselage.rotation.x = Math.PI / 2;
+      fuselage.castShadow = true;
+      this.planeGroup.add(fuselage);
+      this.fuselageMesh = fuselage;
+
+      // 노즈 콘
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(3.4, 24, 20, 0, Math.PI * 2, 0, Math.PI / 2), fuselageMat);
+      nose.rotation.x = -Math.PI / 2;
+      nose.position.set(0, 0, -18);
+      nose.scale.set(1, 0.96, 1.45);
+      nose.castShadow = true;
+      this.planeGroup.add(nose);
+      this.noseMesh = nose;
+
+      // ★ B747 시그니처: 2층 어퍼덱 험프 (Upper Deck Hump)
+      const hump = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.4, 16, 24, 1, false, 0, Math.PI), fuselageMat);
+      hump.rotation.x = Math.PI / 2;
+      hump.rotation.z = Math.PI;
+      hump.position.set(0, 1.35, -9.5);
+      hump.scale.set(0.95, 1.0, 1.0);
+      hump.castShadow = true;
+      this.planeGroup.add(hump);
+
+      // 2층 콕핏 윈드실드
+      const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.25, 2.4), glassMat);
+      windshield.position.set(0, 3.4, -16.2);
+      windshield.rotation.x = 0.42;
+      this.planeGroup.add(windshield);
+
+      // 1층 및 2층 객실 창문 열
+      for (let side of [-1, 1]) {
+        // 1층 메인덱 창문
+        for (let w = -14; w <= 14; w += 1.1) {
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.65), cabinWindowMat);
+          win.position.set(side * 3.42, 0.6, w);
+          win.rotation.y = side * Math.PI / 2;
+          this.planeGroup.add(win);
+        }
+        // 2층 어퍼덱 창문
+        for (let w = -14; w <= -4; w += 1.1) {
+          const win2 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.6), cabinWindowMat);
+          win2.position.set(side * 3.0, 2.8, w);
+          win2.rotation.y = side * Math.PI / 2;
+          this.planeGroup.add(win2);
+        }
+      }
+
+      // 점보 블루 치트라인
+      const cheatline = new THREE.Mesh(
+        new THREE.CylinderGeometry(3.42, 3.42, 30, 32, 1, true, -Math.PI * 0.42, Math.PI * 0.84),
+        cheatlineMat
+      );
+      cheatline.rotation.x = Math.PI / 2;
+      cheatline.position.set(0, 0, -1);
+      this.planeGroup.add(cheatline);
+
+      // 2. 거대한 주익 (날개폭 38, 37.5도 후퇴익) & 윙렛 & 에일러론
+      const mainWingsGroup = new THREE.Group();
+
+      const makeB747Wing = (isLeft) => {
+        const wing = new THREE.Group();
+        const sign = isLeft ? -1 : 1;
+
+        // 거대한 내측 루트
+        const rootW = new THREE.Mesh(new THREE.BoxGeometry(11.0, 0.65, 7.5), wingMat);
+        rootW.position.set(sign * 6.5, 0, 0);
+        rootW.rotation.y = -sign * 0.48;
+        rootW.rotation.z = sign * 0.08;
+        rootW.castShadow = true;
+        wing.add(rootW);
+
+        // 외측 테이퍼드 팁
+        const tipW = new THREE.Mesh(new THREE.BoxGeometry(11.5, 0.42, 4.5), wingMat);
+        tipW.position.set(sign * 16.5, 0.8, sign * -4.8);
+        tipW.rotation.y = -sign * 0.48;
+        tipW.rotation.z = sign * 0.08;
+        tipW.castShadow = true;
+        wing.add(tipW);
+
+        // 크롬 전연 슬랫
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(22.0, 0.55, 0.7), chromeMat);
+        slat.position.set(sign * 12.0, 0.45, sign * -2.4 - 3.2);
+        slat.rotation.y = -sign * 0.48;
+        slat.rotation.z = sign * 0.08;
+        wing.add(slat);
+
+        // 대형 윙렛 (B747-400 Winglet)
+        const winglet = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.4, 2.2), cheatlineMat);
+        winglet.position.set(sign * 21.8, 2.1, sign * -7.5);
+        winglet.rotation.y = -sign * 0.48;
+        winglet.rotation.z = -sign * 0.15;
+        wing.add(winglet);
+
+        const navLight = new THREE.Mesh(
+          new THREE.SphereGeometry(0.26, 8, 8),
+          new THREE.MeshBasicMaterial({ color: isLeft ? 0xef4444 : 0x10b981 })
+        );
+        navLight.position.set(sign * 22.0, 0.5, sign * -7.2);
+        wing.add(navLight);
+
+        // 가동 에일러론
+        const aileronPivot = new THREE.Group();
+        aileronPivot.position.set(sign * 16.8, 0.8, sign * -2.6 + 2.2);
+        const aileronMesh = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.32, 1.6), wingMat);
+        aileronMesh.position.set(0, 0, 0.8);
+        aileronMesh.rotation.y = -sign * 0.48;
+        aileronPivot.add(aileronMesh);
+        wing.add(aileronPivot);
+
+        if (isLeft) this.controlSurfaces.leftAileron = aileronPivot;
+        else this.controlSurfaces.rightAileron = aileronPivot;
+
+        return wing;
+      };
+
+      mainWingsGroup.add(makeB747Wing(true));
+      mainWingsGroup.add(makeB747Wing(false));
+      mainWingsGroup.position.set(0, -0.6, 0);
+      this.planeGroup.add(mainWingsGroup);
+      this.wingsMesh = mainWingsGroup;
+
+      // 3. 4발 대형 제트 터보팬 엔진 (CF6-80: 좌우 각각 2기씩 총 4기)
+      [-14.5, -8.2, 8.2, 14.5].forEach((x, idx) => {
+        const eng = new THREE.Group();
+        const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.8, 4.2), fuselageMat);
+        pylon.position.set(0, 1.3, 0.4);
+        pylon.castShadow = true;
+        eng.add(pylon);
+
+        const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.38, 6.0, 24), fuselageMat);
+        nacelle.rotation.x = Math.PI / 2;
+        nacelle.castShadow = true;
+        eng.add(nacelle);
+
+        const lip = new THREE.Mesh(new THREE.TorusGeometry(1.42, 0.16, 12, 24), chromeMat);
+        lip.position.set(0, 0, -3.0);
+        eng.add(lip);
+
+        const intakeDisk = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.28, 1.28, 0.25, 24),
+          new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9, metalness: 0.2 })
+        );
+        intakeDisk.rotation.x = Math.PI / 2;
+        intakeDisk.position.set(0, 0, -2.6);
+        eng.add(intakeDisk);
+
+        const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.95, 16), chromeMat);
+        spinner.rotation.x = -Math.PI / 2;
+        spinner.position.set(0, 0, -2.55);
+        eng.add(spinner);
+
+        const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.72, 1.5, 14), chromeMat);
+        exhaust.rotation.x = Math.PI / 2;
+        exhaust.position.set(0, 0, 3.4);
+        eng.add(exhaust);
+
+        const zOff = (Math.abs(x) > 10 ? -2.2 : 0.8);
+        const yOff = (Math.abs(x) > 10 ? -1.8 : -2.4);
+        eng.position.set(x, yOff, zOff);
+        this.planeGroup.add(eng);
+        this.engineExhaustPoints.push(new THREE.Vector3(x, yOff, zOff + 4.2));
+      });
+
+      // 4. 웅장한 수직 꼬리날개 & 가동 방향타
+      const finGroup = new THREE.Group();
+      const finMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 10.5, 6.8), fuselageMat);
+      finMesh.position.set(0, 8.2, 16.5);
+      finMesh.rotation.x = -0.38;
+      finMesh.castShadow = true;
+      finGroup.add(finMesh);
+
+      const rudderPivot = new THREE.Group();
+      rudderPivot.position.set(0, 8.2, 19.8);
+      const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 9.8, 2.2), cheatlineMat);
+      rudderMesh.position.set(0, 0, 1.1);
+      rudderMesh.rotation.x = -0.38;
+      rudderPivot.add(rudderMesh);
+      finGroup.add(rudderPivot);
+      this.controlSurfaces.rudder = rudderPivot;
+      this.planeGroup.add(finGroup);
+
+      // 5. 거대한 수평미익 & 가동 승강타
+      const hStabGroup = new THREE.Group();
+      hStabGroup.position.set(0, 2.2, 18.5);
+      const hStab = new THREE.Mesh(new THREE.BoxGeometry(18.5, 0.42, 4.8), wingMat);
+      hStab.rotation.y = -0.32;
+      hStab.castShadow = true;
+      hStabGroup.add(hStab);
+
+      const elevatorPivot = new THREE.Group();
+      elevatorPivot.position.set(0, 0, 2.2);
+      const elevMesh = new THREE.Mesh(new THREE.BoxGeometry(18.0, 0.3, 1.6), wingMat);
+      elevMesh.position.set(0, 0, 0.8);
+      elevatorPivot.add(elevMesh);
+      hStabGroup.add(elevatorPivot);
+      this.controlSurfaces.leftElevator = elevatorPivot;
+      this.controlSurfaces.rightElevator = elevatorPivot;
+
+      this.planeGroup.add(hStabGroup);
+
+      // 4열 메인 랜딩기어
+      makeGear(0, -0.6, -15.5, true);
+      makeGear(-5.2, -0.6, 2.2);
+      makeGear(5.2, -0.6, 2.2);
+
+    } else if (type === 'concorde') {
+      // ------------------------------------------------------------
+      // [콩코드] 마하 2.0 초음속 여객기 (Supersonic Airliner)
+      // ------------------------------------------------------------
+      // 1. 슬림하고 긴 초음속 원통 동체 (직경 1.8, 전장 38)
+      const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 38, 32), fuselageMat);
+      fuselage.rotation.x = Math.PI / 2;
+      fuselage.castShadow = true;
+      this.planeGroup.add(fuselage);
+      this.fuselageMesh = fuselage;
+
+      // ★ 콩코드 시그니처: 드룹 노즈 (Drooping Supersonic Needle Nose)
+      const droopNoseGroup = new THREE.Group();
+      droopNoseGroup.position.set(0, 0, -19);
+      const needleNose = new THREE.Mesh(new THREE.ConeGeometry(1.8, 9.5, 24), fuselageMat);
+      needleNose.rotation.x = -Math.PI / 2 + 0.12; // 드룹 노즈 꺾임 각도
+      needleNose.position.set(0, -0.5, -4.5);
+      needleNose.castShadow = true;
+      droopNoseGroup.add(needleNose);
+
+      // 초음속 바이저 윈드실드
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.85, 2.4), glassMat);
+      visor.position.set(0, 0.45, -2.5);
+      visor.rotation.x = 0.55;
+      droopNoseGroup.add(visor);
+
+      this.planeGroup.add(droopNoseGroup);
+      this.noseMesh = needleNose;
+
+      // 초음속 핀스트라이프 치트라인
+      const cheatline = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.81, 1.81, 32, 32, 1, true, -Math.PI * 0.45, Math.PI * 0.9),
+        cheatlineMat
+      );
+      cheatline.rotation.x = Math.PI / 2;
+      cheatline.position.set(0, 0, 1);
+      this.planeGroup.add(cheatline);
+
+      // 초음속 객실 창문 열 (초음속 고압축 소형 창문)
+      for (let side of [-1, 1]) {
+        for (let w = -12; w <= 12; w += 1.0) {
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.45), cabinWindowMat);
+          win.position.set(side * 1.82, 0.35, w);
+          win.rotation.y = side * Math.PI / 2;
+          this.planeGroup.add(win);
+        }
+      }
+
+      // 2. 전설적인 오기브 델타익 (Ogive Slender Delta Wing) & 가동 엘레본 (Elevons)
+      const deltaWingGroup = new THREE.Group();
+
+      [-1, 1].forEach(sign => {
+        // 복합 델타익 형상 (3단계 슬렌더 델타 메쉬)
+        const d1 = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.38, 22), wingMat);
+        d1.position.set(sign * 4.2, -0.3, 3);
+        d1.rotation.y = -sign * 0.52;
+        d1.castShadow = true;
+        deltaWingGroup.add(d1);
+
+        const d2 = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.28, 14), wingMat);
+        d2.position.set(sign * 8.6, -0.25, 7.5);
+        d2.rotation.y = -sign * 0.65;
+        d2.castShadow = true;
+        deltaWingGroup.add(d2);
+
+        // 항행등
+        const navLight = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 8, 8),
+          new THREE.MeshBasicMaterial({ color: sign < 0 ? 0xef4444 : 0x10b981 })
+        );
+        navLight.position.set(sign * 12.8, -0.1, 12.5);
+        deltaWingGroup.add(navLight);
+
+        // ★ 가동 엘레본 (Elevons: 에일러론 + 승강타 통합 조종면)
+        const elevonPivot = new THREE.Group();
+        elevonPivot.position.set(sign * 7.5, -0.25, 14.5);
+        const elevonMesh = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.22, 1.8), wingMat);
+        elevonMesh.position.set(0, 0, 0.9);
+        elevonPivot.add(elevonMesh);
+        deltaWingGroup.add(elevonPivot);
+
+        if (sign < 0) this.controlSurfaces.leftAileron = elevonPivot;
+        else this.controlSurfaces.rightAileron = elevonPivot;
+      });
+
+      this.planeGroup.add(deltaWingGroup);
+      this.wingsMesh = deltaWingGroup;
+
+      // 3. 듀얼 사각 램젯 엔진 박스 2기 (날개 하부 올림푸스 4발 엔진 & 애프터버너)
+      [-4.2, 4.2].forEach(sideX => {
+        const engBox = new THREE.Group();
+        // 사각형 초음속 흡입구 나셀 박스
+        const box = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.8, 9.5), fuselageMat);
+        box.position.set(0, -0.9, 0);
+        box.castShadow = true;
+        engBox.add(box);
+
+        // 2개 트윈 애프터버너 배기 노즐
+        [-0.9, 0.9].forEach(ex => {
+          const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.82, 1.4, 16), chromeMat);
+          nozzle.rotation.x = Math.PI / 2;
+          nozzle.position.set(ex, -0.9, 5.2);
+          engBox.add(nozzle);
+
+          // 애프터버너 불꽃 코어 링
+          const flameRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.65, 0.08, 8, 16),
+            new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+          );
+          flameRing.position.set(ex, -0.9, 5.8);
+          engBox.add(flameRing);
+
+          this.engineExhaustPoints.push(new THREE.Vector3(sideX + ex, -1.8, 14.5));
+        });
+
+        engBox.position.set(sideX, -0.5, 9.0);
+        this.planeGroup.add(engBox);
+      });
+
+      // 4. 초음속 수직 델타핀 & 방향타
+      const finGroup = new THREE.Group();
+      const finMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8.8, 7.5), fuselageMat);
+      finMesh.position.set(0, 5.5, 14.5);
+      finMesh.rotation.x = -0.55;
+      finMesh.castShadow = true;
+      finGroup.add(finMesh);
+
+      const rudderPivot = new THREE.Group();
+      rudderPivot.position.set(0, 5.5, 18.2);
+      const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 8.2, 1.8), cheatlineMat);
+      rudderMesh.position.set(0, 0, 0.9);
+      rudderMesh.rotation.x = -0.55;
+      rudderPivot.add(rudderMesh);
+      finGroup.add(rudderPivot);
+      this.controlSurfaces.rudder = rudderPivot;
+      this.planeGroup.add(finGroup);
+
+      // 랜딩기어
+      makeGear(0, -0.6, -13.5, true);
+      makeGear(-4.2, -0.6, 4.5);
+      makeGear(4.2, -0.6, 4.5);
     }
 
-    // 기본 위치 (초기엔 활주로 36L 정렬)
-    this.planeGroup.position.set(120, this.groundY, 800);
-    this.planeGroup.rotation.set(0, 0, 0);
+    if (savedPos && savedQuat) {
+      this.planeGroup.position.copy(savedPos);
+      this.planeGroup.quaternion.copy(savedQuat);
+    } else {
+      // 기본 위치 (초기엔 활주로 36L 정렬)
+      this.planeGroup.position.set(120, this.groundY, 800);
+      this.planeGroup.rotation.set(0, 0, 0);
+    }
     this.scene.add(this.planeGroup);
+  }
+
+  // ----------------------------------------------------------------
+  // 속도감 시각 효과 (High-Speed Streamlines & Wingtip Trails)
+  // ----------------------------------------------------------------
+  initSpeedEffects() {
+    // 1. 고속 공기 기류 스트림 라인 (3D Speed Lines)
+    const lineCount = 180;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(lineCount * 6); // 2 vertices per line (x,y,z, x,y,z)
+
+    this.speedLineData = [];
+    for (let i = 0; i < lineCount; i++) {
+      const radius = 6.0 + Math.random() * 32.0;
+      const angle = Math.random() * Math.PI * 2;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.65 + 1.5;
+      const z = -45.0 + Math.random() * 90.0;
+      const length = 12.0 + Math.random() * 22.0;
+      const speedMult = 1.0 + Math.random() * 0.8;
+
+      this.speedLineData.push({ x, y, z, length, speedMult });
+
+      const idx = i * 6;
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+      positions[idx + 3] = x;
+      positions[idx + 4] = y;
+      positions[idx + 5] = z - length;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    this.speedLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xbae6fd,
+      transparent: true,
+      opacity: 0.0,
+      blending: THREE.AdditiveBlending,
+      linewidth: 1.5
+    });
+
+    this.speedLinesGroup = new THREE.LineSegments(geometry, this.speedLineMaterial);
+    this.speedLinesGroup.frustumCulled = false;
+    this.scene.add(this.speedLinesGroup);
+
+    this.speedVignetteEl = document.getElementById('speed-vignette');
+  }
+
+  updateSpeedEffects(dt, currentKmh) {
+    if (!this.speedLinesGroup || !this.speedLineMaterial) return;
+
+    // 시속 240 km/h 이상부터 스트림 라인 점진 등장, 800 km/h에서 최고조
+    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 220) / 580)); // 0.0 ~ 1.0
+
+    const targetOpacity = speedRatio > 0.04 ? (0.15 + speedRatio * 0.68) : 0.0;
+    this.speedLineMaterial.opacity = THREE.MathUtils.lerp(this.speedLineMaterial.opacity, targetOpacity, 0.1);
+
+    // 스피드 라인 위치 및 회전을 기체 중심으로 추종
+    this.speedLinesGroup.position.copy(this.planeGroup.position);
+    this.speedLinesGroup.quaternion.copy(this.planeGroup.quaternion);
+
+    if (this.speedLineMaterial.opacity > 0.01) {
+      const posAttr = this.speedLinesGroup.geometry.attributes.position;
+      const posArr = posAttr.array;
+      const moveSpeed = (28.0 + speedRatio * 110.0) * dt * 60;
+
+      for (let i = 0; i < this.speedLineData.length; i++) {
+        const item = this.speedLineData[i];
+        item.z += moveSpeed * item.speedMult;
+        if (item.z > 50) {
+          item.z = -50 - Math.random() * 20;
+          const radius = 6.0 + Math.random() * 32.0;
+          const angle = Math.random() * Math.PI * 2;
+          item.x = Math.cos(angle) * radius;
+          item.y = Math.sin(angle) * radius * 0.65 + 1.5;
+          item.length = 12.0 + Math.random() * 22.0;
+        }
+
+        const idx = i * 6;
+        posArr[idx] = item.x;
+        posArr[idx + 1] = item.y;
+        posArr[idx + 2] = item.z;
+        posArr[idx + 3] = item.x;
+        posArr[idx + 4] = item.y;
+        posArr[idx + 5] = item.z - item.length;
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    // 2. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
+    if (!this.isOnGround && (currentKmh > 520 || (currentKmh > 320 && Math.abs(this.roll) > 0.35))) {
+      const wingSpan = this.currentPlaneType === 'dc10' ? 24.5 : 17.5;
+      [-wingSpan, wingSpan].forEach(sideX => {
+        const tipPos = new THREE.Vector3(sideX, 0.2, 3.5).applyQuaternion(this.planeGroup.quaternion).add(this.planeGroup.position);
+        this.createVaporParticle(tipPos, currentKmh);
+      });
+    }
+
+    // 3. 화면 테두리 스피드 비네트 효과
+    if (this.speedVignetteEl) {
+      if (currentKmh > 420) {
+        const vigOpacity = Math.min(0.85, (currentKmh - 420) / 400);
+        this.speedVignetteEl.style.opacity = vigOpacity.toFixed(2);
+      } else {
+        this.speedVignetteEl.style.opacity = '0';
+      }
+    }
+
+    // 4. 바다 텍스처 흘림 애니메이션
+    if (this.oceanTexture) {
+      this.oceanTexture.offset.y -= (this.speed * 0.008) * dt * 60;
+    }
+  }
+
+  createVaporParticle(pos, currentKmh) {
+    const geo = new THREE.PlaneGeometry(1.2, 4.5);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: Math.min(0.65, (currentKmh - 380) / 450),
+      side: THREE.DoubleSide
+    });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    p.quaternion.copy(this.planeGroup.quaternion);
+    p.life = 0.8;
+    this.scene.add(p);
+    this.particles.push(p);
   }
 
   // ----------------------------------------------------------------
@@ -1097,17 +1969,38 @@ class AirplaneGame {
     this.jetRumble.start();
     this.rumbleGainNode = rumbleGain;
 
-    // 3. 은은한 터보팬 스풀링 고음 (자극적인 삐- 소리를 없애고 미세한 회전음만 전달)
+    // 3. 은은한 터보팬 스풀링 고음
     this.turbineWhine = this.audioCtx.createOscillator();
     this.turbineWhine.type = 'sine';
     this.turbineWhine.frequency.setValueAtTime(260, this.audioCtx.currentTime);
 
     const turbineGain = this.audioCtx.createGain();
-    turbineGain.gain.setValueAtTime(0.012, this.audioCtx.currentTime); // 매우 은은하게
+    turbineGain.gain.setValueAtTime(0.012, this.audioCtx.currentTime);
     this.turbineWhine.connect(turbineGain);
     turbineGain.connect(this.audioCtx.destination);
     this.turbineWhine.start();
     this.turbineGainNode = turbineGain;
+
+    // 4. 고속 공기역학 풍절음 (High-Speed Cockpit Wind Rush: 500~800km/h에서 강렬하게 발생)
+    const windSrc = this.audioCtx.createBufferSource();
+    windSrc.buffer = noiseBuffer;
+    windSrc.loop = true;
+
+    const windFilter = this.audioCtx.createBiquadFilter();
+    windFilter.type = 'bandpass';
+    windFilter.frequency.setValueAtTime(750, this.audioCtx.currentTime);
+    windFilter.Q.setValueAtTime(1.1, this.audioCtx.currentTime);
+
+    const windGain = this.audioCtx.createGain();
+    windGain.gain.setValueAtTime(0.001, this.audioCtx.currentTime);
+
+    windSrc.connect(windFilter);
+    windFilter.connect(windGain);
+    windGain.connect(this.audioCtx.destination);
+    windSrc.start();
+    this.jetWindSrc = windSrc;
+    this.cockpitWindFilter = windFilter;
+    this.cockpitWindGain = windGain;
   }
 
   stopJetSound() {
@@ -1122,6 +2015,10 @@ class AirplaneGame {
     if (this.turbineWhine) {
       try { this.turbineWhine.stop(); } catch (e) {}
       this.turbineWhine = null;
+    }
+    if (this.jetWindSrc) {
+      try { this.jetWindSrc.stop(); } catch (e) {}
+      this.jetWindSrc = null;
     }
   }
 
@@ -1343,6 +2240,8 @@ class AirplaneGame {
     this.hullIntegrity = 0;
     this.speed = 0;
     this.screenShake = 1.8; // 강한 카메라 흔들림
+    if (this.speedLineMaterial) this.speedLineMaterial.opacity = 0;
+    if (this.speedVignetteEl) this.speedVignetteEl.style.opacity = '0';
     this.playExplosionSound();
 
     // 기체 본체는 숨기고 파쇄된 개별 잔해 파츠 생성
@@ -1364,6 +2263,104 @@ class AirplaneGame {
       this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
       this.overlay.classList.remove('hidden');
     }, 2800);
+  }
+
+  // 공항 섬 영역 판정 (바다 vs 공항 섬 육지)
+  isOverAirport(x, z) {
+    // 출발 공항 섬: X [-450, 450], Z [-1450, 1450]
+    if (x >= -450 && x <= 450 && z >= -1450 && z <= 1450) return true;
+    // 목적지 공항 섬: X [-450, 450], Z [-5950, -3050]
+    if (x >= -450 && x <= 450 && z >= -5950 && z <= -3050) return true;
+    return false;
+  }
+
+  // 바다 고속 격돌 추락 (Sky-high Water Geyser & Ocean Crash)
+  triggerWaterCrash(cause = '해상 고속 격돌 추락') {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+    this.isPlaying = false;
+    this.clearGPWS();
+    this.stopJetSound();
+    this.isStalling = false;
+    this.hullIntegrity = 0;
+    this.speed = 0;
+    this.screenShake = 2.2;
+    if (this.speedLineMaterial) this.speedLineMaterial.opacity = 0;
+    if (this.speedVignetteEl) this.speedVignetteEl.style.opacity = '0';
+    this.playExplosionSound();
+
+    this.planeGroup.visible = false;
+    this.spawnAirframeDebris(this.planeGroup.position, this.planeGroup.rotation);
+    this.createMassiveWaterGeyser(this.planeGroup.position);
+    this.showPopup(`🌊 ${cause}! 바다에 격돌하여 거대한 물기둥과 함께 산산조각 났습니다.`);
+
+    setTimeout(() => {
+      document.getElementById('modal-title').textContent = '🌊 SEA CRASH IMPACT';
+      document.getElementById('modal-desc').innerHTML = `
+        <span style="color:#0284c7; font-weight:800; font-size:16px;">${cause}</span><br>
+        바다 표면에 고속으로 격돌하여 거대한 물기둥과 함께 분해되었습니다.<br>
+        다음 비행에서는 수면 접근 시 기수를 들고 완만하게 착수해 보세요!
+      `;
+      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
+      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
+      this.overlay.classList.remove('hidden');
+    }, 2800);
+  }
+
+  // 바다 비상착수 물보라 스프레이
+  createWaterSpray(pos) {
+    const geo = new THREE.DodecahedronGeometry(1.2, 1);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe, transparent: true, opacity: 0.85 });
+    for (let i = 0; i < 4; i++) {
+      const p = new THREE.Mesh(geo, mat);
+      const offsetX = (Math.random() - 0.5) * 8;
+      const offsetZ = (Math.random() - 0.5) * 5;
+      p.position.set(pos.x + offsetX, 0.4, pos.z + offsetZ);
+      p.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 4,
+        2.0 + Math.random() * 3.5,
+        3.0 + Math.random() * 4.0
+      );
+      p.life = 0.6 + Math.random() * 0.3;
+      this.scene.add(p);
+      this.particles.push(p);
+    }
+  }
+
+  // 거대한 물기둥 & 수면 파동 충격파 (Massive Water Geyser)
+  createMassiveWaterGeyser(pos) {
+    const ringGeo = new THREE.RingGeometry(2, 8, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
+    const shockRing = new THREE.Mesh(ringGeo, ringMat);
+    shockRing.rotation.x = -Math.PI / 2;
+    shockRing.position.set(pos.x, 0.2, pos.z);
+    shockRing.isShockwave = true;
+    shockRing.life = 1.2;
+    this.scene.add(shockRing);
+    this.particles.push(shockRing);
+
+    const dropGeo = new THREE.DodecahedronGeometry(2.8, 1);
+    const dropColors = [0xffffff, 0xe0f2fe, 0xbae6fd, 0x7dd3fc, 0x38bdf8];
+    for (let i = 0; i < 85; i++) {
+      const color = dropColors[Math.floor(Math.random() * dropColors.length)];
+      const p = new THREE.Mesh(dropGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+      p.position.copy(pos);
+      p.position.y = 0.5;
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * 10.0;
+      p.position.x += Math.cos(angle) * radius;
+      p.position.z += Math.sin(angle) * radius;
+
+      const vHoriz = 3.0 + Math.random() * 7.0;
+      p.velocity = new THREE.Vector3(
+        Math.cos(angle) * vHoriz,
+        10.0 + Math.random() * 16.0,
+        Math.sin(angle) * vHoriz
+      );
+      p.life = 1.3 + Math.random() * 0.5;
+      this.scene.add(p);
+      this.particles.push(p);
+    }
   }
 
   // 기체 구조 분해 잔해 조각 생성 (Debris Physics)
@@ -1540,12 +2537,20 @@ class AirplaneGame {
     this.groundY = 6.84;
     this.buildAircraft(type);
 
-    const nameText = type === 'dc10' ? 'DC-10 삼발기' : 'MD-80 쌍발기';
-    document.getElementById('plane-name-text').textContent = nameText;
+    const names = {
+      dc10: 'DC-10 삼발기',
+      md80: 'MD-80 쌍발기',
+      a320: 'A320 제트기',
+      b747: 'B747-400 점보',
+      concorde: '콩코드 초음속기'
+    };
+    const nameText = names[type] || type.toUpperCase();
+    const planeNameEl = document.getElementById('plane-name-text');
+    if (planeNameEl) planeNameEl.textContent = nameText;
     this.showPopup(`✈ 기종 변경: ${nameText}`);
 
     document.querySelectorAll('.plane-choice-btn').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.getElementById(type === 'dc10' ? 'select-dc10' : 'select-md80');
+    const activeBtn = document.getElementById(`select-${type}`);
     if (activeBtn) activeBtn.classList.add('active');
   }
 
@@ -1587,34 +2592,64 @@ class AirplaneGame {
     this.targetArrow = document.querySelector('.target-indicator .arrow');
     this.targetDist = document.getElementById('target-dist');
 
-    this.gearBtn.addEventListener('click', () => { this.toggleLandingGear(); });
-    document.getElementById('select-dc10').addEventListener('click', () => { this.switchAircraft('dc10'); });
-    document.getElementById('select-md80').addEventListener('click', () => { this.switchAircraft('md80'); });
-    this.planeToggleBtn.addEventListener('click', () => {
-      this.switchAircraft(this.currentPlaneType === 'dc10' ? 'md80' : 'dc10');
+    if (this.gearBtn) {
+      this.gearBtn.addEventListener('click', (e) => { e.preventDefault(); this.toggleLandingGear(); });
+    }
+
+    // 5대 기종 버튼 이벤트 리스너 바인딩 (DC-10, MD-80, A320, B747, Concorde)
+    const aircraftTypes = ['dc10', 'md80', 'a320', 'b747', 'concorde'];
+    aircraftTypes.forEach(t => {
+      const btn = document.getElementById(`select-${t}`);
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          this.switchAircraft(t);
+        });
+      }
     });
+
+    if (this.planeToggleBtn) {
+      this.planeToggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const nextIdx = (aircraftTypes.indexOf(this.currentPlaneType) + 1) % aircraftTypes.length;
+        this.switchAircraft(aircraftTypes[nextIdx]);
+      });
+    }
 
     // 1. 활주로 즉시 이륙 모드 (추천)
     if (this.takeoffDirectBtn) {
-      this.takeoffDirectBtn.addEventListener('click', () => {
+      this.takeoffDirectBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         this.startDirectTakeoff();
       });
     }
 
     // 2. 게이트 출발 모드
-    this.startBtn.addEventListener('click', () => {
-      this.startGateDeparture();
-    });
+    if (this.startBtn) {
+      this.startBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.startGateDeparture();
+      });
+    }
 
-    this.camToggleBtn.addEventListener('click', () => { this.toggleCamera(); });
-    this.soundBtn.addEventListener('click', () => {
-      this.soundEnabled = !this.soundEnabled;
-      this.soundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
-    });
+    if (this.camToggleBtn) {
+      this.camToggleBtn.addEventListener('click', (e) => { e.preventDefault(); this.toggleCamera(); });
+    }
+    if (this.soundBtn) {
+      this.soundBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.soundEnabled = !this.soundEnabled;
+        this.soundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
+      });
+    }
 
-    document.getElementById('help-btn').addEventListener('click', () => {
-      this.overlay.classList.remove('hidden');
-    });
+    const helpBtn = document.getElementById('help-btn');
+    if (helpBtn) {
+      helpBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.overlay.classList.remove('hidden');
+      });
+    }
   }
 
   // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff)
@@ -1623,6 +2658,8 @@ class AirplaneGame {
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
     this.hullIntegrity = 100;
     this.groundY = 6.84;
     this.startTime = Date.now();
@@ -1633,9 +2670,11 @@ class AirplaneGame {
 
     this.buildAircraft(this.currentPlaneType);
     this.planeGroup.position.set(120, this.groundY, 800);
-    this.planeGroup.rotation.set(0, 0, 0); // 활주로 북쪽(Z = -1)을 향해 정렬
+    this.yaw = 0.0;
+    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    this.planeGroup.visible = true;
 
-    // 즉시 출력을 80%로 올려 가속
+    // 즉시 출력을 85%로 올려 가속
     this.throttle = 0.85;
     this.showPopup('🛫 활주로 정렬 완료! 속도 200km/h 도달 시 ↓ 아래 화살표를 눌러 기수를 띄우세요!');
     this.startJetSound();
@@ -1647,6 +2686,8 @@ class AirplaneGame {
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
     this.hullIntegrity = 100;
     this.groundY = 6.84;
     this.startTime = Date.now();
@@ -1657,7 +2698,9 @@ class AirplaneGame {
 
     this.buildAircraft(this.currentPlaneType);
     this.planeGroup.position.set(-135, this.groundY, 0);
-    this.planeGroup.rotation.set(0, Math.PI / 2, 0);
+    this.yaw = Math.PI / 2;
+    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    this.planeGroup.visible = true;
 
     this.throttle = 0.2;
     this.showPopup('📢 승객 285명 탑승 완료! 0~9 키로 출력을 올려 유도로(황색선)로 이동하세요.');
@@ -1865,6 +2908,8 @@ class AirplaneGame {
     if (this.isPlaying && !this.isDestroyed) {
       this.updateFlightPhysics(dt);
       this.updateControlSurfaces(dt);
+      const currentKmh = this.speed * 280;
+      this.updateSpeedEffects(dt, currentKmh);
       this.checkObstacleCollisions();
       this.updateHUD();
       this.updateParticles(dt);
@@ -1986,42 +3031,81 @@ class AirplaneGame {
     // 1. 지상(Ground) 활주 물리
     // --------------------------------------------------------------
     if (this.isOnGround) {
-      let targetSpeed = this.throttle * 3.0;
-      if (this.keys.brake || this.isBellySliding) {
-        targetSpeed *= 0.35;
-      }
-      this.speed = THREE.MathUtils.lerp(this.speed, targetSpeed, 0.05);
+      if (this.isWaterLanding) {
+        // ★ 바다 비상착수 상태 (Miracle on the Ocean / Hudson)
+        this.speed = Math.max(0, this.speed - 0.28 * dt);
+        this.waterBobPhase += dt * 3.2;
+        this.planeGroup.position.y = 0.8 + Math.sin(this.waterBobPhase) * 0.35;
+        this.planeGroup.rotation.z = Math.sin(this.waterBobPhase * 0.6) * 0.035;
+        this.planeGroup.rotation.x = Math.sin(this.waterBobPhase * 0.4) * 0.02;
 
-      // A/D 키 노즈 휠 조향
-      let steerInput = 0;
-      if (this.keys.left) steerInput -= 1;
-      if (this.keys.right) steerInput += 1;
-      steerInput += this.joystickData.x;
+        // 수면 활주 물보라 분출
+        if (this.speed > 0.04) {
+          this.createWaterSpray(this.planeGroup.position);
+        }
 
-      this.planeGroup.rotateY(-steerInput * 0.022);
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+        const waterMove = this.speed * 115.0 * dt;
+        this.planeGroup.position.addScaledVector(forward, waterMove);
 
-      // 전진 이동
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      this.planeGroup.position.addScaledVector(forward, this.speed * 1.8);
-      this.planeGroup.position.y = this.groundY;
+        if (this.speed < 0.02 && !this.waterSuccessShown) {
+          this.waterSuccessShown = true;
+          this.flightPhase = 'TOUCHDOWN';
+          this.phaseDisplay.textContent = '해상 비상착수 안전 부유 중';
+          this.showPopup('🌊 [비상착수 성공] 모든 승객이 구명보트로 안전하게 대피했습니다! (허드슨강의 기적)');
+          this.score += 2000;
+          setTimeout(() => {
+            document.getElementById('modal-title').textContent = '🌊 MIRACLE DITCHING SUCCESS!';
+            document.getElementById('modal-desc').innerHTML = `
+              <span style="color:#0284c7; font-weight:800; font-size:16px;">🌊 성공적인 해상 비상착수 (Water Ditching)</span><br>
+              완벽한 강하율과 기수 각도로 수면에 부드럽게 안착했습니다.<br>
+              285명의 승객 전원이 구명정으로 안전하게 구조되었습니다!
+            `;
+            this.startBtn.textContent = '게이트에서 다시 시작 🔄';
+            this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
+            this.overlay.classList.remove('hidden');
+          }, 2400);
+        }
+      } else {
+        // 일반 지상 주행 (활주로 & 유도로)
+        let targetSpeed = this.throttle <= 0.35 
+          ? (this.throttle * 0.55) 
+          : (0.19 + (this.throttle - 0.35) * 1.55);
 
-      // 지상 자세 (수평 정렬)
-      this.planeGroup.rotation.x = 0;
-      this.planeGroup.rotation.z = 0;
+        if (this.keys.brake || this.isBellySliding) {
+          targetSpeed *= 0.25;
+        }
+        this.speed = THREE.MathUtils.lerp(this.speed, targetSpeed, 0.05);
 
-      // ★ 이륙 로테이션 (Takeoff Rotation): 180 km/h 이상 & 아래 화살표(↓) 입력 시 부드럽게 상승!
-      const pullUpInput = this.keys.down || (this.joystickData.y > 0.3);
+        // A/D 키 노즈 휠 조향 (지상 360도 무한 원형 선회 지원)
+        let steerInput = 0;
+        if (this.keys.left) steerInput -= 1;
+        if (this.keys.right) steerInput += 1;
+        steerInput += this.joystickData.x;
 
-      if (currentKmh >= 180 && pullUpInput && !this.isGearCollapsed) {
-        this.isOnGround = false;
-        this.flightPhase = 'CLIMB_CRUISE';
-        this.phaseDisplay.textContent = '상승 및 순항 비행';
-        this.showPopup('🛫 Rotate! 비행기가 하늘로 떠올랐습니다. G 키를 눌러 기어를 접으세요!');
-        this.score += 500;
+        this.yaw -= steerInput * 0.028;
+        this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
 
-        // 양력으로 기수를 띄우고 즉시 고도 상승 부여
-        this.planeGroup.rotateX(0.08); // 기수 상승
-        this.planeGroup.position.y += 1.5; // 지면 즉시 이탈
+        // 전진 이동 (dt 기반 프레임 독립 이동)
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+        const groundMove = this.speed * 115.0 * dt;
+        this.planeGroup.position.addScaledVector(forward, groundMove);
+        this.planeGroup.position.y = this.groundY;
+
+        // ★ 이륙 로테이션 (Takeoff Rotation): 180 km/h 이상 & 아래 화살표(↓) 입력 시 부드럽게 상승!
+        const pullUpInput = this.keys.down || (this.joystickData.y > 0.3);
+
+        if (currentKmh >= 180 && pullUpInput && !this.isGearCollapsed) {
+          this.isOnGround = false;
+          this.flightPhase = 'CLIMB_CRUISE';
+          this.phaseDisplay.textContent = '상승 및 순항 비행';
+          this.showPopup('🛫 Rotate! 비행기가 하늘로 떠올랐습니다. G 키를 눌러 기어를 접으세요!');
+          this.score += 500;
+
+          // 양력으로 기수를 띄우고 즉시 고도 상승 부여
+          this.planeGroup.rotateX(0.08); // 기수 상승
+          this.planeGroup.position.y += 1.5; // 지면 즉시 이탈
+        }
       }
 
     } else {
@@ -2031,7 +3115,7 @@ class AirplaneGame {
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
 
       // 상승 시 중력 감속(Climb Drag), 하강 시 중력 가속(Dive Gravity)
-      let targetAirSpeed = THREE.MathUtils.clamp(0.42 + this.throttle * 2.8, 0.22, 3.5);
+      let targetAirSpeed = THREE.MathUtils.clamp(0.65 + this.throttle * 2.35, 0.45, 3.25);
       if (forward.y > 0.08) {
         targetAirSpeed -= forward.y * 1.15; // 기수가 높을수록 속도 급감
       } else if (forward.y < -0.08) {
@@ -2103,31 +3187,53 @@ class AirplaneGame {
 
       // 4. ★ 정밀 협조 선회 (Coordinated Turn & Rudder Yaw):
       // 비행기가 우측으로 기울면 정확히 우측으로 선회하고, 좌측으로 기울면 좌측으로 선회!
-      // bankTilt < 0 (우측 기울임) -> rotateY 음수 (Three.js 우회전)
-      // bankTilt > 0 (좌측 기울임) -> rotateY 양수 (Three.js 좌회전)
       const aerodynamicTurn = bankTilt * 0.026;
       const rudderYaw = -rollInput * 0.016; // 키 입력에 의한 즉각 러더 요
       this.planeGroup.rotateY(aerodynamicTurn + rudderYaw);
 
-      // 5. 회전된 최신 전방 비행 벡터로 이동
+      // 5. 회전된 최신 전방 비행 벡터로 이동 (dt 기반 프레임 독립 물리)
       const updatedForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      this.planeGroup.position.addScaledVector(updatedForward, this.speed * 2.5);
+      const airMove = this.speed * 115.0 * dt;
+      this.planeGroup.position.addScaledVector(updatedForward, airMove);
 
       // GPWS 및 경보 시스템 평가
       this.checkGPWS(dt);
 
       // ------------------------------------------------------------
-      // 3. 지면 접지 / 착륙 / 추락 판정 (안전 착륙 검사)
+      // 3. 지면 / 수면 접지 / 착륙 / 추락 판정 (안전 착륙 검사)
       // ------------------------------------------------------------
-      // 지면 접촉 판정: 비행기가 아래로 하강 중일 때만 체크 (이륙 상승 중에는 절대 체크하지 않음!)
-      if (this.planeGroup.position.y <= this.groundY + 0.2 && this.verticalSpeed < -0.8) {
+      const overAirport = this.isOverAirport(this.planeGroup.position.x, this.planeGroup.position.z);
+      const effectiveGroundY = overAirport ? this.groundY : 0.8;
+
+      if (this.planeGroup.position.y <= effectiveGroundY + 0.3 && this.verticalSpeed < -0.8) {
         const sinkRate = -this.verticalSpeed; // 강하율 (m/s)
 
         // 실제 월드 업 벡터를 통해 뒤집힘 확인 (짐벌락 버그 원천 차단)
         const worldUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.planeGroup.quaternion);
         const isUpsideDown = worldUp.y < -0.2;
 
-        // 치명적 추락: 거꾸로 뒤집힌 채 추락하거나 강하율이 15 m/s 초과
+        if (!overAirport) {
+          // ★ 바다 착수 / 해상 추락 판정
+          if (sinkRate > 10.0 || (isUpsideDown && currentKmh > 100) || currentKmh > 360) {
+            this.triggerWaterCrash('바다 고속 격돌 추락');
+            return;
+          }
+
+          // 완만한 비상착수 (Water Ditching - 허드슨강의 기적)
+          this.isWaterLanding = true;
+          this.isOnGround = true;
+          this.waterBobPhase = 0.0;
+          this.planeGroup.position.y = 0.8;
+          const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+          this.yaw = Math.atan2(-fwd.x, -fwd.z);
+          this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+          this.clearGPWS();
+          this.playTouchdownScreech();
+          this.showPopup('🌊 바다 비상착수! 엔진 역추진으로 수면 활주 중입니다.');
+          return;
+        }
+
+        // 육지 공항 지면 접촉 판정
         if (sinkRate > 15.0 || (isUpsideDown && currentKmh > 130)) {
           this.triggerExplosion('지면 고속 격돌 추락');
           return;
@@ -2143,9 +3249,11 @@ class AirplaneGame {
 
           this.isOnGround = true;
           this.planeGroup.position.y = this.groundY;
-          this.clearGPWS(); // 착륙 즉시 PULL UP 및 모든 경보음 완전 해제 & 끄기!
+          const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+          this.yaw = Math.atan2(-fwd.x, -fwd.z);
+          this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+          this.clearGPWS();
 
-          // 한계 초과 시 폭발
           if (sinkRate > 12.0 || currentKmh > 330) {
             this.triggerExplosion('과도한 착륙 충격으로 인한 기체 파손 폭발');
             return;
@@ -2154,7 +3262,10 @@ class AirplaneGame {
           // 정상 부드러운 착륙 (Soft Touchdown)
           this.isOnGround = true;
           this.planeGroup.position.y = this.groundY;
-          this.clearGPWS(); // 착륙 즉시 PULL UP 및 모든 경보음 완전 해제 & 끄기!
+          const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+          this.yaw = Math.atan2(-fwd.x, -fwd.z);
+          this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+          this.clearGPWS();
           this.playTouchdownScreech();
 
           if (this.planeGroup.position.z < -2500) {
@@ -2168,26 +3279,45 @@ class AirplaneGame {
     }
 
     // --------------------------------------------------------------
-    // 카메라 추적 (부드러운 러프)
+    // 카메라 추적, 동적 속도 FOV & 원근 속도감 연출
     // --------------------------------------------------------------
+    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 120) / 720)); // 0.0 ~ 1.0
+
+    // 1. 동적 속도 FOV: 속도에 따라 시야각이 시원하게 넓어지며 주변 사물이 휙휙 스쳐 지나가는 속도감 제공!
+    const baseFov = this.cameraMode === '3rd' ? 60 : 64;
+    const fovBoost = this.cameraMode === '3rd' ? 18 : 22;
+    const targetFov = baseFov + speedRatio * fovBoost;
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 0.08);
+    this.camera.updateProjectionMatrix();
+
     if (this.cameraMode === '3rd') {
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      const camOffset = new THREE.Vector3(0, 9.5, 42.0).applyQuaternion(this.planeGroup.quaternion);
+      // 고속 비행 시 카메라 거리가 뒤로 살짝 늘어나며 역동적 공간감 형성
+      const camDistZ = 42.0 + speedRatio * 7.5;
+      const camHeight = 9.5 + speedRatio * 1.5;
+      const camOffset = new THREE.Vector3(0, camHeight, camDistZ).applyQuaternion(this.planeGroup.quaternion);
       const targetCamPos = this.planeGroup.position.clone().add(camOffset);
-      this.camera.position.lerp(targetCamPos, 0.14);
+      this.camera.position.lerp(targetCamPos, 0.13);
 
       const lookTarget = this.planeGroup.position.clone().add(forward.clone().multiplyScalar(40));
       this.camera.lookAt(lookTarget);
     } else {
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      const cockpitOffset = new THREE.Vector3(0, 2.0, -14.0).applyQuaternion(this.planeGroup.quaternion);
+      const cockpitOffset = new THREE.Vector3(0, 2.05, -14.2).applyQuaternion(this.planeGroup.quaternion);
       this.camera.position.copy(this.planeGroup.position).add(cockpitOffset);
 
       const lookTarget = this.planeGroup.position.clone().add(forward.clone().multiplyScalar(100));
       this.camera.lookAt(lookTarget);
     }
 
-    // 제트 엔진 오디오 파라미터 실시간 부드러운 보간 (스로틀 0~1 연동)
+    // 2. 고속 공기역학 풍압 미세 떨림 (Aerodynamic Micro-shiver at 580~850 km/h)
+    if (currentKmh > 580) {
+      const speedTurbulence = ((currentKmh - 580) / 320) * (this.cameraMode === '1st' ? 0.08 : 0.05);
+      this.camera.position.x += (Math.random() - 0.5) * speedTurbulence;
+      this.camera.position.y += (Math.random() - 0.5) * speedTurbulence;
+    }
+
+    // 제트 엔진 및 풍절음 오디오 실시간 부드러운 보간 (스로틀 및 속도 연동)
     if (this.audioCtx && this.soundEnabled) {
       const t = this.throttle; // 0.0 ~ 1.0
       const now = this.audioCtx.currentTime;
@@ -2210,6 +3340,15 @@ class AirplaneGame {
       if (this.turbineWhine) {
         const targetWhineFreq = 260 + t * 360; // 260Hz ~ 620Hz
         this.turbineWhine.frequency.setTargetAtTime(targetWhineFreq, now, 0.15);
+      }
+
+      // 4. 고속 공기역학 풍절음 (High-Speed Cockpit Wind Rush: 400~850 km/h)
+      if (this.cockpitWindFilter && this.cockpitWindGain) {
+        const windRatio = Math.min(1.0, Math.max(0, (currentKmh - 300) / 550));
+        const targetWindFreq = 600 + windRatio * 1400; // 600Hz ~ 2000Hz
+        const targetWindGain = windRatio * (this.cameraMode === '1st' ? 0.30 : 0.20);
+        this.cockpitWindFilter.frequency.setTargetAtTime(targetWindFreq, now, 0.15);
+        this.cockpitWindGain.gain.setTargetAtTime(targetWindGain, now, 0.15);
       }
     }
   }
@@ -2458,7 +3597,37 @@ class AirplaneGame {
   }
 }
 
-// 브라우저 로딩 후 실행
-window.addEventListener('DOMContentLoaded', () => {
-  window.airplaneGame = new AirplaneGame();
-});
+// 전역 헬퍼 함수 (인라인 onclick 및 외부 호출 100% 보장)
+window.switchPlane = function(type) {
+  if (window.airplaneGame) {
+    window.airplaneGame.switchAircraft(type);
+  }
+};
+window.startDirectTakeoff = function() {
+  if (window.airplaneGame) {
+    window.airplaneGame.startDirectTakeoff();
+  }
+};
+window.startGateDeparture = function() {
+  if (window.airplaneGame) {
+    window.airplaneGame.startGateDeparture();
+  }
+};
+
+// 브라우저 및 웹뷰(Flutter) 즉각 로딩 및 버튼 먹통 방지 초기화
+function initGame() {
+  if (!window.airplaneGame) {
+    try {
+      window.airplaneGame = new AirplaneGame();
+    } catch (err) {
+      console.error('AirplaneGame init error:', err);
+    }
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initGame);
+} else {
+  initGame();
+}
+window.addEventListener('load', initGame);
