@@ -1,0 +1,173 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Antigravity 3D GLB Pipeline - Haeundae Beach"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "HaeundaeScene",
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "HaeundaeCoastalResort",
+      "children": [1, 2, 3, 4]
+    },
+    {
+      "name": "GoldenSandBeach",
+      "mesh": 0
+    },
+    {
+      "name": "TurquoiseOcean",
+      "mesh": 1
+    },
+    {
+      "name": "CoastalSkyscrapers",
+      "mesh": 2,
+      "translation": [0.0, 0.0, -80.0]
+    },
+    {
+      "name": "BeachParasols",
+      "mesh": 3,
+      "translation": [0.0, 1.2, 20.0]
+    }
+  ],
+  "materials": [
+    {
+      "name": "GoldenSand",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.96, 0.72, 0.35, 1.0],
+        "metallicFactor": 0.05,
+        "roughnessFactor": 0.95
+      }
+    },
+    {
+      "name": "OceanWater",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.02, 0.52, 0.78, 0.85],
+        "metallicFactor": 0.1,
+        "roughnessFactor": 0.15
+      }
+    },
+    {
+      "name": "SkyscraperGlass",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.22, 0.74, 0.97, 1.0],
+        "metallicFactor": 0.85,
+        "roughnessFactor": 0.12
+      }
+    },
+    {
+      "name": "ParasolRed",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.93, 0.27, 0.27, 1.0],
+        "metallicFactor": 0.1,
+        "roughnessFactor": 0.6
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "BeachMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "OceanMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1
+          },
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "SkyscraperMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 2
+          },
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "ParasolMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 3
+          },
+          "material": 3,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 6,
+      "type": "VEC3",
+      "max": [400.0, 1.5, 60.0],
+      "min": [-400.0, 0.0, -40.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 72,
+      "componentType": 5126,
+      "count": 6,
+      "type": "VEC3",
+      "max": [800.0, 0.5, 500.0],
+      "min": [-800.0, 0.0, 60.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 144,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "max": [250.0, 120.0, 30.0],
+      "min": [-250.0, 0.0, -30.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 576,
+      "componentType": 5126,
+      "count": 18,
+      "type": "VEC3",
+      "max": [180.0, 3.2, 5.0],
+      "min": [-180.0, 0.0, -5.0]
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 792,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 792,
+      "uri": "data:application/octet-stream;base64,AADAwQAAAAAAAEBAAADAQAAAAAAAAEBAAADAwQAAAAAAAEBAAADAwQAAAAAAAEBAAADAQAAAAAAAAEBAAADAQAAAAAAAQEAAgMCAAAAAAABgQQAAgMEAAAAAAABgQQAAgMCAAAAAAABgQQAAgMCAAAAAAABgQQAAgMEAAAAAAABgQQAAgMEAAAAAAABgQQAAgL8AAAAAAABgQAAAgD8AAAAAAABgQAACAPwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAAAAAAGBAAACAPwAAwEAAAGDAAACAvwAAAAAAAGDAAACAPwAAAAAAAGDAAACAPwAAwEAAAGDAAACAvwAAAAAAAGDAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAAAAPwAAAAAAAEBAAAAAPwAAQEAAAABA"
+    }
+  ]
+}

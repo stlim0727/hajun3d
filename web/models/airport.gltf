@@ -1,0 +1,174 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Antigravity 3D GLB Pipeline - Airport Terminal"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "AirportScene",
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "InternationalAirport",
+      "children": [1, 2, 3, 4]
+    },
+    {
+      "name": "RunwayAsphalt",
+      "mesh": 0
+    },
+    {
+      "name": "MainTerminal",
+      "mesh": 1,
+      "translation": [-140.0, 0.0, 0.0]
+    },
+    {
+      "name": "ControlTower",
+      "mesh": 2,
+      "translation": [-180.0, 0.0, -120.0]
+    },
+    {
+      "name": "BoardingBridges",
+      "mesh": 3,
+      "translation": [-95.0, 0.0, 0.0]
+    }
+  ],
+  "materials": [
+    {
+      "name": "RunwayMaterial",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.15, 0.17, 0.22, 1.0],
+        "metallicFactor": 0.1,
+        "roughnessFactor": 0.85
+      }
+    },
+    {
+      "name": "TerminalGlassSteel",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.85, 0.92, 0.98, 1.0],
+        "metallicFactor": 0.65,
+        "roughnessFactor": 0.2
+      }
+    },
+    {
+      "name": "TowerWhite",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.95, 0.95, 0.95, 1.0],
+        "metallicFactor": 0.2,
+        "roughnessFactor": 0.4
+      }
+    },
+    {
+      "name": "JetwayAccordion",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.4, 0.45, 0.52, 1.0],
+        "metallicFactor": 0.3,
+        "roughnessFactor": 0.6
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "RunwayMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "TerminalMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1
+          },
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "TowerMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 2
+          },
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "JetwayMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 3
+          },
+          "material": 3,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 6,
+      "type": "VEC3",
+      "max": [60.0, 0.5, 2000.0],
+      "min": [-60.0, 0.0, -2000.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 72,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "max": [60.0, 24.0, 180.0],
+      "min": [-60.0, 0.0, -180.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 504,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "max": [10.0, 68.0, 10.0],
+      "min": [-10.0, 0.0, -10.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 936,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "max": [35.0, 9.5, 12.0],
+      "min": [-35.0, 0.0, -12.0]
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 1224,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1224,
+      "uri": "data:application/octet-stream;base64,AABgvwAAAAAAAAAA9kEAAGDAAAAAAAAAAPZBAABgvwAAAAAAAPZBAABgvwAAAAAAAPZBAABgwAAAAAAAAAD2QQAAgMAAAAAAAAD2QQAAgL8AAAAAAABgQAAAgD8AAAAAAABgQAACAPwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAAAAAAGBAAACAPwAAwEAAAGDAAACAvwAAAAAAAGDAAACAPwAAAAAAAGDAAACAPwAAwEAAAGDAAACAvwAAAAAAAGDAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAACAPwAAAAAAAGDAAACAPwAAAAAAAGBAAACAPwAAwEAAAGBAAACAPwAAAAAAAGDAAACAPwAAwEAAAGBAAACAPwAAwEAAAGDAAACAvwAAAAAAAGBAAACAvwAAAAAAAGDAAACAvwAAwEAAAGDAAACAvwAAAAAAAGBAAACAvwAAwEAAAGDAAACAvwAAwEAAAGBAAACAvwAAAAAAAGDAAACAPwAAAAAAAGDAAACAPwAAwEAAAGDAAACAvwAAAAAAAGDAAACAPwAAwEAAAGDAAACAvwAAwEAAAGDAAACAvwAAAAAAAGBAAACAPwAAAAAAAGBAAACAPwAAwEAAAGBAAACAvwAAAAAAAGBAAACAPwAAwEAAAGBAAACAvwAAwEAAAGBAAAAAPwAAAAAAAEBAAAAAPwAAQEAAAABA"
+    }
+  ]
+}

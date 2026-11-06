@@ -20,6 +20,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/web/
+    - assets/web/models/
+    - assets/web/assets/models/
     - assets/web/index.html
     - assets/web/style.css
+    - assets/web/glb_bundle.js
     - assets/web/game.js

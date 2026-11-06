@@ -1,0 +1,235 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Antigravity 3D GLB Pipeline - Hajun Plane 3D"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "AirplaneScene",
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "CommercialJetA320",
+      "children": [1, 2, 3, 4, 5, 6, 7]
+    },
+    {
+      "name": "Fuselage",
+      "mesh": 0
+    },
+    {
+      "name": "CockpitWindshield",
+      "mesh": 1
+    },
+    {
+      "name": "MainWings",
+      "mesh": 2
+    },
+    {
+      "name": "LeftEngine",
+      "mesh": 3,
+      "translation": [-6.0, -1.8, 1.0]
+    },
+    {
+      "name": "RightEngine",
+      "mesh": 3,
+      "translation": [6.0, -1.8, 1.0]
+    },
+    {
+      "name": "VerticalStabilizer",
+      "mesh": 4
+    },
+    {
+      "name": "HorizontalStabilizers",
+      "mesh": 5
+    }
+  ],
+  "materials": [
+    {
+      "name": "LiveryWhite",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.97, 0.98, 1.0, 1.0],
+        "metallicFactor": 0.28,
+        "roughnessFactor": 0.2
+      }
+    },
+    {
+      "name": "TintedCockpitGlass",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.08, 0.12, 0.18, 1.0],
+        "metallicFactor": 0.9,
+        "roughnessFactor": 0.1
+      }
+    },
+    {
+      "name": "WingTitanium",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.78, 0.82, 0.88, 1.0],
+        "metallicFactor": 0.45,
+        "roughnessFactor": 0.3
+      }
+    },
+    {
+      "name": "EngineChrome",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.45, 0.5, 0.55, 1.0],
+        "metallicFactor": 0.85,
+        "roughnessFactor": 0.18
+      }
+    },
+    {
+      "name": "TailBlueLogo",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.01, 0.52, 0.78, 1.0],
+        "metallicFactor": 0.35,
+        "roughnessFactor": 0.25
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "FuselageMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "CockpitMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1
+          },
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "WingsMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 2
+          },
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "EngineMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 3
+          },
+          "material": 3,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "TailFinMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 4
+          },
+          "material": 4,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "StabMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 5
+          },
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "max": [2.0, 2.0, 18.0],
+      "min": [-2.0, -2.0, -20.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 432,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3",
+      "max": [1.4, 2.2, -14.0],
+      "min": [-1.4, 0.8, -18.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 576,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3",
+      "max": [18.0, 0.6, 6.0],
+      "min": [-18.0, 0.0, -2.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 720,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "max": [1.2, 1.2, 2.8],
+      "min": [-1.2, -1.2, -2.8]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 1008,
+      "componentType": 5126,
+      "count": 6,
+      "type": "VEC3",
+      "max": [0.3, 8.0, 17.0],
+      "min": [-0.3, 1.8, 10.0]
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 1080,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3",
+      "max": [6.5, 1.6, 17.5],
+      "min": [-6.5, 1.2, 14.0]
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 1224,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1224,
+      "uri": "data:application/octet-stream;base64,AACAvwAAgL8AAGDAAACAPwAAgL8AAGDAAACAPwAAgD8AAGDAAACAvwAAgL8AAGDAAACAPwAAgD8AAGDAAACAvwAAgD8AAGDAAACAvwAAgL/AAGC/AACAPwAAgD8AAGC/AACAPwAAgL/AAGC/AACAvwAAgL/AAGC/AACAvwAAgD8AAGC/AACAPwAAgD8AAGC/AACAvwAAgL/AAGC/AACAvwAAgD/AAGC/AACAvwAAgD8AAGDAAACAvwAAgL/AAGC/AACAvwAAgD8AAGDAAACAvwAAgL8AAGDAAACAPwAAgL/AAGC/AACAPwAAgD8AAGDAAACAPwAAgD/AAGC/AACAPwAAgL/AAGC/AACAPwAAgL8AAGDAAACAPwAAgD8AAGDAAACAvwAAgD/AAGC/AACAAAAAAAAAPwAAqL8AAACAvwAAgL8AAGC/AACAPwAAgD/AAGC/AACAvwAAgD/AAGC/AAAgPwAAgD/AAGC/AACAPwAAgL/AAGC/AAAAAAAAAAAAPwAAqL8AAACAvwAAgL8AAGDAAACAPwAAgD8AAGDAAAAAgAAAAIA/AABEQAAAgL8AAIA/AABEQAAAgL8AAACAPwAARAAAAIAAAAAAAIA/AABEQAAAgL8AAACAPwAARAAAgD8AAACAPwAARAAAAIAAAAAgPwAAQEAAAIC/AAAAgDwAQEAAAIC/AACAwAAAREAAAIAAAAAgPwAAQEAAAIC/AACAwAAAREAAgD8AAIDAQABEQAAAgL8AAGDAAACAPwAAMEAAAACAvwAAgD8AADBAAACAvwAAgD8AAGC/AACAvwAAYDAAAACAvwAAgD8AAGC/AACAvwAAMEAAAAAAgL8AAGDAAACAPwAAgL8AAGDAAACAvwAAgL8AADBAAACAvwAAYDAAAACAvwAAgL8AADBAAACAvwAAgL8AAGDAAAAAgAAAgD8AAEhAAACAvwAAgD8AAEhAAACAPwAAgD8AAEhAAAAAgAAAgD8AADhAAACAvwAAgD8AADhAAACAPwAAgD8AADhAAAAAgAAAgD8AAMhAAACAvwAAgD8AAMhAAACAPwAAgD8AAMhA"
+    }
+  ]
+}
