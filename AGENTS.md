@@ -18,7 +18,7 @@ Workflow rules that apply to every agent:
 
 1. Create a new git worktree for each task (`npm run wt:new -- <branch>` or `git fetch origin && git worktree add -b <branch> <path> origin/main`) BEFORE reading or modifying files so you always inspect `origin/main` rather than a stale checkout. Never edit directly in the shared checkout and never blindly copy whole files across checkouts (apply focused edits to prevent clobbering concurrent work).
 2. Before committing or pushing, inspect `git diff origin/main` to verify that only intentional scoped changes are present and that no unrelated code or recent features from other branches were accidentally deleted (`-` lines).
-3. No PR workflow: In this repository, do not open pull requests. Always push verified changes directly to `origin main`. Run `npm run check` and `npm test` before pushing to guarantee zero regressions.
+3. No PR workflow & Bold direct push to origin main: In this repository, do not open pull requests. Always push directly to `origin main`. Avoid running long local test suites that are almost identical to CI tests; do quick syntax checks (`npm run check`) if needed, and boldly push to let GitHub Actions CI verify tests.
 4. Multiple agents may work in this repository at the same time. Inspect git status before editing, never assume exclusive access, and leave other agents' and the user's edits untouched.
 
 - Read the relevant row in [the task map](docs/development/agent-task-map.md).

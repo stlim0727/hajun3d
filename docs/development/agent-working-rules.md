@@ -17,5 +17,5 @@
 - **Token efficiency discipline**:
   - Read only the relevant module in `web/js/` identified from `docs/development/agent-task-map.md`.
   - Do not load monolithic historical dumps unless strictly necessary.
-- **Verification before completion**:
-  - Always run `npm run check` and `npm test` before concluding your task or opening a PR.
+- **Verification & CI delegation**:
+  - Avoid running long local test suites that are almost identical to CI tests. Boldly push directly to `origin main` to let CI test verify it, running fast syntax checks (`npm run check`) locally when needed.
