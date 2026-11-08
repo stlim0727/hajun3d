@@ -458,40 +458,103 @@
         </div>
       </div>
     </div>
-    <div id="mobile-controls">
-      <!-- Virtual Joystick for Pitch & Roll -->
-      <div id="joystick-zone">
-        <div id="joystick-base">
-          <div id="joystick-stick"></div>
+    <div id="mobile-controls" class="touch-controls-container">
+      <!-- Left Quadrant: Throttle Quadrant & Quick Presets -->
+      <div class="touch-quadrant touch-left">
+        <div id="touch-throttle-card" class="touch-throttle-card">
+          <div class="touch-card-header">
+            <span class="touch-label">THROTTLE</span>
+            <span id="touch-thr-val" class="touch-value cyan">0% IDLE</span>
+          </div>
+          <div class="touch-throttle-body">
+            <div class="touch-throttle-presets">
+              <button type="button" class="btn-touch-preset" data-thr="1.0" title="TOGA 100%">TOGA</button>
+              <button type="button" class="btn-touch-preset" data-thr="0.70" title="CLIMB 70%">70%</button>
+              <button type="button" class="btn-touch-preset" data-thr="0.40" title="APPROACH 40%">40%</button>
+              <button type="button" class="btn-touch-preset" data-thr="0.0" title="IDLE 0%">IDLE</button>
+            </div>
+            <div id="touch-throttle-track" class="touch-throttle-track">
+              <div id="touch-throttle-fill" class="touch-throttle-fill"></div>
+              <div id="touch-throttle-thumb" class="touch-throttle-thumb">
+                <span class="thumb-grip"></span>
+              </div>
+              <div class="throttle-detent detent-toga" style="top: 0%;"></div>
+              <div class="throttle-detent detent-70" style="top: 30%;"></div>
+              <div class="throttle-detent detent-40" style="top: 60%;"></div>
+              <div class="throttle-detent detent-idle" style="top: 100%;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Action Buttons (Boost, Brake, Gear, Flaps, Camera) -->
-      <div class="action-buttons">
-        <div class="action-btn-row secondary-actions">
-          <button id="btn-touch-gear" class="touch-btn mini-action-btn" title="랜딩 기어 토글" type="button" onclick="window.toggleLandingGear()">
+      <!-- Center Bottom: Rudder & Brakes Bar -->
+      <div class="touch-quadrant touch-center">
+        <!-- Hydraulic Wheel Brake Button -->
+        <button type="button" id="touch-btn-brake" class="btn-touch-brake" title="휠 브레이크 (Hold to Brake)">
+          <span class="brake-label">BRAKE</span>
+          <span class="brake-sub">HOLD</span>
+        </button>
+
+        <!-- Rudder Slider -->
+        <div id="touch-rudder-card" class="touch-rudder-card">
+          <div class="rudder-label-strip">
+            <span>◄ L</span>
+            <span id="touch-rudder-val">0°</span>
+            <span>R ►</span>
+          </div>
+          <div id="touch-rudder-track" class="touch-rudder-track">
+            <div class="rudder-center-notch"></div>
+            <div id="touch-rudder-thumb" class="touch-rudder-thumb"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Quadrant: Virtual Flight Stick & Action Buttons -->
+      <div class="touch-quadrant touch-right">
+        <!-- Quick Action Buttons Row -->
+        <div class="action-btn-row secondary-actions touch-quick-actions">
+          <button id="btn-touch-gear" class="touch-btn mini-action-btn" title="랜딩 기어 토글 (G)" type="button" onclick="window.toggleLandingGear()">
             <span>🛞</span>
             <small>기어</small>
           </button>
-          <button id="btn-touch-flaps" class="touch-btn mini-action-btn" title="플랩 각도 설정" type="button" onclick="window.toggleFlaps()">
+          <button id="btn-touch-flaps" class="touch-btn mini-action-btn" title="플랩 각도 설정 (F)" type="button" onclick="window.toggleFlaps()">
             <span>🪽</span>
             <small>플랩</small>
           </button>
-          <button id="btn-touch-cam" class="touch-btn mini-action-btn" title="카메라 시점 전환" type="button" onclick="window.toggleCamera()">
+          <button id="btn-touch-spoilers" class="touch-btn mini-action-btn" title="스포일러 토글 (B)" type="button" onclick="window.toggleSpoilers()">
+            <span>🛑</span>
+            <small>스포일러</small>
+          </button>
+          <button id="btn-touch-cam" class="touch-btn mini-action-btn" title="카메라 시점 전환 (C)" type="button" onclick="window.toggleCamera()">
             <span>🎥</span>
             <small>시점</small>
           </button>
         </div>
-        <div class="action-btn-row primary-actions">
-          <button id="btn-boost" class="touch-btn boost-action-btn" type="button">
-            <span>BOOST</span>
-            <small>가속</small>
-          </button>
-          <button id="btn-brake" class="touch-btn brake-action-btn" type="button">
-            <span>BRAKE</span>
-            <small>감속</small>
-          </button>
+
+        <!-- Virtual Flight Stick Yoke -->
+        <div class="touch-stick-card">
+          <div class="touch-card-header">
+            <span class="touch-label">FLIGHT YOKE</span>
+            <span id="touch-stick-telemetry" class="touch-value">P: 0° | R: 0°</span>
+          </div>
+          <div id="joystick-zone" class="touch-stick-zone">
+            <div class="stick-crosshair-h"></div>
+            <div class="stick-crosshair-v"></div>
+            <div id="joystick-base" class="stick-boundary"></div>
+            <div id="joystick-stick" class="touch-stick-knob">
+              <div class="knob-ring"></div>
+              <div class="knob-dot"></div>
+            </div>
+          </div>
         </div>
+
+        <!-- Hidden legacy fallback buttons to prevent any external script breakages -->
+        <button id="btn-boost" class="touch-btn boost-action-btn" type="button" style="display:none;">
+          <span>BOOST</span><small>가속</small>
+        </button>
+        <button id="btn-brake" class="touch-btn brake-action-btn" type="button" style="display:none;">
+          <span>BRAKE</span><small>감속</small>
+        </button>
       </div>
     </div>
 
