@@ -235,14 +235,22 @@
       );
     }
 
-    // 3. 러더 & 노즈 휠: 방향 조향 (손잡이 비틀기 러더 및 에일러론 협조)
+    // 3. 러더 & 노즈 휠: 방향 조향 (러더 입력 + 에일러론 협조)
+    let rudderInput = 0;
+    if (Math.abs(this.touchRudder || 0) > 0.02) {
+      rudderInput = this.touchRudder;
+    }
+    if (this.hotasState && this.hotasState.connected && this.hotasState.useTwistRudder && Math.abs(this.hotasState.yaw) > 0.12) {
+      rudderInput = this.hotasState.yaw;
+    }
+
     let targetRudder = 0;
-    if (Math.abs(rollInput) > 0.06) {
+    if (Math.abs(rudderInput) > 0.02) {
+      targetRudder = -rudderInput * 0.55;
+    } else if (Math.abs(rollInput) > 0.06) {
       targetRudder = -rollInput * 0.35;
     }
-    if (this.hotasState && this.hotasState.connected && this.hotasState.useTwistRudder && Math.abs(this.hotasState.yaw) > 0.25) {
-      targetRudder = -this.hotasState.yaw * 0.55;
-    }
+
     if (this.controlSurfaces.rudder) {
       this.controlSurfaces.rudder.rotation.y = THREE.MathUtils.lerp(
         this.controlSurfaces.rudder.rotation.y,
@@ -437,11 +445,13 @@
         this.groundSpeed = Math.max(0, vGround + aGround * effectiveDt);
         this.speed = this.groundSpeed / 77.777;
 
-        // A/D 키 및 HOTAS 사이드스틱 노즈 휠 스티어링
+        // A/D 키, 터치 러더 및 HOTAS 사이드스틱 노즈 휠 스티어링
         let steerInput = 0;
         if (this.keys.left) steerInput -= 1;
         if (this.keys.right) steerInput += 1;
-        if (this.joystickData && this.joystickData.active) {
+        if (Math.abs(this.touchRudder || 0) > 0.02) {
+          steerInput += this.touchRudder;
+        } else if (this.joystickData && this.joystickData.active) {
           steerInput += this.joystickData.x;
         }
         if (this.hotasState && this.hotasState.connected) {
@@ -557,22 +567,37 @@
       const w = -vAir.dot(bUp);
 
       // 진정 받음각(Angle of Attack, alpha) 및 미끄러짐각(Sideslip, beta)
-      this.aoa = Math.atan2(w, Math.max(1.0, u));
-      this.sideslip = Math.asin(THREE.MathUtils.clamp(v / airSpeed, -1.0, 1.0));
+      if (airSpeed > 1.5) {
+        this.aoa = Math.atan2(w, Math.max(0.5, u));
+        this.sideslip = Math.asin(THREE.MathUtils.clamp(v / airSpeed, -1.0, 1.0));
+      } else {
+        this.aoa = 0;
+        this.sideslip = 0;
+      }
+      this.alpha = this.aoa;
+      this.beta = this.sideslip;
 
       // 동압 (Dynamic Pressure q = 0.5 * rho * V²)
       const qDyn = 0.5 * rho * airSpeed * airSpeed;
 
       // 지면 효과 (Ground Effect Cushion - 착륙 플레어 쿠션)
+      // phi_ground = (16h/b)^2 / (1 + (16h/b)^2)
       const radioAlt = Math.max(0.2, (this.planeGroup.position.y - this.groundY) * 10);
       const hOverB = radioAlt / specs.wingSpan;
-      let phiIGE = 1.0;
+      let phiGround = 1.0;
       let igeLiftMult = 1.0;
-      if (hOverB < 1.0) {
-        phiIGE = Math.pow(16.0 * hOverB, 2) / (1.0 + Math.pow(16.0 * hOverB, 2));
-        phiIGE = Math.max(0.52, Math.min(1.0, phiIGE));
-        igeLiftMult = 1.0 + 0.16 * (1.0 - hOverB); // 착륙 직전 지면 쿠션 양력 증대
+      if (hOverB < 1.2) {
+        const h_b = Math.max(0.08, hOverB);
+        const h16 = 16.0 * h_b;
+        const h16Sq = h16 * h16;
+        phiGround = h16Sq / (1.0 + h16Sq);
+        // 지면 반 날개폭 이내 진입 시 양력 쿠션 효과
+        if (h_b < 0.5) {
+          igeLiftMult = 1.0 + 0.12 * (0.5 - h_b);
+        }
       }
+      this.phiGround = phiGround;
+      this.groundEffectFactor = phiGround;
 
       // 공기역학 양력선 & 실속 한계 받음각 판정
       const alphaCrit = specs.stallAlphaClean + flapAlphaStall;
@@ -604,7 +629,7 @@
       cL = Math.max(-0.6, cL);
 
       // 공기역학 항력 (Parasite + Induced + Flaps + Spoilers + Gear + Stall Drag)
-      const cDi = (cL * cL) / (Math.PI * specs.aspectRatio * specs.oswaldEff) * phiIGE;
+      const cDi = (cL * cL) / (Math.PI * specs.aspectRatio * specs.oswaldEff) * phiGround;
       const cDStall = this.isStalling ? (0.42 * Math.pow(this.aoa - alphaCrit, 1.5)) : 0.0;
       const totalCD = specs.cd0 + flapCD + gearCD + spoilerCD + cDi + cDStall;
 
@@ -617,14 +642,25 @@
       // 2) 항력: 비행 경로 정반대 방향
       const dragForce = vNorm.clone().multiplyScalar(-qDyn * specs.wingArea * totalCD);
 
-      // 3) 추력: 엔진 추진축 방향
+      // 3) 공기역학 횡력 (Sideforce): 미끄러짐각 beta 및 러더 편향에 의한 측면 힘
+      let inFlightRudder = 0;
+      if (Math.abs(this.touchRudder || 0) > 0.02) {
+        inFlightRudder = this.touchRudder;
+      }
+      if (this.hotasState && this.hotasState.connected && this.hotasState.useTwistRudder && Math.abs(this.hotasState.yaw) > 0.12) {
+        inFlightRudder = this.hotasState.yaw;
+      }
+      const cY = -0.75 * this.sideslip + 0.18 * inFlightRudder;
+      const sideForce = bRight.clone().multiplyScalar(qDyn * specs.wingArea * cY);
+
+      // 4) 추력: 엔진 추진축 방향
       const thrustForce = bFwd.clone().multiplyScalar(thrustMagnitude);
 
-      // 4) 중력: 지구 중심 방향 (-Y)
+      // 5) 중력: 지구 중심 방향 (-Y)
       const gravityForce = new THREE.Vector3(0, -specs.mass * 9.81, 0);
 
-      // 5) 알짜 힘 합성 & 뉴턴 가속도 a = F / m
-      const netForce = new THREE.Vector3().add(liftForce).add(dragForce).add(thrustForce).add(gravityForce);
+      // 6) 알짜 힘 합성 & 뉴턴 가속도 a = F / m
+      const netForce = new THREE.Vector3().add(liftForce).add(dragForce).add(sideForce).add(thrustForce).add(gravityForce);
       const accel = netForce.divideScalar(specs.mass);
       this.acceleration.copy(accel);
 
@@ -632,7 +668,7 @@
       this.velocity.addScaledVector(accel, effectiveDt);
 
       // ------------------------------------------------------------
-      // FBW (Fly-By-Wire) 비행 제어 법칙 (Airbus Normal Law)
+      // FBW 6-DoF 비행 제어 법칙 & 연속 공기역학 감쇠 (Normal Law & Aero Damping)
       // ------------------------------------------------------------
       let pitchInput = 0;
       let rollInput = 0;
@@ -651,44 +687,70 @@
       }
       const isRollActive = Math.abs(rollInput) > 0.06;
 
+      if (!this.angularVelocity) {
+        this.angularVelocity = new THREE.Vector3(0, 0, 0);
+      }
+
+      const qDynRatio = THREE.MathUtils.clamp(qDyn / 2500.0, 0.25, 1.5);
+      const pitchDamping = (specs.pitchDamping || 1.8) * qDynRatio;
+      const rollDamping = (specs.rollDamping || 2.2) * qDynRatio;
+      const yawDamping = (specs.yawDamping || 2.0) * qDynRatio;
+
       // 1) 피치 제어: 동압 연동 조종면 효율 및 에어버스 플레어 법칙
-      let pitchRate = pitchInput * 0.026;
+      let targetPitchRate = pitchInput * 0.026 * (specs.pitchAuthority || 0.55);
       if (this.isStalling && pitchInput > 0) {
-        pitchRate *= 0.12; // 실속 시 엘리베이터 무력화
+        targetPitchRate *= 0.12; // 실속 시 엘리베이터 무력화
       }
       // 착륙 플레어 법칙 (Flare Law): 지상 15m 미만에서 기수 숙임 모멘트를 주어 파일럿의 부드러운 당김 유도
       if (radioAlt < 15.0 && !this.isOnGround) {
-        pitchRate -= 0.0035;
+        targetPitchRate -= 0.0035;
       }
-      this.planeGroup.rotateX(pitchRate);
+      this.angularVelocity.x = THREE.MathUtils.lerp(
+        this.angularVelocity.x,
+        targetPitchRate,
+        Math.min(1.0, effectiveDt * (6.0 + pitchDamping))
+      );
+      this.planeGroup.rotateX(this.angularVelocity.x);
 
-      // 2) 롤 제어 & 뱅크각 유지 (Bank Angle Hold & Auto-Leveling)
+      // 2) 롤 제어 & 뱅크각 유지 (Bank Angle Hold & Auto-Leveling with Aero Damping)
       const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
       const bankTilt = THREE.MathUtils.clamp(localRight.y, -1, 1);
       const maxBankTilt = 0.82;
 
+      let targetRollRate = 0;
       if (isRollActive) {
         if ((rollInput > 0 && bankTilt > -maxBankTilt) || (rollInput < 0 && bankTilt < maxBankTilt)) {
-          this.planeGroup.rotateZ(-rollInput * 0.038);
+          targetRollRate = -rollInput * 0.038 * (specs.rollAuthority || 0.70);
         }
       } else {
         // 중립 시 수평 자동 복원: 미세 쏠림 원천 차단
         if (Math.abs(bankTilt) > 0.001) {
-          this.planeGroup.rotateZ(-bankTilt * 0.12);
+          targetRollRate = -bankTilt * 0.12;
         }
       }
+      this.angularVelocity.z = THREE.MathUtils.lerp(
+        this.angularVelocity.z,
+        targetRollRate,
+        Math.min(1.0, effectiveDt * (7.0 + rollDamping))
+      );
+      this.planeGroup.rotateZ(this.angularVelocity.z);
 
-      // 3) 협조 선회 (Coordinated Turn): 경사각에 맞춘 원심력 요 회전 (공 0 중앙 유지)
+      // 3) 협조 선회 및 러더 요 응답 (Coordinated Turn & Rudder Yaw Response with Aero Damping)
       let turnRate = 0;
       if (isRollActive) {
         turnRate = bankTilt * 0.026 - (rollInput * 0.016);
       }
-      // 러더는 조종사가 의도적으로 35% 이상 비틀었을 때만 비상 조향
-      if (this.hotasState && this.hotasState.connected && this.hotasState.useTwistRudder && Math.abs(this.hotasState.yaw) > 0.35) {
-        turnRate += -this.hotasState.yaw * 0.015;
+      // 러더 편향에 따른 요 모멘트 반응
+      if (Math.abs(inFlightRudder) > 0.02) {
+        turnRate += -inFlightRudder * 0.022 * (specs.yawAuthority || 0.45);
       }
-      if (Math.abs(turnRate) > 0.0001) {
-        this.planeGroup.rotateY(turnRate);
+      this.angularVelocity.y = THREE.MathUtils.lerp(
+        this.angularVelocity.y,
+        turnRate,
+        Math.min(1.0, effectiveDt * (6.0 + yawDamping))
+      );
+      if (Math.abs(this.angularVelocity.y) > 0.00005) {
+        this.planeGroup.rotateY(this.angularVelocity.y);
       }
 
       // ------------------------------------------------------------
