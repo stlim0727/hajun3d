@@ -2875,3 +2875,43 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   }
 }
 
+/* ==========================================================================
+   🔊 Subtle Audio Autoplay Unlock Hint Banner (#audio-start-hint)
+   ========================================================================== */
+.audio-start-hint {
+  position: fixed;
+  bottom: max(20px, calc(env(safe-area-inset-bottom, 0px) + 20px));
+  top: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px 20px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #f0f6fc;
+  font: 500 13px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+  text-align: center;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  z-index: 9999;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.audio-start-hint:hover {
+  background: rgba(30, 41, 59, 0.96);
+  border-color: rgba(56, 189, 248, 0.7);
+  box-shadow: 0 6px 24px rgba(56, 189, 248, 0.25);
+}
+
+.audio-start-hint[hidden] {
+  display: none !important;
+}
