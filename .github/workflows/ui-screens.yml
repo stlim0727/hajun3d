@@ -1,12 +1,6 @@
 name: UI Screens
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'web/**'
-      - 'scripts/capture-all-ui-screens.mjs'
-      - 'scripts/lib/browserHarness.mjs'
   workflow_dispatch:
     inputs:
       tier:

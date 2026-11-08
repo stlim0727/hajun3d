@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - Keyboard, Touch/Virtual Joystick, HOTAS 1 & Airbus TCA Sidestick Controls
  * Subsystem: input (11 methods)
  */
@@ -42,7 +42,10 @@
   setTouchThrottle(val) {
     const clamped = Math.max(0.0, Math.min(1.0, val));
     this.throttle = clamped;
+    this.syncTouchThrottleUI(clamped);
+  },
 
+  syncTouchThrottleUI(clamped) {
     const pct = Math.round(clamped * 100);
     const throttleReadout = document.getElementById('touch-thr-val');
     if (throttleReadout) {
@@ -62,7 +65,7 @@
       throttleThumb.style.top = `${(1.0 - clamped) * 100}%`;
     }
     if (this.boostVal && this.boostBar) {
-      const digit = Math.round(this.throttle * 10);
+      const digit = Math.round(clamped * 10);
       this.boostVal.textContent = `${pct}% [키 ${digit}]`;
       this.boostBar.style.width = `${pct}%`;
     }
@@ -99,6 +102,7 @@
         const digit = parseInt(e.key, 10);
         if (!isNaN(digit)) {
           this.throttle = digit * 0.1;
+          if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(this.throttle);
           this.showPopup(`엔진 출력: ${Math.round(this.throttle * 100)}% [키 ${digit}]`);
           return;
         }
@@ -342,6 +346,7 @@
     // ----------------------------------------------------------------
     const throttleTrack = document.getElementById('touch-throttle-track');
     let throttlePointerId = null;
+        this.isTouchThrottleActive = false;
 
     if (throttleTrack) {
       const updateThrottleFromPointer = (clientY) => {
@@ -357,6 +362,7 @@
         if (e.button !== 0 && e.pointerType === 'mouse') return;
         e.preventDefault();
         throttlePointerId = e.pointerId;
+        this.isTouchThrottleActive = true;
         try {
           throttleTrack.setPointerCapture(e.pointerId);
         } catch (_) {}
@@ -377,6 +383,7 @@
           }
         } catch (_) {}
         throttlePointerId = null;
+        this.isTouchThrottleActive = false;
       };
 
       throttleTrack.addEventListener('pointerup', onThrottlePointerEnd);

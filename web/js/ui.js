@@ -287,6 +287,7 @@
     // 즉시 출력을 85%로 올려 가속 및 플랩 1(이륙 플랩) 설정
     this.throttle = 0.85;
     this.n1 = 85.0;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.85);
     this.targetN1 = 85.0;
     this.flapIndex = 1; // 이륙 기본 플랩 1 (Takeoff Flaps 1)
     this.spoilerExtended = false;
@@ -479,6 +480,12 @@
       }
     }
 
+        if (!this.isTouchThrottleActive && typeof this.syncTouchThrottleUI === 'function') {
+      if (this._lastSyncedThrottle !== this.throttle) {
+        this._lastSyncedThrottle = this.throttle;
+        this.syncTouchThrottleUI(this.throttle);
+      }
+    }
     const n1Val = Math.round(this.n1);
     const thrPercent = Math.round(this.throttle * 100);
     const revTag = this.reverseThrustActive ? ' [REV]' : '';

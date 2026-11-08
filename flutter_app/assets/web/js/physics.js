@@ -922,40 +922,9 @@
       this.camera.position.y += (Math.random() - 0.5) * speedTurbulence;
     }
 
-    // 제트 엔진 및 풍절음 오디오 실시간 부드러운 보간 (실제 N1% 터빈 스풀업 회전수 연동)
-    if (this.audioCtx && this.soundEnabled) {
-      const n1Norm = Math.min(1.0, Math.max(0, (this.n1 - 20) / 80)); // 0.0 (Idle 20%) ~ 1.0 (TOGA 100%)
-      const now = this.audioCtx.currentTime;
-
-      // 1. 공기 분사 제트 노이즈 (저속에서는 낮은 웅웅거림, TOGA에서는 거대한 굉음)
-      if (this.jetNoiseFilter && this.jetNoiseGain) {
-        const targetCutoff = 320 + n1Norm * 1450; // 320Hz ~ 1770Hz
-        const targetNoiseGain = 0.08 + n1Norm * 0.24 + (this.reverseThrustActive ? 0.16 : 0.0);
-        this.jetNoiseFilter.frequency.setTargetAtTime(targetCutoff, now, 0.12);
-        this.jetNoiseGain.gain.setTargetAtTime(targetNoiseGain, now, 0.12);
-      }
-
-      // 2. 터빈 회전 코어 저음
-      if (this.jetRumble) {
-        const targetRumbleFreq = 54 + n1Norm * 48; // 54Hz ~ 102Hz
-        this.jetRumble.frequency.setTargetAtTime(targetRumbleFreq, now, 0.12);
-      }
-
-      // 3. 은은한 터빈 휘파람음 (N1 상승 시 선명한 고음 휘파람 상승)
-      if (this.turbineWhine) {
-        const targetWhineFreq = 260 + n1Norm * 420; // 260Hz ~ 680Hz
-        this.turbineWhine.frequency.setTargetAtTime(targetWhineFreq, now, 0.12);
-      }
-
-      // 4. 고속 공기역학 풍절음 (High-Speed Cockpit Wind Rush: 400~850 km/h 및 스포일러 전개 난류)
-      if (this.cockpitWindFilter && this.cockpitWindGain) {
-        const windRatio = Math.min(1.0, Math.max(0, (currentKmh - 300) / 550));
-        const spoilerBoost = this.spoilerExtended ? 0.12 : 0.0;
-        const targetWindFreq = 600 + windRatio * 1400 + (this.spoilerExtended ? 300 : 0); // 600Hz ~ 2300Hz
-        const targetWindGain = windRatio * (this.cameraMode === '1st' ? 0.30 : 0.20) + spoilerBoost;
-        this.cockpitWindFilter.frequency.setTargetAtTime(targetWindFreq, now, 0.12);
-        this.cockpitWindGain.gain.setTargetAtTime(targetWindGain, now, 0.12);
-      }
+    // 제트 엔진 및 풍절음 오디오 실시간 부드러운 보간
+    if (this.audioCtx && this.soundEnabled && typeof this.updateAudio === 'function') {
+      this.updateAudio(dt);
     }
   },
 
