@@ -32,3 +32,11 @@ Thumbs.db
 # Temp / Cache
 scratch_chrome_profile/
 screenshots/
+node_modules/
+.review/
+.cache/
+.tmp/
+review-artifacts/
+.env
+.env.local
+

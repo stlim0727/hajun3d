@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hajun PR Feedback"
+  short_description: "Review Hajun Plane 3D PRs and post Korean feedback"
+  default_prompt: "Use $hajun-pr-feedback to review this Hajun Plane 3D PR and post Korean feedback."

@@ -1,0 +1,18 @@
+{
+  "name": "hajun-plane-3d",
+  "version": "1.0.0",
+  "description": "Realistic Jet Airliner 3D Flight Simulator for Web and Flutter WebView",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-syntax.mjs && node scripts/check-workflow-actions.mjs",
+    "test": "node --test tests/**/*.test.js",
+    "wt:new": "node scripts/agent-workflow.mjs wt:new",
+    "pr:arc": "node scripts/agent-workflow.mjs pr:arc",
+    "pr:mac": "node scripts/agent-workflow.mjs pr:mac",
+    "audio:departure": "node scripts/build-gemini-departure-radio.mjs",
+    "audio:check": "node scripts/build-gemini-departure-radio.mjs --check"
+  },
+  "devDependencies": {
+    "yaml": "2.8.1"
+  }
+}

@@ -50,7 +50,7 @@
       this.scene.add(p);
       this.particles.push(p);
     }
-  }
+  },
 
   registerObstacle(mesh, name, offset = new THREE.Vector3(0, 0, 0)) {
     mesh.updateMatrixWorld(true);

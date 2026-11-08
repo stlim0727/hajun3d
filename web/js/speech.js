@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - Cockpit Microphone, Persistent Speech AI, Passenger Dialogue & Interactive PA
  * Subsystem: speech (16 methods)
  */
@@ -115,13 +115,18 @@
   // ----------------------------------------------------------------
   toggleMicrophone() {
     if (this.isMicActive) {
-      this.stopMicrophone();
+      const paBanner = document.getElementById('pa-broadcast-banner');
+      if (paBanner && paBanner.classList.contains('hidden')) {
+        paBanner.classList.remove('hidden');
+      } else {
+        this.stopMicrophone();
+      }
     } else {
       this.startMicrophone();
     }
   },
 
-  startMicrophone() {
+  startMicrophone(showBanner = true) {
     this.isMicActive = true;
     this.micRestartTimer = null;
     this.micLastRecognizedText = '';
@@ -144,7 +149,7 @@
       micBtn.classList.add('active');
     }
     if (micText) micText.textContent = '마이크 LIVE (듣는 중)';
-    if (paBanner) paBanner.classList.remove('hidden');
+    if (paBanner && showBanner) paBanner.classList.remove('hidden');
     if (paText) paText.textContent = '"기장님, 지금 말씀하세요! 마이크로 말씀하시거나 아래 방송 칩을 누르면 승객들이 AI로 즉각 반응합니다."';
 
     this.playPAChime();

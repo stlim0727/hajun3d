@@ -375,6 +375,41 @@ window.toggleTwistRudder = function() {
 };
 
 // 브라우저 및 웹뷰(Flutter) 즉각 로딩 및 버튼 먹통 방지 초기화
+
+window.toggleMobileMenu = function() {
+  const m = document.getElementById('mobile-menu-modal');
+  if (m) {
+    m.classList.toggle('hidden');
+    if (!m.classList.contains('hidden') && window.airplaneGame) {
+      const planeMap = {
+        'a320': 'A320 제트기', 'b747': 'B747-400 점보', 'dc10': 'DC-10 삼발기',
+        'md80': 'MD-80 쌍발기', 'concorde': '콩코드 초음속기', 'amphibian': '수륙양용기', 'ancestor': '1903 조상 비행기'
+      };
+      const curPlane = window.airplaneGame.currentPlaneType || 'a320';
+      const pName = document.getElementById('mobile-plane-name');
+      if (pName) pName.textContent = planeMap[curPlane] || curPlane.toUpperCase();
+
+      const gStat = document.getElementById('mobile-gear-status');
+      if (gStat) gStat.textContent = window.airplaneGame.gearExtended ? 'DOWN (전개)' : 'UP (수납)';
+
+      const fStat = document.getElementById('mobile-flaps-status');
+      if (fStat) {
+        const flapNames = ['UP (0°)', '1 (15°)', '2 (25°)', 'FULL (40°)'];
+        fStat.textContent = flapNames[window.airplaneGame.flapIndex || 0] || 'UP';
+      }
+
+      const spStat = document.getElementById('mobile-spoiler-status');
+      if (spStat) spStat.textContent = window.airplaneGame.spoilerExtended ? 'EXT (전개)' : 'RET (수납)';
+
+      const revStat = document.getElementById('mobile-reverser-status');
+      if (revStat) revStat.textContent = window.airplaneGame.reverseThrustActive ? 'ON (역추진)' : 'OFF';
+
+      const engStat = document.getElementById('mobile-engine-status');
+      if (engStat) engStat.textContent = window.airplaneGame.isEngineOff ? 'OFF (정지)' : 'ON (가동)';
+    }
+  }
+};
+
 function initGame() {
   if (!window.airplaneGame) {
     try {

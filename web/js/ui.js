@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - PFD Attitude Horizon, Glassmorphism HUD, Gate Modals & Flight Missions
  * Subsystem: ui (21 methods)
  */
@@ -15,6 +15,14 @@
     }
     if (gearBtn) {
       gearBtn.className = `icon-btn glass ${stateClass}`;
+    const touchGear = document.getElementById('btn-touch-gear');
+    if (touchGear) {
+      touchGear.className = `touch-btn mini-action-btn ${stateClass}`;
+    }
+    const mobGear = document.getElementById('mobile-gear-status');
+    if (mobGear) {
+      mobGear.textContent = statusText === 'DOWN' ? 'DOWN (전개)' : 'UP (수납)';
+    }
     }
   },
 
@@ -296,7 +304,7 @@
 
     // 비행 시작 시 조종석 마이크 상시 청취 자동 활성화
     setTimeout(() => {
-      if (!this.isMicActive) this.startMicrophone();
+      if (!this.isMicActive) this.startMicrophone(false);
     }, 400);
   },
 
@@ -358,7 +366,7 @@
 
     // 비행 시작 시 조종석 마이크 상시 청취 자동 활성화
     setTimeout(() => {
-      if (!this.isMicActive) this.startMicrophone();
+      if (!this.isMicActive) this.startMicrophone(false);
     }, 400);
   },
 
