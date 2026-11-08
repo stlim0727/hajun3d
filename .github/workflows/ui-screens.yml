@@ -1,0 +1,83 @@
+name: UI Screens
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'scripts/capture-all-ui-screens.mjs'
+      - 'scripts/lib/browserHarness.mjs'
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Which screens tier to capture/verify'
+        required: false
+        default: 'core'
+        type: choice
+        options:
+          - core
+          - full
+          - all
+      publish:
+        description: 'Publish: save screenshots, commit to repository, and trigger GitHub Pages deploy'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: ui-screens-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-screens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      - name: Capture UI screens
+        run: |
+          if [ "${{ inputs.publish }}" = "true" ]; then
+            node scripts/capture-all-ui-screens.mjs --tier ${{ inputs.tier || 'core' }}
+          else
+            node scripts/capture-all-ui-screens.mjs --tier ${{ inputs.tier || 'core' }} --verify
+          fi
+        env:
+          FORCE_GPU: '0'
+
+      - name: Commit and push updated UI screens
+        if: ${{ inputs.publish }}
+        run: |
+          if [ -n "$(git status --porcelain screenshots/ui)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add screenshots/ui/ screens*.html
+            git commit -m "chore(screens): update UI screens showcase [tier: ${{ inputs.tier || 'core' }}]"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No screenshot or catalog changes to commit."
+          fi
+
+      - name: Upload UI screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ui-screens-${{ inputs.tier || 'core' }}
+          path: |
+            screenshots/ui/
+            /tmp/hajun-ui-screens-*/
+          if-no-files-found: ignore

@@ -28,3 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - name: Verify UI screens acceptance
+        run: npm run test:ui-screens
+        env:
+          FORCE_GPU: '0'
