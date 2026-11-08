@@ -10,7 +10,12 @@
     "pr:arc": "node scripts/agent-workflow.mjs pr:arc",
     "pr:mac": "node scripts/agent-workflow.mjs pr:mac",
     "audio:departure": "node scripts/build-gemini-departure-radio.mjs",
-    "audio:check": "node scripts/build-gemini-departure-radio.mjs --check"
+    "audio:check": "node scripts/build-gemini-departure-radio.mjs --check",
+    "screens:capture": "node scripts/capture-all-ui-screens.mjs",
+    "screens:capture:all": "node scripts/capture-all-ui-screens.mjs --all-viewports",
+    "screens:capture:portrait": "node scripts/capture-all-ui-screens.mjs --viewport mobile-portrait",
+    "screens:capture:landscape": "node scripts/capture-all-ui-screens.mjs --viewport mobile-landscape",
+    "test:ui-screens": "node scripts/capture-all-ui-screens.mjs --tier core --verify"
   },
   "devDependencies": {
     "yaml": "2.8.1"
