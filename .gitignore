@@ -32,7 +32,6 @@ Thumbs.db
 # Temp / Cache
 scratch_chrome_profile/
 fresh_chrome_profile/
-screenshots/
 node_modules/
 .review/
 .cache/

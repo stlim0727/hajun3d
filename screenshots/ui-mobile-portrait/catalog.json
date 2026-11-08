@@ -1,0 +1,176 @@
+{
+  "generatedAt": "2026-11-08T06:17:15.295Z",
+  "branch": "main",
+  "commit": "859958d79b15d99cdca9db57566517e56b29f73e",
+  "commitShort": "859958d",
+  "commitDate": "2026-11-08T15:04:30+09:00",
+  "viewport": "mobile-portrait",
+  "dimensions": "390x844",
+  "screens": [
+    {
+      "id": "01_startup_plane_selector",
+      "category": "lobby",
+      "file": "01_startup_plane_selector.png",
+      "title_ko": "시뮬레이터 시작 및 기종 선택 모달",
+      "title_en": "Startup & Aircraft Selector Modal",
+      "description_ko": "초기 운항 브리핑, 7종 제트 여객기 선택 카드, 활주로 즉시 이륙 및 게이트 출발 버튼",
+      "description_en": "Initial flight operations briefing, 7 aircraft selector cards, direct takeoff & gate start actions",
+      "selector": "#overlay-screen",
+      "tier": "core"
+    },
+    {
+      "id": "02_taxiway_departure",
+      "category": "gate",
+      "file": "02_taxiway_departure.png",
+      "title_ko": "게이트 출발 및 유도로(Taxiway) 지상 주행",
+      "title_en": "Gate Departure & Taxiway Ground Operations",
+      "description_ko": "게이트 1 탑승 완료 후 활주로 36L를 향한 유도로 지상 활주 및 지상 조향 상태",
+      "description_en": "Ground taxiing and nosewheel steering from Gate 1 towards Runway 36L",
+      "selector": "#game-container",
+      "tier": "core"
+    },
+    {
+      "id": "03_flight_hud_pfd",
+      "category": "flight",
+      "file": "03_flight_hud_pfd.png",
+      "title_ko": "비행 HUD 및 인공수평의(PFD) 비행 계기",
+      "title_en": "In-Flight HUD & Miniature PFD Flight Instruments",
+      "description_ko": "A320 순항 비행: 자세계(피치/롤), 대기속도 게이지, 고도 및 승강계(VSI), 스로틀 및 항법 지시계",
+      "description_en": "Cruise flight instruments: PFD attitude horizon, airspeed indicator, altimeter, VSI, and throttle",
+      "selector": "#hud",
+      "tier": "core"
+    },
+    {
+      "id": "04_night_mode",
+      "category": "flight",
+      "file": "04_night_mode.png",
+      "title_ko": "야간 비행 모드 (Night Mode) 및 활주로 조명",
+      "title_en": "Night Mode Flight & Runway Lighting System",
+      "description_ko": "야간 운항: 밤하늘 별자리, 기체 항법등(스트로브/비콘), 활주로 36L 유도등 및 PAPI 점등",
+      "description_en": "Night operations: starry sky, aircraft navigation strobes, runway ALS and PAPI lighting",
+      "selector": "#game-container",
+      "tier": "core"
+    },
+    {
+      "id": "05_emergency_overlay",
+      "category": "emergency",
+      "file": "05_emergency_overlay.png",
+      "title_ko": "비상 상황 시나리오 선택 오버레이",
+      "title_en": "In-Flight Emergency Scenario Selector Overlay",
+      "description_ko": "1번 엔진 화재, 버드 스트라이크 전 엔진 정지, 윈드시어 돌풍, 기어 고장 시나리오 선택 패널",
+      "description_en": "Emergency scenarios: engine fire, dual bird strike, microburst windshear, and gear failure",
+      "selector": "#emergency-panel",
+      "tier": "core"
+    },
+    {
+      "id": "06_gate_deplaning_card",
+      "category": "gate",
+      "file": "06_gate_deplaning_card.png",
+      "title_ko": "목적지 게이트 도착 및 승객 285명 하선 카드",
+      "title_en": "Gate Arrival Docking & Deplaning Action Card",
+      "description_ko": "인천공항 게이트 정지선 정차: 탑승교 L1 도킹 연결 완료, 엔진 완전 정지(OFF) 및 승객 하선 시작",
+      "description_en": "Incheon Gate arrival: L1 jetway docked, engines shutdown, and 285 passenger deplaning prompt",
+      "selector": "#gate-action-container",
+      "tier": "core"
+    },
+    {
+      "id": "07_cockpit_first_person",
+      "category": "flight",
+      "file": "07_cockpit_first_person.png",
+      "title_ko": "1인칭 조종석 시점 (Cockpit View)",
+      "title_en": "1st Person Cockpit Camera View",
+      "description_ko": "조종석 내부 1인칭 시점: 전방 윈드실드 시야, 글래스 콕핏 및 활주로 정렬 조망",
+      "description_en": "First-person cockpit view overlooking runway approach and glareshield",
+      "selector": "#game-container",
+      "tier": "full"
+    },
+    {
+      "id": "08_plane_b747_jumbo",
+      "category": "lobby",
+      "file": "08_plane_b747_jumbo.png",
+      "title_ko": "보잉 747-400 점보 제트기 (Queen of the Skies)",
+      "title_en": "Boeing 747-400 Jumbo Jet Aircraft",
+      "description_ko": "대형 4발 제트 여객기: 2층 덱 험프, 4기 터보팬 엔진 및 18륜 랜딩 기어 3D 모델",
+      "description_en": "Iconic 4-engine widebody airliner featuring upper deck hump and 18 landing wheels",
+      "selector": "#game-container",
+      "tier": "full"
+    },
+    {
+      "id": "09_plane_concorde_supersonic",
+      "category": "lobby",
+      "file": "09_plane_concorde_supersonic.png",
+      "title_ko": "콩코드 초음속 여객기 (Mach 2.0 Supersonic)",
+      "title_en": "Concorde Supersonic Airliner",
+      "description_ko": "초음속 델타익 기체: 마하 2.0 순항 속도, 오지브 델타익 및 가동형 드룹 노즈 3D 모델",
+      "description_en": "Supersonic delta-wing passenger jet capable of Mach 2.0 with droop nose",
+      "selector": "#game-container",
+      "tier": "full"
+    },
+    {
+      "id": "10_mobile_menu_drawer",
+      "category": "modal",
+      "file": "10_mobile_menu_drawer.png",
+      "title_ko": "모바일 통합 조종 & 시스템 설정 드로어",
+      "title_en": "Mobile Systems & Flight Controls Drawer Menu",
+      "description_ko": "모바일 최적화 메뉴: 기종 변경, 기어/플랩/스포일러/역추진 및 비상 시나리오 바로가기",
+      "description_en": "Mobile responsive drawer: aircraft switch, flight controls, scenarios, and audio",
+      "selector": "#mobile-menu-modal",
+      "tier": "full"
+    },
+    {
+      "id": "11_hotas_calibration_modal",
+      "category": "modal",
+      "file": "11_hotas_calibration_modal.png",
+      "title_ko": "HOTAS 1 & 에어버스 사이드스틱 캘리브레이션 모달",
+      "title_en": "Thrustmaster HOTAS One & Airbus Sidestick Control Dialog",
+      "description_ko": "Thrustmaster T.Flight HOTAS One: 피치/롤/러더/스로틀 4축 실시간 게이지 및 공식 버튼 맵",
+      "description_en": "Hardware flight stick calibration: 4-axis realtime meters, deadzone tuning, and button mapping",
+      "selector": "#hotas-modal",
+      "tier": "full"
+    },
+    {
+      "id": "12_glb_pipeline_modal",
+      "category": "modal",
+      "file": "12_glb_pipeline_modal.png",
+      "title_ko": "풀 GLB 3D 파이프라인 및 에셋 관리 모달",
+      "title_en": "Full GLB 3D Pipeline & Preset Manager Modal",
+      "description_ko": "기체/공항/인천공항/지형/도시 100% 바이너리 GLB 내보내기 및 드래그 앤 드롭 파일 로더",
+      "description_en": "Full glTF 2.0 binary pipeline: asset presets, drag & drop model importer, and GLB export",
+      "selector": "#glb-modal",
+      "tier": "full"
+    },
+    {
+      "id": "13_captain_pa_broadcast",
+      "category": "flight",
+      "file": "13_captain_pa_broadcast.png",
+      "title_ko": "조종석 기장 안내 방송 (Captain PA) & 승객 반응 오버레이",
+      "title_en": "Captain PA Live Voice Broadcast & Passenger Reactions",
+      "description_ko": "기장 마이크 음성 방송: 실시간 오디오 VU 미터 파형 및 승객 285명 맞춤형 반응 프리셋",
+      "description_en": "Cockpit captain PA live broadcast banner with real-time VU audio meter and quick chips",
+      "selector": "#pa-broadcast-banner",
+      "tier": "full"
+    },
+    {
+      "id": "14_gpws_terrain_warning",
+      "category": "flight",
+      "file": "14_gpws_terrain_warning.png",
+      "title_ko": "지상 근접 경보 시스템 (EGPWS PULL UP Warning)",
+      "title_en": "Enhanced Ground Proximity Warning System (EGPWS)",
+      "description_ko": "고위험 지형 근접 경보: 시각적 점멸 PULL UP TERRAIN AHEAD 마스터 워닝 배너",
+      "description_en": "Terrain awareness warning: flashing high-priority PULL UP TERRAIN AHEAD master alert",
+      "selector": "#gpws-banner",
+      "tier": "full"
+    },
+    {
+      "id": "15_high_speed_vignette",
+      "category": "flight",
+      "file": "15_high_speed_vignette.png",
+      "title_ko": "200km 대륙 횡단 배속 순항 & 고속 모션 비네트",
+      "title_en": "High-Speed Cruise & Motion Blur Vignette Effect",
+      "description_ko": "고속 순항 모드(4x 배속): 화면 가장자리 고속 윈드 터널 비네트 및 속도선 렌더링",
+      "description_en": "High-speed continental cruise mode with dynamic wind vignette effect",
+      "selector": "#speed-vignette",
+      "tier": "full"
+    }
+  ]
+}
