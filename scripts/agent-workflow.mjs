@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// One-shot agent workflow helper for worktree creation (wt:new), review inspection (pr:arc), and merge+cleanup (pr:mac).
-// Collapses 15-25 individual git/gh shell turns per PR into a single deterministic command.
+// One-shot agent workflow helper for worktree creation (wt:new).
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';

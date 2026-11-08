@@ -24,5 +24,4 @@ To enable automated PR feedback on GitHub:
 ## Local / Interactive Usage
 
 You can also ask the coding agent in your IDE chat:
-> "Use `$hajun-pr-feedback` to review PR #12 and post Korean feedback."
-> or "Run `npm run pr:arc` to inspect review feedback and resolve issues."
+> "Use `$hajun-pr-feedback` to review changes and post Korean feedback."

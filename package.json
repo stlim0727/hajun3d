@@ -7,8 +7,6 @@
     "check": "node scripts/check-syntax.mjs && node scripts/check-workflow-actions.mjs",
     "test": "node --test tests/**/*.test.js",
     "wt:new": "node scripts/agent-workflow.mjs wt:new",
-    "pr:arc": "node scripts/agent-workflow.mjs pr:arc",
-    "pr:mac": "node scripts/agent-workflow.mjs pr:mac",
     "audio:departure": "node scripts/build-gemini-departure-radio.mjs",
     "audio:check": "node scripts/build-gemini-departure-radio.mjs --check",
     "screens:capture": "node scripts/capture-all-ui-screens.mjs",

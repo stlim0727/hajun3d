@@ -7,15 +7,8 @@ Source code and executable configurations take precedence over historical descri
 
 ## User shorthand
 
-Treat these acronyms as instructions when used as commands in a task or PR context:
+Treat these acronyms as instructions when used as commands in a task context:
 
-- **`arc` — address review comments:** run `npm run pr:arc` to inspect the PR's
-  current review comments, checks, and threads in one call, validate feedback,
-  implement actionable fixes, run relevant checks, push updates, and reply to comments
-  and resolve threads (`npm run pr:arc -- --resolve <threadId>`).
-- **`mac` — merge (PR) and clean up (worktree and directory):** run `npm run pr:mac`
-  to verify required CI and checks, merge the intended PR (`--merge --delete-branch`),
-  remove its task worktree and directory, and fast-forward the clean shared checkout.
 - **`wt:new` — create task worktree:** run `npm run wt:new -- <branch>` to fetch
   `origin/main` and create an isolated worktree before editing.
 
@@ -24,8 +17,8 @@ Treat these acronyms as instructions when used as commands in a task or PR conte
 Workflow rules that apply to every agent:
 
 1. Create a new git worktree for each task (`npm run wt:new -- <branch>` or `git fetch origin && git worktree add -b <branch> <path> origin/main`) BEFORE reading or modifying files so you always inspect `origin/main` rather than a stale checkout. Never edit directly in the shared checkout and never blindly copy whole files across checkouts (apply focused edits to prevent clobbering concurrent work).
-2. Before committing or opening a PR, inspect `git diff origin/main` to verify that only intentional scoped changes are present and that no unrelated code or recent features from other PRs were accidentally deleted (`-` lines).
-3. Open a pull request when the work is ready: commit to a focused branch, push, and open a PR — unless the user explicitly requests local-only work.
+2. Before committing or pushing, inspect `git diff origin/main` to verify that only intentional scoped changes are present and that no unrelated code or recent features from other branches were accidentally deleted (`-` lines).
+3. No PR workflow: In this repository, do not open pull requests. Always push verified changes directly to `origin main`. Run `npm run check` and `npm test` before pushing to guarantee zero regressions.
 4. Multiple agents may work in this repository at the same time. Inspect git status before editing, never assume exclusive access, and leave other agents' and the user's edits untouched.
 
 - Read the relevant row in [the task map](docs/development/agent-task-map.md).
