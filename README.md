@@ -129,18 +129,33 @@ Three.js 기반의 고성능 3D WebGL 엔진으로 구현되어 **웹 브라우�
 
 ---
 
-## 📁 프로젝트 파일 구조
+## 📁 프로젝트 파일 구조 (모듈형 아키텍처)
 
 ```text
 hajun-plane-3d/
 ├── web/
-│   ├── index.html        # 공항 HUD, 6종 기종 선택 버튼, 다단계 출발 모드 버튼
-│   ├── style.css         # 고해상도 글래스모피즘 HUD 스타일, 듀얼 액션 버튼, 클릭 최적화
-│   └── game.js           # 6종 3D 항공기 모델링, 360도 지상/해상 조향, 수륙양용 이수/착수, EGPWS
+│   ├── index.html            # 공항 HUD, 6종 기종 선택 버튼, 모듈 스크립트 로더
+│   ├── style.css             # 고해상도 글래스모피즘 HUD 스타일, 듀얼 액션 버튼
+│   ├── glb_bundle.js         # 13종 전 기종 및 배경 3D 바이너리 GLB 번들
+│   ├── game.js               # 전역 액션 디스패처, 디바운스 보호 및 부트스트랩
+│   └── js/                   # 🧩 기능별 서브시스템 모듈 (Coding Agent 토큰 최적화)
+│       ├── core.js           # AirplaneGame 클래스 본체, 생성자, Three.js 씬 코어, 렌더 루프
+│       ├── config.js         # 7종 기체 상세 제원 및 항공역학 상수
+│       ├── physics.js        # 3D 뉴턴 동역학, 공기역학 양항비, 터보팬 관성 스풀, 플랩/스포일러
+│       ├── audio.js          # Web Audio 합성 제트음, EGPWS 음성/경보음, 안내방송 차임
+│       ├── environment.js    # 조명, 별무리, 동적 대양 텍스처, 입체 구름, PAPI, 산맥 지형
+│       ├── airports.js       # 출발 공항, 인천 메가 허브, GSE 조업차량, 버스, AI 편대, 도시
+│       ├── aircraft_builder.js # 절차적 3D 기체 모델링, 에어포일, 노즈콘, 터보팬, 업스윕 동체
+│       ├── glb_pipeline.js   # 바이너리 GLB 언팩/로드, GLTF 내보내기, 드래그&드롭 교체
+│       ├── effects.js        # 비행운, 터치다운 연기, 속도 베이퍼, 파손/폭발 및 파편 물리
+│       ├── input.js          # 키보드 매핑, 모바일 가상 조이스틱, HOTAS 1 / TCA 에어버스 스틱
+│       ├── emergency.js      # 엔진 화재, 버드 스트라이크, 윈드시어, 기어 고장 등 비상 상황
+│       ├── speech.js         # 조종석 마이크 상시 청취, 음성인식, 승객 285명 AI 실시간 화답
+│       └── ui.js             # PFD 인공수평의, HUD 계기, 비상 패널, 게이트 하선 모달
 ├── flutter_app/
-│   ├── pubspec.yaml      # Flutter 웹뷰 설정
-│   ├── lib/main.dart     # 가로 전체화면 모바일 앱 엔트리
-│   └── assets/web/       # 동기화된 오프라인 번들 웹 에셋 (index.html, style.css, game.js)
-├── PROJECT_CONTEXT.md    # 개발 히스토리 및 항공역학/물리 공식 기술 문서
-└── README.md             # 게임 매뉴얼 및 가이드
+│   ├── pubspec.yaml          # Flutter 웹뷰 설정 (- assets/web/js/ 포함)
+│   ├── lib/main.dart         # 가로 전체화면 모바일 앱 엔트리
+│   └── assets/web/           # 동기화된 오프라인 번들 웹 에셋 (index.html, style.css, js/, game.js)
+├── PROJECT_CONTEXT.md        # 개발 히스토리 및 항공역학/물리 공식 기술 문서
+└── README.md                 # 게임 매뉴얼 및 가이드
 ```

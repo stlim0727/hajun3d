@@ -38,17 +38,36 @@
 | **#28** | 전 기종 바이너리 GLB 3D 파일 직접 구축 | A320, B747, DC-10, MD-80, Concorde, Amphibian, Ancestor 등 7개 전 기종에 대해 glTF 2.0 Binary 표준 준수 3D `.glb` 바이너리 파일 직접 작성 및 탑재 |
 | **#29** | 화면의 모든 공항·지형·산맥·도시 배경 전체 GLB 구축 | 출발공항 36L(`airport.glb`), 인천공항 허브(`incheon_airport.glb`), 대륙·해양·열대섬·대산맥 지형(`terrain.glb`), 해운대·LCT·광안대교(`haeundae.glb`), 통합 월드(`world_environment.glb`) 등 16개 GLB 모델 전체 생성, 게임 시작 시 실제 GLB 파일 직접 로드 및 실시간 GLB 파이프라인 동기화 완비 |
 | **#30** | 비행기 및 모든 배경 100% 순수 바이너리 GLB 전환 & 드로우콜 99% 감축 60FPS 극적 성능 향상 | 13종 전 기종 및 배경 환경(출발공항, 인천메가공항, 지형·대양·산맥, 해운대 메트로폴리스)을 `glb_bundle.js`로 사전 패키징하여 로컬 `file://` 및 모바일 WebView에서도 CORS 없이 0ms 즉각 메모리 언팩 로드. 수천 개 메쉬를 생성하던 무거운 절차적 지형/나무/차량 루프를 완전히 걷어내고 드로우콜을 2,500+개에서 ~15개로 99% 이상 감축하여 부드러운 60+ FPS 극적 성능 향상 달성 |
+| **#32** | AI 코딩 에이전트 토큰 효율성 극대화를 위한 모듈형 아키텍처 전면 리팩터링 | 기존 12,232줄(506KB)의 거대한 모놀리식 `game.js`를 13개의 독립 서브시스템(`web/js/*.js`)으로 분리. 기능 수정 시 전체 파일(수만 토큰) 대신 특정 서브시스템(수백 줄)만 탐색/수정할 수 있도록 구조화하여 토큰 소모량 90% 이상 감축 및 브라우저/Flutter 웹뷰 무번들 100% 호환성 확보 |
 
 ---
 
-## 🏗️ 3. 시스템 아키텍처 및 디렉터리 구조
+## 🏗️ 3. 시스템 아키텍처 및 디렉터리 구조 (AI Agent Friendly Architecture)
 
-* **웹 배포 디렉터리 (`web/`)**:
-  * `index.html`: Three.js CDN, 반응형 HUD, 인공수평의(PFD), 비상상황 패널, 하선 버튼, 게임 캔버스.
-  * `style.css`: 글래스모피즘 HUD, PFD 비행 계기판, 게이트 액션 카드, 에메랄드 펄스 글로우.
-  * `game.js`: 항공역학 물리, 지형/공항/비행기 절차적 3D 모델링, 사운드 합성, 파손 엔진.
+> **💡 코딩 에이전트 작업 가이드 (Token Efficiency Guide):**  
+> 특정 기능을 수정하거나 추가할 때 12,000줄의 전체 코드를 읽지 마시고, 아래의 해당 서브시스템 모듈 파일만 직접 읽고 수정하세요.
+
+* **웹 코어 & 배포 디렉터리 (`web/`)**:
+  * `index.html`: Three.js CDN, 반응형 HUD, 인공수평의(PFD), 모듈 스크립트 로더.
+  * `style.css`: 글래스모피즘 HUD, PFD 비행 계기판, 게이트 액션 카드 스타일.
+  * `glb_bundle.js`: 13종 전 기종 및 배경 3D 바이너리 GLB 번들.
+  * `game.js`: 전역 액션 디스패처, 디바운스 보호 시스템, DOM 이벤트 브릿지 및 부트스트랩(`initGame`).
+  * **`web/js/` (기능별 서브시스템 모듈 - 토큰 절약 최적화)**:
+    1. [`core.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/core.js): `AirplaneGame` 기본 클래스 선언, 생성자(`constructor`), Three.js 씬 코어(`initThree`), 메인 렌더 루프(`animate`).
+    2. [`config.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/config.js): 7개 기종 정밀 제원 스펙(`getAircraftSpecs`), 물리 상수 및 엔진 제원.
+    3. [`physics.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/physics.js): 3D 뉴턴 동역학, 공기역학 양항비, 터보팬 관성 스풀, 플랩/스포일러/역추진 물리, 지면 효과, 랜딩 기어 시퀀스.
+    4. [`audio.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/audio.js): Web Audio 합성 제트 사운드, 롤/피치 가변 주파수, EGPWS 음성/경보음, 안내방송 차임.
+    5. [`environment.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/environment.js): 태양광/달빛 조명, 별무리, 동적 대양 텍스처, 입체 구름, PAPI 진입각 지시등, 산맥 지형.
+    6. [`airports.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/airports.js): 출발공항 36L, 인천공항 허브, 탑승교 연동, 지상 조업 차량(GSE), 버스, AI 항공기 편대, 해운대 도시.
+    7. [`aircraft_builder.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/aircraft_builder.js): 절차적 3D 기체 모델링, 주익 에어포일, 유선형 노즈콘, 터보팬 블레이드, 업스윕 동체, 도색 텍스처링, 항법등.
+    8. [`glb_pipeline.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/glb_pipeline.js): 바이너리 GLB 로더, GLTF Exporter, 드래그&드롭 3D 파일 교체 및 프리셋 파이프라인.
+    9. [`effects.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/effects.js): 비행운(Contrail), 터치다운 연기, 속도 압축 응결 베이퍼, 해상 스프레이, 기체 파손/폭발 및 파편 물리.
+    10. [`input.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/input.js): 키보드 매핑, 모바일 가상 조이스틱, HOTAS 1 / TCA 에어버스 사이드스틱 축 보정 및 영점 조절.
+    11. [`emergency.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/emergency.js): 4종 비상 상황(엔진 화재, 버드 스트라이크, 마이크로버스트 윈드시어, 기어 고장) 및 비상 착륙 보너스.
+    12. [`speech.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/speech.js): 조종석 마이크 상시 청취, 음성인식(STT), 승객 285명 실시간 AI 대화 화답 엔진.
+    13. [`ui.js`](file:///c:/Users/Sungtaek%20Lim/hajun-plane-3d/web/js/ui.js): PFD 인공수평의, HUD 계기, 기어/플랩/스포일러 UI 게이지, 게이트 하선 모달, 미션 완료.
 * **Flutter 모바일 앱 (`flutter_app/assets/web/`)**:
-  * `web/`의 모든 파일과 100% 동일하게 동기화되어 모바일 웹뷰(WebView)로 구동.
+  * `web/`의 모든 파일(`js/` 모듈 포함)과 100% 동일하게 동기화되어 모바일 웹뷰(WebView)로 구동.
 
 ---
 

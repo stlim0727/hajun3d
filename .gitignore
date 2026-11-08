@@ -28,3 +28,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.log
+
+# Temp / Cache
+scratch_chrome_profile/
+screenshots/

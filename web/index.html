@@ -603,6 +603,46 @@
   </div>
 
   <script src="glb_bundle.js"></script>
+  <!-- Modular Architecture for Clean Maintenance & Token Efficiency -->
+  <script src="js/core.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/environment.js"></script>
+  <script src="js/airports.js"></script>
+  <script src="js/aircraft_builder.js"></script>
+  <script src="js/glb_pipeline.js"></script>
+  <script src="js/effects.js"></script>
+  <script src="js/physics.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/emergency.js"></script>
+  <script src="js/speech.js"></script>
+  <script src="js/ui.js"></script>
   <script src="game.js"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const p = new URLSearchParams(window.location.search);
+      const action = p.get('action');
+      if (action === 'takeoff') {
+        setTimeout(() => { if (window.startDirectTakeoff) window.startDirectTakeoff(); }, 500);
+      } else if (action === 'gate') {
+        setTimeout(() => { if (window.startGateDeparture) window.startGateDeparture(); }, 500);
+      } else if (action === 'emergency') {
+        setTimeout(() => {
+          if (window.startDirectTakeoff) window.startDirectTakeoff();
+          setTimeout(() => { if (window.toggleEmergencyPanel) window.toggleEmergencyPanel(); }, 500);
+        }, 500);
+      } else if (action === 'glb') {
+        setTimeout(() => {
+          if (window.startDirectTakeoff) window.startDirectTakeoff();
+          setTimeout(() => { if (window.toggleGLBMenu) window.toggleGLBMenu(); }, 500);
+        }, 500);
+      } else if (action === 'hotas') {
+        setTimeout(() => {
+          if (window.startDirectTakeoff) window.startDirectTakeoff();
+          setTimeout(() => { if (window.toggleHOTASModal) window.toggleHOTASModal(); }, 500);
+        }, 500);
+      }
+    });
+  </script>
 </body>
 </html>
