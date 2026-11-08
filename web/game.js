@@ -177,7 +177,11 @@ window.toggleSound = function() {
   if (!debounceAction('toggleSound', 180)) return;
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame) {
-    window.airplaneGame.soundEnabled = !window.airplaneGame.soundEnabled;
+    if (typeof window.airplaneGame.toggleSound === 'function') {
+      window.airplaneGame.toggleSound();
+    } else {
+      window.airplaneGame.soundEnabled = !window.airplaneGame.soundEnabled;
+    }
     const soundBtn = document.getElementById('sound-btn');
     if (soundBtn) {
       soundBtn.textContent = window.airplaneGame.soundEnabled ? '🔊' : '🔇';

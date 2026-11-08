@@ -307,6 +307,11 @@ class AirplaneGame {
     if (this.movingGroundCrew && this.movingGroundCrew.length > 0) this.updateAirportGSE(dt);
     if (this.animatedJetways && this.animatedJetways.length > 0) this.updateAnimatedJetways(dt);
 
+    // 오디오 시스템 실시간 보간 및 신디사이저 갱신
+    if (this.audioCtx && typeof this.updateAudio === 'function') {
+      this.updateAudio(dt);
+    }
+
     if (this.isPlaying && !this.isDestroyed) {
       if (this.currentEmergency) this.updateEmergency(dt);
       this.updateFlightPhysics(dt);
