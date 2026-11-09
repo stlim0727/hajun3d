@@ -885,7 +885,7 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   align-items: center;
   justify-content: center;
   transform: translate(0px, 0px);
-  transition: transform 0.04s ease-out;
+  will-change: transform;
 }
 
 .knob-ring {
@@ -3358,14 +3358,14 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 
   .touch-stick-zone,
   #joystick-zone {
-    width: 92px !important;
-    height: 92px !important;
+    width: 114px !important;
+    height: 114px !important;
   }
 
   .touch-stick-knob,
   #joystick-stick {
-    width: 32px !important;
-    height: 32px !important;
+    width: 38px !important;
+    height: 38px !important;
   }
 
   .knob-ring {
@@ -3414,8 +3414,8 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     padding: 6px 12px !important;
   }
   #joystick-zone {
-    width: 100px !important;
-    height: 100px !important;
+    width: 116px !important;
+    height: 116px !important;
   }
   .action-buttons {
     gap: 4px !important;

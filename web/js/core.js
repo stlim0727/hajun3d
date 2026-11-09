@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - Core Game Engine
  * Manages main loop, class definition, Three.js instance, and core properties.
  */
@@ -77,8 +77,12 @@ class AirplaneGame {
       brake: false        // S: 감속 / 역추진
     };
 
-    // 모바일 조이스틱
-    this.joystickData = { x: 0, y: 0, active: false };
+    // 모바일 조이스틱 & 터치 제어 상태
+    this.joystickData = { x: 0, y: 0, active: false, rawX: 0, rawY: 0 };
+    this.smoothedTouchStick = { x: 0, y: 0 };
+    this.isTouchStickReleasing = false;
+    this.isTouchRudderReleasing = false;
+    this.touchRudder = 0.0;
 
     // HOTAS 1 & 비행 조이스틱 컨트롤러 상태 (Thrustmaster T.Flight HOTAS One / Airbus TCA FBW)
     this.hotasState = {

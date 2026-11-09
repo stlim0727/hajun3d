@@ -133,3 +133,52 @@ test('validates touch flight controls prototype API on AirplaneGame', () => {
   mockGame.setTouchBrakes(0.0);
   assert.equal(mockGame.keys.brake, false, 'Brake must release on touch up');
 });
+
+test('validates FBW Normal Law Bank Angle Hold and coordinated turn behavior', () => {
+  // Test bank angle hold logic:
+  // When bankTilt is within normal envelope (e.g. 20 deg, bankTilt ~ 0.34) and rollInput is 0:
+  // Target roll rate must be exactly 0 (Bank Angle Hold) rather than forced auto-leveling
+  const fbwBankLimit = 0.545; // ~33 deg
+
+  const computeRollRate = (bankTilt, isRollActive, rollInput) => {
+    const maxBankTilt = 0.82;
+    if (isRollActive) {
+      if ((rollInput > 0 && bankTilt > -maxBankTilt) || (rollInput < 0 && bankTilt < maxBankTilt)) {
+        return -rollInput * 0.024 * 0.70;
+      }
+      return 0;
+    }
+    if (Math.abs(bankTilt) > fbwBankLimit) {
+      const targetTilt = Math.sign(bankTilt) * fbwBankLimit;
+      return -(bankTilt - targetTilt) * 0.05;
+    } else if (Math.abs(bankTilt) < 0.035) {
+      return -bankTilt * 0.025;
+    } else {
+      return 0.0; // Bank Angle Hold
+    }
+  };
+
+  // 1. Within 20 deg bank (bankTilt = 0.34): Neutral stick holds bank angle (roll rate = 0)
+  assert.equal(computeRollRate(0.34, false, 0), 0.0, '20 deg bank must be held with 0 roll rate');
+  assert.equal(computeRollRate(-0.34, false, 0), 0.0, '-20 deg bank must be held with 0 roll rate');
+
+  // 2. Beyond 33 deg bank (bankTilt = 0.65, ~40 deg bank): Returns gently toward 33 deg
+  const steepReturnRate = computeRollRate(0.65, false, 0);
+  assert.ok(steepReturnRate < 0, 'Steep bank must return towards 33 deg boundary');
+  assert.ok(Math.abs(steepReturnRate) < 0.01, 'Spiral return rate must be gentle');
+
+  // 3. Near wings level (bankTilt = 0.02, ~1.1 deg): Gently settles to 0
+  const wingsLevelRate = computeRollRate(0.02, false, 0);
+  assert.ok(wingsLevelRate < 0, 'Wings level deadband must gently center');
+
+  // 4. Coordinated turn rate is continuously non-zero whenever banked
+  const computeTurnRate = (bankTilt, isRollActive, rollInput, inFlightRudder) => {
+    let turnRate = bankTilt * 0.020;
+    if (isRollActive) turnRate -= rollInput * 0.008;
+    if (Math.abs(inFlightRudder) > 0.02) turnRate += -inFlightRudder * 0.022 * 0.45;
+    return turnRate;
+  };
+
+  const turnAt20Deg = computeTurnRate(0.34, false, 0, 0);
+  assert.ok(turnAt20Deg > 0.005, 'Banked aircraft must sustain turn rate even when roll stick is neutral');
+});

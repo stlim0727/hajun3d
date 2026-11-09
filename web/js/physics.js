@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - 3D Newtonian Aerodynamics, Spool Dynamics, Flaps, Spoilers, Reverse Thrust & Landing Gear
  * Subsystem: physics (13 methods)
  */
@@ -11,6 +11,7 @@
   // 랜딩 기어 시퀀서 (도어 개방 ➔ 기어 전개/수납 ➔ 도어 폐쇄 3단계 물리)
   // ----------------------------------------------------------------
   toggleLandingGear() {
+    if (typeof triggerTouchHaptic === 'function') triggerTouchHaptic(18);
     if (this.isGearCollapsed) {
       this.showPopup('❌ 랜딩 기어가 파손되어 작동하지 않습니다!');
       return;
@@ -236,8 +237,15 @@
     }
 
     // 3. 러더 & 노즈 휠: 방향 조향 (러더 입력 + 에일러론 협조)
+    if (this.isTouchRudderReleasing) {
+      this.touchRudder *= 0.82;
+      if (Math.abs(this.touchRudder) < 0.01) {
+        this.touchRudder = 0.0;
+        this.isTouchRudderReleasing = false;
+      }
+    }
     let rudderInput = 0;
-    if (Math.abs(this.touchRudder || 0) > 0.02) {
+    if (Math.abs(this.touchRudder || 0) > 0.01) {
       rudderInput = this.touchRudder;
     }
     if (this.hotasState && this.hotasState.connected && this.hotasState.useTwistRudder && Math.abs(this.hotasState.yaw) > 0.12) {
@@ -245,7 +253,7 @@
     }
 
     let targetRudder = 0;
-    if (Math.abs(rudderInput) > 0.02) {
+    if (Math.abs(rudderInput) > 0.01) {
       targetRudder = -rudderInput * 0.55;
     } else if (Math.abs(rollInput) > 0.06) {
       targetRudder = -rollInput * 0.35;
@@ -260,7 +268,11 @@
     }
     if (this.controlSurfaces.noseWheelGroup && this.isOnGround) {
       let steerWheel = 0;
-      if (Math.abs(rollInput) > 0.06) steerWheel = -rollInput * 0.42;
+      if (Math.abs(this.touchRudder || 0) > 0.01) {
+        steerWheel = -this.touchRudder * 0.55;
+      } else if (Math.abs(rollInput) > 0.06) {
+        steerWheel = -rollInput * 0.42;
+      }
       if (this.hotasState && this.hotasState.connected && this.hotasState.useTwistRudder && Math.abs(this.hotasState.yaw) > 0.12) {
         steerWheel = -this.hotasState.yaw * 0.55;
       }
@@ -276,6 +288,7 @@
   // 플랩, 스포일러, 역추진 제어 및 UI / 사운드
   // ----------------------------------------------------------------
   toggleFlaps() {
+    if (typeof triggerTouchHaptic === 'function') triggerTouchHaptic(14);
     this.flapIndex = (this.flapIndex + 1) % this.flaps.length;
     const flapName = this.flaps[this.flapIndex];
     this.playFlapSound();
@@ -287,6 +300,7 @@
   },
 
   toggleSpoilers() {
+    if (typeof triggerTouchHaptic === 'function') triggerTouchHaptic(14);
     this.spoilerExtended = !this.spoilerExtended;
     this.playSpoilerSound();
     this.updateSpoilerUI();
@@ -449,10 +463,10 @@
         let steerInput = 0;
         if (this.keys.left) steerInput -= 1;
         if (this.keys.right) steerInput += 1;
-        if (Math.abs(this.touchRudder || 0) > 0.02) {
+        if (Math.abs(this.touchRudder || 0) > 0.01) {
           steerInput += this.touchRudder;
-        } else if (this.joystickData && this.joystickData.active) {
-          steerInput += this.joystickData.x;
+        } else if (this.joystickData && (this.joystickData.active || this.isTouchStickReleasing)) {
+          steerInput += (this.smoothedTouchStick ? this.smoothedTouchStick.x : this.joystickData.x);
         }
         if (this.hotasState && this.hotasState.connected) {
           if (Math.abs(this.hotasState.roll) > 0.08) {
@@ -677,10 +691,34 @@
       if (this.keys.left) rollInput -= 1;  // A: 좌측 롤
       if (this.keys.right) rollInput += 1; // D: 우측 롤
 
-      if (this.joystickData && this.joystickData.active) {
-        pitchInput += this.joystickData.y;
-        rollInput += this.joystickData.x;
+      if (!this.smoothedTouchStick) {
+        this.smoothedTouchStick = { x: 0, y: 0 };
       }
+
+      if (this.joystickData && this.joystickData.active) {
+        const smoothRate = Math.min(1.0, effectiveDt * 20.0);
+        this.smoothedTouchStick.x = THREE.MathUtils.lerp(this.smoothedTouchStick.x, this.joystickData.x, smoothRate);
+        this.smoothedTouchStick.y = THREE.MathUtils.lerp(this.smoothedTouchStick.y, this.joystickData.y, smoothRate);
+        pitchInput += this.smoothedTouchStick.y;
+        rollInput += this.smoothedTouchStick.x;
+      } else if (this.isTouchStickReleasing) {
+        this.joystickData.x *= 0.82;
+        this.joystickData.y *= 0.82;
+        this.smoothedTouchStick.x = THREE.MathUtils.lerp(this.smoothedTouchStick.x, this.joystickData.x, 0.28);
+        this.smoothedTouchStick.y = THREE.MathUtils.lerp(this.smoothedTouchStick.y, this.joystickData.y, 0.28);
+        if (Math.hypot(this.joystickData.x, this.joystickData.y) < 0.008) {
+          this.joystickData.x = 0;
+          this.joystickData.y = 0;
+          this.smoothedTouchStick.x = 0;
+          this.smoothedTouchStick.y = 0;
+          this.joystickData.active = false;
+          this.isTouchStickReleasing = false;
+        } else {
+          pitchInput += this.smoothedTouchStick.y;
+          rollInput += this.smoothedTouchStick.x;
+        }
+      }
+
       if (this.hotasState && this.hotasState.connected) {
         if (Math.abs(this.hotasState.pitch) > 0.06) pitchInput = this.hotasState.pitch;
         if (Math.abs(this.hotasState.roll) > 0.07) rollInput = this.hotasState.roll;
@@ -697,9 +735,15 @@
       const yawDamping = (specs.yawDamping || 2.0) * qDynRatio;
 
       // 1) 피치 제어: 동압 연동 조종면 효율 및 에어버스 플레어 법칙
-      let targetPitchRate = pitchInput * 0.026 * (specs.pitchAuthority || 0.55);
+      let targetPitchRate = pitchInput * 0.018 * (specs.pitchAuthority || 0.55);
       if (this.isStalling && pitchInput > 0) {
         targetPitchRate *= 0.12; // 실속 시 엘리베이터 무력화
+      }
+      // 선회 시 수직 양력 손실을 보상하는 FBW 피치 보정 (최대 33도 선회까지 자동 고도 유지)
+      const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
+      const bankTilt = THREE.MathUtils.clamp(localRight.y, -1, 1);
+      if (Math.abs(bankTilt) > 0.05 && !this.isOnGround) {
+        targetPitchRate += Math.min(0.0028, Math.abs(bankTilt) * 0.0024);
       }
       // 착륙 플레어 법칙 (Flare Law): 지상 15m 미만에서 기수 숙임 모멘트를 주어 파일럿의 부드러운 당김 유도
       if (radioAlt < 15.0 && !this.isOnGround) {
@@ -710,22 +754,29 @@
         targetPitchRate,
         Math.min(1.0, effectiveDt * (6.0 + pitchDamping))
       );
-      this.planeGroup.rotateX(this.angularVelocity.x);
 
-      // 2) 롤 제어 & 뱅크각 유지 (Bank Angle Hold & Auto-Leveling with Aero Damping)
-      const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
-      const bankTilt = THREE.MathUtils.clamp(localRight.y, -1, 1);
-      const maxBankTilt = 0.82;
+      // 2) 롤 제어 & 뱅크각 유지 (Bank Angle Hold & Spiral Stability under Normal Law)
+      const maxBankTilt = 0.82; // ~55도 최대 뱅크각
+      const fbwBankLimit = 0.545; // ~33도 에어버스 FBW 중립 유지 한계각 (Bank Angle Hold Limit)
 
       let targetRollRate = 0;
       if (isRollActive) {
         if ((rollInput > 0 && bankTilt > -maxBankTilt) || (rollInput < 0 && bankTilt < maxBankTilt)) {
-          targetRollRate = -rollInput * 0.038 * (specs.rollAuthority || 0.70);
+          targetRollRate = -rollInput * 0.024 * (specs.rollAuthority || 0.70);
         }
       } else {
-        // 중립 시 수평 자동 복원: 미세 쏠림 원천 차단
-        if (Math.abs(bankTilt) > 0.001) {
-          targetRollRate = -bankTilt * 0.12;
+        // 중립(Neutral) 시 FBW 비행 제어 법칙:
+        // - 뱅크각 33도 이하 (|bankTilt| <= 0.545): 뱅크각 완벽 유지 (Bank Angle Hold, targetRollRate = 0)
+        // - 미세 수평 영역 (|bankTilt| < 0.035, 약 2도 미만): 수평 직진 자동 복원 (Wings Level Hold)
+        // - 뱅크각 33도 초과 (|bankTilt| > 0.545): 안전 한계 33도로 부드럽게 복귀하는 양의 나선 안정성 (Spiral Stability)
+        if (Math.abs(bankTilt) > fbwBankLimit) {
+          const targetTilt = Math.sign(bankTilt) * fbwBankLimit;
+          targetRollRate = -(bankTilt - targetTilt) * 0.05;
+        } else if (Math.abs(bankTilt) < 0.035) {
+          targetRollRate = -bankTilt * 0.025;
+        } else {
+          // Bank Angle Hold: 선회 각도 유지 (롤 복귀율 0)
+          targetRollRate = 0.0;
         }
       }
       this.angularVelocity.z = THREE.MathUtils.lerp(
@@ -733,12 +784,12 @@
         targetRollRate,
         Math.min(1.0, effectiveDt * (7.0 + rollDamping))
       );
-      this.planeGroup.rotateZ(this.angularVelocity.z);
 
       // 3) 협조 선회 및 러더 요 응답 (Coordinated Turn & Rudder Yaw Response with Aero Damping)
-      let turnRate = 0;
+      // 뱅크 각도가 형성되면 양력의 수평 성분에 의해 선회율(Turn Rate)이 자연스럽게 발생
+      let turnRate = bankTilt * 0.020;
       if (isRollActive) {
-        turnRate = bankTilt * 0.026 - (rollInput * 0.016);
+        turnRate -= rollInput * 0.008; // 에일러론 역요 보정
       }
       // 러더 편향에 따른 요 모멘트 반응
       if (Math.abs(inFlightRudder) > 0.02) {
@@ -749,8 +800,13 @@
         turnRate,
         Math.min(1.0, effectiveDt * (6.0 + yawDamping))
       );
-      if (Math.abs(this.angularVelocity.y) > 0.00005) {
-        this.planeGroup.rotateY(this.angularVelocity.y);
+
+      // 모바일 고주사율 디스플레이(90Hz/120Hz ProMotion) 프레임 타임 스케일 정규화
+      const frameRateScale = Math.min(2.0, Math.max(0.4, effectiveDt * 60.0));
+      this.planeGroup.rotateX(this.angularVelocity.x * frameRateScale);
+      this.planeGroup.rotateZ(this.angularVelocity.z * frameRateScale);
+      if (Math.abs(this.angularVelocity.y) > 0.00002) {
+        this.planeGroup.rotateY(this.angularVelocity.y * frameRateScale);
       }
 
       // ------------------------------------------------------------

@@ -20,15 +20,26 @@
     return [(pitch / magnitude) * response, (roll / magnitude) * response];
   }
 
+  function triggerTouchHaptic(duration = 10) {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate(duration);
+      } catch (_) {}
+    }
+  }
+
   if (typeof globalThis !== 'undefined') {
     globalThis.shapeTouchStick = shapeTouchStick;
+    globalThis.triggerTouchHaptic = triggerTouchHaptic;
   }
   if (typeof window !== 'undefined') {
     window.shapeTouchStick = shapeTouchStick;
+    window.triggerTouchHaptic = triggerTouchHaptic;
   }
 
   Object.assign(AirplaneGame.prototype, {
   shapeTouchStick,
+  triggerTouchHaptic,
 
   setTouchStick(pitch, roll) {
     const [shapedPitch, shapedRoll] = shapeTouchStick(pitch, roll);
@@ -37,6 +48,9 @@
     this.joystickData.y = shapedPitch;
     this.joystickData.rawX = roll;
     this.joystickData.rawY = pitch;
+    if (this.joystickData.active) {
+      this.isTouchStickReleasing = false;
+    }
   },
 
   setTouchThrottle(val) {
@@ -73,6 +87,9 @@
 
   setTouchRudder(val) {
     this.touchRudder = Math.max(-1.0, Math.min(1.0, val));
+    if (Math.abs(this.touchRudder) > 0.02) {
+      this.isTouchRudderReleasing = false;
+    }
   },
 
   setTouchBrakes(val) {
@@ -242,8 +259,8 @@
     // 모바일 터치 비행 조종 시스템 (Virtual Stick, Throttle Quadrant, Rudder & Brakes)
     // - 3차 비선형 응답 곡선(3rd-order non-linear response) 및 6% 레이디얼 데드존
     // - Pointer Capture(pointerdown, pointermove, pointerup, pointercancel)로 화면 이탈 완벽 방어
-    // - 연속 드래그 스로틀 쿼드런트 및 원터치 프리셋 (IDLE 0%, 40%, 70%, 100% TOGA)
-    // - 자동 중립 복귀 러더 슬라이더 및 노즈휠 스티어링 연동
+    // - 연속 드래그 스로틀 쿼드런트 및 마그네틱 디텐트 스냅 (IDLE 0%, 40%, 70%, 100% TOGA) + 햅틱
+    // - 탄성 스프링 복귀(Elastic Spring Return) 러더 슬라이더 및 노즈휠 스티어링 연동
     // ----------------------------------------------------------------
     const joystickZone = document.getElementById('joystick-zone');
     const joystickStick = document.getElementById('joystick-stick');
@@ -251,15 +268,14 @@
     let stickPointerId = null;
     let stickCenterX = 0;
     let stickCenterY = 0;
-    let stickRadius = 45;
+    let stickRadius = 50;
 
     const updateStickGeometry = () => {
       if (!joystickZone) return;
       const rect = joystickZone.getBoundingClientRect();
       stickCenterX = rect.left + rect.width * 0.5;
       stickCenterY = rect.top + rect.height * 0.5;
-      const knobSize = joystickStick ? Math.max(joystickStick.offsetWidth, joystickStick.offsetHeight) : 50;
-      stickRadius = Math.max(20, (Math.min(rect.width, rect.height) - knobSize) * 0.5);
+      stickRadius = Math.max(32, Math.min(rect.width, rect.height) * 0.42);
     };
 
     const updateStickPosition = (clientX, clientY) => {
@@ -273,6 +289,7 @@
       }
 
       if (joystickStick) {
+        joystickStick.style.transition = 'none';
         joystickStick.style.transform = `translate(${dx}px, ${dy}px)`;
       }
 
@@ -284,16 +301,11 @@
       const rawPitch = dy / stickRadius;
       const rawRoll = dx / stickRadius;
 
-      const [shapedPitch, shapedRoll] = shapeTouchStick(rawPitch, rawRoll);
-      this.joystickData.active = true;
-      this.joystickData.x = shapedRoll;
-      this.joystickData.y = shapedPitch;
-      this.joystickData.rawX = rawRoll;
-      this.joystickData.rawY = rawPitch;
+      this.setTouchStick(rawPitch, rawRoll);
 
       if (telemEl) {
-        const pDeg = Math.round(shapedPitch * 25);
-        const rDeg = Math.round(shapedRoll * 30);
+        const pDeg = Math.round(this.joystickData.y * 25);
+        const rDeg = Math.round(this.joystickData.x * 30);
         telemEl.textContent = `P: ${pDeg > 0 ? '+' : ''}${pDeg}° | R: ${rDeg > 0 ? '+' : ''}${rDeg}°`;
       }
     };
@@ -304,11 +316,13 @@
         if (e.button !== 0 && e.pointerType === 'mouse') return;
         e.preventDefault();
         stickPointerId = e.pointerId;
+        this.isTouchStickReleasing = false;
         try {
           joystickZone.setPointerCapture(e.pointerId);
         } catch (_) {}
         updateStickGeometry();
         updateStickPosition(e.clientX, e.clientY);
+        triggerTouchHaptic(10);
       });
 
       joystickZone.addEventListener('pointermove', (e) => {
@@ -325,15 +339,13 @@
           }
         } catch (_) {}
         stickPointerId = null;
-        this.joystickData.active = false;
-        this.joystickData.x = 0;
-        this.joystickData.y = 0;
-        this.joystickData.rawX = 0;
-        this.joystickData.rawY = 0;
+        this.isTouchStickReleasing = true;
         if (joystickStick) {
+          joystickStick.style.transition = 'transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
           joystickStick.style.transform = 'translate(0px, 0px)';
         }
         if (telemEl) telemEl.textContent = 'P: 0° | R: 0°';
+        triggerTouchHaptic(8);
       };
 
       joystickZone.addEventListener('pointerup', onStickPointerEnd);
@@ -346,14 +358,38 @@
     // ----------------------------------------------------------------
     const throttleTrack = document.getElementById('touch-throttle-track');
     let throttlePointerId = null;
-        this.isTouchThrottleActive = false;
+    this.isTouchThrottleActive = false;
+    let lastHapticDetent = null;
 
     if (throttleTrack) {
       const updateThrottleFromPointer = (clientY) => {
         const rect = throttleTrack.getBoundingClientRect();
         const relativeY = clientY - rect.top;
         const clampedY = Math.max(0, Math.min(rect.height, relativeY));
-        const normalized = 1.0 - (clampedY / rect.height);
+        let normalized = 1.0 - (clampedY / rect.height);
+
+        // Realistic detent magnetic snap (IDLE 0%, APP 40%, CLB 70%, TOGA 100%)
+        const detents = [
+          { val: 0.0, range: 0.04 },
+          { val: 0.40, range: 0.035 },
+          { val: 0.70, range: 0.035 },
+          { val: 1.0, range: 0.04 }
+        ];
+        let matchedDetent = null;
+        for (const d of detents) {
+          if (Math.abs(normalized - d.val) <= d.range) {
+            normalized = d.val;
+            matchedDetent = d.val;
+            break;
+          }
+        }
+        if (matchedDetent !== null && matchedDetent !== lastHapticDetent) {
+          lastHapticDetent = matchedDetent;
+          triggerTouchHaptic(14);
+        } else if (matchedDetent === null) {
+          lastHapticDetent = null;
+        }
+
         this.setTouchThrottle(normalized);
       };
 
@@ -367,6 +403,7 @@
           throttleTrack.setPointerCapture(e.pointerId);
         } catch (_) {}
         updateThrottleFromPointer(e.clientY);
+        triggerTouchHaptic(10);
       });
 
       throttleTrack.addEventListener('pointermove', (e) => {
@@ -384,6 +421,7 @@
         } catch (_) {}
         throttlePointerId = null;
         this.isTouchThrottleActive = false;
+        lastHapticDetent = null;
       };
 
       throttleTrack.addEventListener('pointerup', onThrottlePointerEnd);
@@ -399,6 +437,7 @@
         e.stopPropagation();
         const thr = parseFloat(btn.getAttribute('data-thr') || '0');
         this.setTouchThrottle(thr);
+        triggerTouchHaptic(15);
         this.showPopup(`엔진 출력: ${Math.round(thr * 100)}% (디텐트 프리셋)`);
       });
     });
@@ -420,6 +459,7 @@
         dx = Math.max(-maxDeflection, Math.min(maxDeflection, dx));
 
         if (rudderThumb) {
+          rudderThumb.style.transition = 'none';
           rudderThumb.style.transform = `translateX(${dx}px)`;
         }
 
@@ -437,10 +477,12 @@
         if (e.button !== 0 && e.pointerType === 'mouse') return;
         e.preventDefault();
         rudderPointerId = e.pointerId;
+        this.isTouchRudderReleasing = false;
         try {
           rudderTrack.setPointerCapture(e.pointerId);
         } catch (_) {}
         updateRudderFromPointer(e.clientX);
+        triggerTouchHaptic(10);
       });
 
       rudderTrack.addEventListener('pointermove', (e) => {
@@ -457,11 +499,13 @@
           }
         } catch (_) {}
         rudderPointerId = null;
-        this.setTouchRudder(0.0);
+        this.isTouchRudderReleasing = true;
         if (rudderThumb) {
+          rudderThumb.style.transition = 'transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
           rudderThumb.style.transform = 'translateX(0px)';
         }
         if (rudderReadout) rudderReadout.textContent = '0°';
+        triggerTouchHaptic(8);
       };
 
       rudderTrack.addEventListener('pointerup', onRudderPointerEnd);
@@ -478,11 +522,13 @@
         e.preventDefault();
         touchBrakeBtn.classList.add('active');
         this.setTouchBrakes(1.0);
+        triggerTouchHaptic(20);
       };
       const stopBraking = (e) => {
         e.preventDefault();
         touchBrakeBtn.classList.remove('active');
         this.setTouchBrakes(0.0);
+        triggerTouchHaptic(10);
       };
 
       touchBrakeBtn.addEventListener('pointerdown', startBraking);
