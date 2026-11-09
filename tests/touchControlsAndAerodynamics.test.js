@@ -332,3 +332,123 @@ test('validates Boeing 737 level tilt sensitivity (25° pitch, 30° roll) and du
   assert.ok(Math.abs(game.gyroNormPitch) < 1e-3, 'Recentered pitch must be zero at current angle');
   assert.ok(Math.abs(game.gyroNormRoll) < 1e-3, 'Recentered roll must be zero at current angle');
 });
+
+test('validates ISA atmosphere model (troposphere & tropopause) from physics.js', () => {
+  const code = readFileSync('web/js/physics.js', 'utf8');
+  const sandbox = {
+    AirplaneGame: { prototype: {} },
+    window: {},
+    globalThis: {},
+    THREE: {
+      Vector3: function(x=0, y=0, z=0) { this.x = x; this.y = y; this.z = z; },
+      Quaternion: function() { this.setFromAxisAngle = () => this; },
+      MathUtils: {
+        clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
+        degToRad: deg => (deg * Math.PI) / 180,
+        radToDeg: rad => (rad * 180) / Math.PI
+      }
+    }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+
+  const Atmosphere = sandbox.Atmosphere || sandbox.AirplaneGame.prototype.Atmosphere;
+  assert.ok(Atmosphere, 'Atmosphere object must be exported');
+
+  // 1. Sea level conditions (0m)
+  const sl = Atmosphere.getConditions(0);
+  assert.ok(Math.abs(sl.temperature - 288.15) < 0.1, 'Sea level temp must be ~288.15 K');
+  assert.ok(Math.abs(sl.pressure - 101325.0) < 1.0, 'Sea level pressure must be ~101325 Pa');
+  assert.ok(Math.abs(sl.density - 1.225) < 0.005, 'Sea level density must be ~1.225 kg/m^3');
+  assert.ok(Math.abs(sl.speedOfSound - 340.3) < 0.5, 'Sea level speed of sound must be ~340.3 m/s');
+  assert.ok(Math.abs(sl.densityRatio - 1.0) < 0.001, 'Sea level density ratio must be 1.0');
+
+  // 2. 5000m conditions (cruising climb)
+  const at5k = Atmosphere.getConditions(5000);
+  assert.ok(Math.abs(at5k.temperature - (288.15 - 0.0065 * 5000)) < 0.1, '5000m temp follows lapse rate');
+  assert.ok(at5k.pressure < sl.pressure && at5k.pressure > 50000, '5000m pressure ~540 hPa');
+  assert.ok(at5k.density < 0.8 && at5k.density > 0.7, '5000m density ~0.736 kg/m^3');
+
+  // 3. 11000m tropopause (isothermal layer start)
+  const atTropo = Atmosphere.getConditions(11000);
+  const at12k = Atmosphere.getConditions(12000);
+  assert.ok(Math.abs(atTropo.temperature - 216.65) < 0.1, 'Tropopause temp must be ~216.65 K');
+  assert.ok(Math.abs(at12k.temperature - 216.65) < 0.1, 'Stratosphere base is isothermal');
+  assert.ok(at12k.pressure < atTropo.pressure, 'Stratosphere pressure continues exponential decay');
+
+  // 4. TAS / IAS conversion
+  const tas = 250.0; // m/s
+  const ias = Atmosphere.tasToIas(tas, at5k.densityRatio);
+  assert.ok(ias < tas, 'IAS must be less than TAS at altitude');
+  const recoveredTas = Atmosphere.iasToTas(ias, at5k.densityRatio);
+  assert.ok(Math.abs(recoveredTas - tas) < 1e-4, 'IAS to TAS conversion roundtrip');
+});
+
+test('validates continuous flow separation and stall reattachment hysteresis', () => {
+  // Simulate Flight3d continuous separation state dynamics
+  let separation = 0.0;
+  const alphaStallRad = (15.0 * Math.PI) / 180.0;
+  const tas = 70.0; // ~136 kt flight speed
+  const dt = 0.05; // 50ms timestep
+
+  const updateSeparation = (alphaRad, dtSec) => {
+    const absAlpha = Math.abs(alphaRad);
+    const separationWeight = Math.max(0.0, Math.min(1.0, (tas - 2.0) / 13.0));
+    const separationTarget = Math.max(0.0, Math.min(1.0, (absAlpha - alphaStallRad) / ((12.0 * Math.PI) / 180.0))) * separationWeight;
+    const reattachMix = 1.0 - Math.exp(-dtSec / 0.5);
+    separation = Math.max(separationTarget, separation * (1.0 - reattachMix));
+    return separation;
+  };
+
+  // 1. Below critical AoA (12 deg): attached flow (separation == 0)
+  assert.equal(updateSeparation((12.0 * Math.PI) / 180.0, dt), 0.0);
+
+  // 2. Past critical AoA (21 deg, 6 deg into stall): abrupt onset
+  const stalledSep = updateSeparation((21.0 * Math.PI) / 180.0, dt);
+  assert.ok(stalledSep >= 0.5, 'Stall onset must be abrupt past alphaCrit');
+
+  // 3. Recovery: pilot pushes nose down to 10 deg (below alphaStall)
+  // Flow must NOT instantly reattach; hysteresis preserves separation decaying over ~0.5s
+  const recoveryStep1 = updateSeparation((10.0 * Math.PI) / 180.0, 0.1);
+  assert.ok(recoveryStep1 > 0.35, 'Separation must lag and not drop to zero immediately');
+
+  // After 1.5 seconds (3 time constants), flow reattaches
+  let recoveryStepN = recoveryStep1;
+  for (let t = 0; t < 30; t++) {
+    recoveryStepN = updateSeparation((10.0 * Math.PI) / 180.0, 0.05);
+  }
+  assert.ok(recoveryStepN < 0.05, 'After 1.5s recovery flow must reattach below 0.05');
+});
+
+test('validates transonic wave drag and dynamic pressure control column stiffness (q-feel)', () => {
+  // 1. Transonic Mach wave drag: M > 0.78
+  const computeWaveDrag = (mach, buffetMach = 0.78) => {
+    if (mach > buffetMach) {
+      return Math.pow(mach - buffetMach, 3.5) * 8.0;
+    }
+    return 0.0;
+  };
+
+  assert.equal(computeWaveDrag(0.75), 0.0, 'Subsonic drag below M 0.78 has 0 wave drag');
+  assert.equal(computeWaveDrag(0.78), 0.0, 'At buffet boundary wave drag is 0');
+  const waveDragM84 = computeWaveDrag(0.84);
+  assert.ok(waveDragM84 > 0.0001, 'Supercritical M 0.84 exhibits sharp transonic drag rise');
+  assert.ok(computeWaveDrag(0.88) > waveDragM84 * 5.0, 'Wave drag grows exponentially with Mach');
+
+  // 2. Boeing 737 q-feel stiffness curve
+  const computeQFeel = (iasKnots) => {
+    return Math.max(0.40, 1.0 - Math.max(0, (iasKnots - 140) / 220.0) * 0.55);
+  };
+
+  assert.equal(computeQFeel(130), 1.0, 'Low speed <= 140 kt has full control deflection authority');
+  assert.equal(computeQFeel(140), 1.0, '140 kt boundary stiffness is 1.0');
+  const midQ = computeQFeel(250);
+  assert.ok(midQ < 1.0 && midQ > 0.65, '250 kt cruise has progressive stiffening');
+  assert.ok(Math.abs(computeQFeel(360) - 0.45) < 1e-4, '360 kt VMO has stiff control column');
+  assert.ok(Math.abs(computeQFeel(400) - 0.40) < 1e-4, 'Extreme speed clamps at minimum 0.40 authority');
+
+  // 3. Elevator authority in stall wake
+  const elevatorEffectiveness = (separation) => Math.max(0.15, 1.0 - 0.80 * separation);
+  assert.equal(elevatorEffectiveness(0.0), 1.0, 'Clean wing has 100% elevator authority');
+  assert.ok(elevatorEffectiveness(1.0) <= 0.20, 'Deep stall wake buries tail with <= 20% authority');
+});

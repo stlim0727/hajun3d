@@ -6,7 +6,66 @@
 (function() {
   'use strict';
 
+  // ----------------------------------------------------------------
+  // International Standard Atmosphere (ISA) Model (Flight3d 표준)
+  // - 고도별 온도, 기압, 공기 밀도(rho), 음속(speedOfSound), 밀도비 계산
+  // ----------------------------------------------------------------
+  const Atmosphere = {
+    R: 287.05,          // J/(kg·K)
+    GAMMA: 1.4,
+    G0: 9.80665,        // m/s^2
+    T0: 288.15,         // 해수면 표준 온도 (15°C)
+    P0: 101325.0,       // 해수면 표준 기압 (Pa)
+    RHO0: 1.225,        // 해수면 표준 밀도 (kg/m^3)
+    LAPSE_RATE: 0.0065, // 대류권 기온 감률 (K/m)
+    TROPOPAUSE_ALT: 11000.0, // 대류권계면 고도 (m)
+
+    getConditions(altitudeMeters) {
+      const h = Math.max(-500, Math.min(altitudeMeters, 25000));
+      let temperature, pressure;
+
+      if (h <= this.TROPOPAUSE_ALT) {
+        // 대류권 (Troposphere)
+        temperature = this.T0 - this.LAPSE_RATE * h;
+        pressure = this.P0 * Math.pow(temperature / this.T0, this.G0 / (this.LAPSE_RATE * this.R));
+      } else {
+        // 성층권 하부 (Lower Stratosphere)
+        const tTropo = this.T0 - this.LAPSE_RATE * this.TROPOPAUSE_ALT;
+        const pTropo = this.P0 * Math.pow(tTropo / this.T0, this.G0 / (this.LAPSE_RATE * this.R));
+        temperature = tTropo;
+        const dh = h - this.TROPOPAUSE_ALT;
+        pressure = pTropo * Math.exp((-this.G0 * dh) / (this.R * tTropo));
+      }
+
+      const density = pressure / (this.R * temperature);
+      const speedOfSound = Math.sqrt(this.GAMMA * this.R * temperature);
+      const densityRatio = density / this.RHO0;
+
+      return { temperature, pressure, density, speedOfSound, densityRatio };
+    },
+
+    tasToIas(tas, densityRatio) {
+      return tas * Math.sqrt(Math.max(0.001, densityRatio));
+    },
+
+    iasToTas(ias, densityRatio) {
+      return ias / Math.sqrt(Math.max(0.001, densityRatio));
+    },
+
+    msToKnots(ms) {
+      return ms * 1.94384;
+    },
+
+    knotsToMs(knots) {
+      return knots / 1.94384;
+    }
+  };
+
+  if (typeof globalThis !== 'undefined') globalThis.Atmosphere = Atmosphere;
+  if (typeof window !== 'undefined') window.Atmosphere = Atmosphere;
+
   Object.assign(AirplaneGame.prototype, {
+  Atmosphere,
   // ----------------------------------------------------------------
   // 랜딩 기어 시퀀서 (도어 개방 ➔ 기어 전개/수납 ➔ 도어 폐쇄 3단계 물리)
   // ----------------------------------------------------------------
@@ -353,20 +412,25 @@
 
     const n1Frac = Math.max(0, this.n1 / 100.0);
     const altM = Math.max(0, (this.planeGroup.position.y - this.groundY) * 10);
-    // 고도 상승에 따른 공기 희박으로 인한 제트 엔진 추력 감쇄
-    const altThrustFactor = Math.exp(-altM / 14000.0);
-    const thrustMagnitude = specs.maxThrust * Math.pow(n1Frac, 2.1) * altThrustFactor;
+    const atmos = Atmosphere.getConditions(altM);
+    const rho = atmos.density;
+    const densityRatio = atmos.densityRatio;
+    const speedOfSound = atmos.speedOfSound;
 
-    // 대기 밀도 (ISA 표준 대기 모델)
-    const rho = 1.225 * Math.exp(-altM / 8500.0);
+    // 고도 상승에 따른 공기 희박으로 인한 제트 엔진 추력 감쇄 (밀도비에 정밀 연동)
+    const thrustMagnitude = specs.maxThrust * Math.pow(n1Frac, 2.1) * densityRatio;
 
-    // 플랩 & 스포일러 계수 산출
-    const flapCL = [0.0, 0.38, 0.75, 1.15][this.flapIndex] || 0.0;
-    const flapCD = [0.0, 0.012, 0.028, 0.065][this.flapIndex] || 0.0;
-    const flapAlphaStall = [0.0, 0.03, 0.05, 0.06][this.flapIndex] || 0.0;
-    const spoilerCL = this.spoilerExtended ? -0.22 : 0.0;
-    const spoilerCD = this.spoilerExtended ? 0.045 : 0.0;
-    const gearCD = this.gearExtended ? 0.018 : 0.0;
+    // 플랩 전개각 부드러운 서보 전개 (Flight3d 표준)
+    if (this.currentFlapAngle === undefined) this.currentFlapAngle = 0.0;
+    const targetFlapAngle = [0, 15, 25, 40][this.flapIndex] || 0.0;
+    this.currentFlapAngle += (targetFlapAngle - this.currentFlapAngle) * Math.min(1.0, effectiveDt * 1.5);
+    const flapFraction = this.currentFlapAngle / 40.0;
+    const flapCL = (specs.clFlapBoostMax || 0.95) * flapFraction;
+    const flapCD = 0.0012 * this.currentFlapAngle + 0.000045 * (this.currentFlapAngle * this.currentFlapAngle);
+    const flapAlphaStall = THREE.MathUtils.degToRad(2.0 * flapFraction);
+    const spoilerCL = this.spoilerExtended ? -0.38 : 0.0;
+    const spoilerCD = this.spoilerExtended ? 0.075 : 0.0;
+    const gearCD = this.gearExtended ? 0.024 : 0.0;
 
     const currentKmh = this.speed * 280;
 
@@ -545,9 +609,8 @@
           this.score += 500;
           this.triggerPassengerReaction('takeoff');
 
-          // 이륙 순간 활주로 36L 직선 헤딩(0.0) 고정 (쏠림 100% 방지)
-          this.yaw = 0.0;
-          this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0);
+          // 이륙 순간 활주로 헤딩 유지
+          this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
           this.planeGroup.rotateX(0.08); // 기수 들림
 
           const initialVz = -this.groundSpeed;
@@ -591,8 +654,16 @@
       this.alpha = this.aoa;
       this.beta = this.sideslip;
 
-      // 동압 (Dynamic Pressure q = 0.5 * rho * V²)
-      const qDyn = 0.5 * rho * airSpeed * airSpeed;
+      // 진속도(TAS), 지시속도(IAS), 마하수(Mach), 동압(qDyn) 계산 (ISA 대기 모델)
+      const tas = airSpeed;
+      const ias = Atmosphere.tasToIas(tas, densityRatio);
+      const mach = tas / speedOfSound;
+      const iasKnots = Atmosphere.msToKnots(ias);
+      const qDyn = 0.5 * rho * tas * tas;
+      this.tas = tas;
+      this.ias = ias;
+      this.mach = mach;
+      this.qDyn = qDyn;
 
       // 지면 효과 (Ground Effect Cushion - 착륙 플레어 쿠션)
       // phi_ground = (16h/b)^2 / (1 + (16h/b)^2)
@@ -613,39 +684,59 @@
       this.phiGround = phiGround;
       this.groundEffectFactor = phiGround;
 
-      // 공기역학 양력선 & 실속 한계 받음각 판정
+      // 공기역학 양력선 & 연속 실속 박리/재부착 히스테리시스 모델 (Flight3d 표준)
       const alphaCrit = specs.stallAlphaClean + flapAlphaStall;
-      let cL = 0.0;
+      const absAlpha = Math.abs(this.aoa);
+      if (this.separation === undefined) this.separation = 0.0;
 
-      if (this.aoa <= alphaCrit) {
-        cL = (specs.cl0 + specs.clAlpha * this.aoa + flapCL + spoilerCL) * igeLiftMult;
-        this.isStalling = false;
-        this.stallSeverity = 0.0;
-      } else {
-        // ★ 실속(Aerodynamic Stall): 날개 상면 박리로 인한 양력 붕괴 & 기체 떨림
-        this.isStalling = true;
-        const alphaExcess = this.aoa - alphaCrit;
-        this.stallSeverity = Math.min(1.0, Math.max(0.25, alphaExcess / 0.14 + (1.0 - n1Frac) * 0.35));
-        const cLPeak = specs.cl0 + specs.clAlpha * alphaCrit + flapCL;
-        cL = (cLPeak * Math.cos(Math.min(Math.PI * 0.48, 2.4 * alphaExcess)) + spoilerCL) * igeLiftMult;
+      const separationWeight = THREE.MathUtils.clamp((tas - 2.0) / 13.0, 0.0, 1.0);
+      const separationTarget = THREE.MathUtils.clamp(
+        (absAlpha - alphaCrit) / THREE.MathUtils.degToRad(12.0), 0.0, 1.0
+      ) * separationWeight;
 
-        // 실속 진동 버핏팅 (Buffeting)
-        const buffetX = (Math.random() - 0.5) * 0.06 * this.stallSeverity;
-        const buffetZ = (Math.random() - 0.5) * 0.08 * this.stallSeverity;
+      // 실속 박리 onset은 급격, 재부착(reattachment)은 시상수 ~0.5초 지수 감쇄 (후류 히스테리시스)
+      const reattachMix = 1.0 - Math.exp(-effectiveDt / 0.5);
+      this.separation = Math.max(separationTarget, this.separation * (1.0 - reattachMix));
+      this.stallSeverity = this.separation;
+      this.isStalling = (tas > 15.0) && (this.separation > 0.1);
+
+      // 연속 양력 모델: 선형 피크 클램프와 평판 십자류 모델의 가중 결합
+      const cl0 = specs.cl0 + flapCL;
+      const clCapped = cl0 + specs.clAlpha * Math.sign(this.aoa) * Math.min(absAlpha, alphaCrit);
+      const clFlatPlate = 2.0 * Math.sin(this.aoa) * Math.cos(this.aoa);
+      const brk = 1.0 - Math.exp(-this.separation / 0.01);
+      const W = Math.pow(this.separation, 1.3);
+      let cL = ((1.0 - W) * (1.0 - 0.28 * brk) * clCapped + W * clFlatPlate + spoilerCL) * igeLiftMult;
+      cL = THREE.MathUtils.clamp(cL, -0.6, 2.8);
+      this.cl = cL;
+
+      // 실속 버핏팅 및 조종석 진동
+      const qBuffetScale = Math.min(1.0, qDyn / 500.0);
+      this.buffetVibration = Math.min(1.0, this.separation * 1.5) * qBuffetScale;
+      if (this.separation > 0.05) {
+        const buffetX = (Math.random() - 0.5) * 0.06 * this.buffetVibration;
+        const buffetZ = (Math.random() - 0.5) * 0.08 * this.buffetVibration;
         this.planeGroup.rotateX(buffetX);
         this.planeGroup.rotateZ(buffetZ);
-        this.screenShake = Math.max(this.screenShake, 0.48 * this.stallSeverity);
+        this.screenShake = Math.max(this.screenShake, 0.48 * this.buffetVibration);
 
         // 공기역학적 기수 급강하 모멘트 (Nose Drop)
-        this.planeGroup.rotateX(-0.028 * this.stallSeverity);
-        this.playStickShakerSound();
+        this.planeGroup.rotateX(-0.028 * this.separation * (1.0 + 0.9 * this.separation));
+        if (this.isStalling) {
+          this.playStickShakerSound();
+        }
       }
-      cL = Math.max(-0.6, cL);
 
-      // 공기역학 항력 (Parasite + Induced + Flaps + Spoilers + Gear + Stall Drag)
-      const cDi = (cL * cL) / (Math.PI * specs.aspectRatio * specs.oswaldEff) * phiGround;
-      const cDStall = this.isStalling ? (0.42 * Math.pow(this.aoa - alphaCrit, 1.5)) : 0.0;
-      const totalCD = specs.cd0 + flapCD + gearCD + spoilerCD + cDi + cDStall;
+      // 공기역학 항력 (Parasite + Flaps + Gear + Spoilers + Transonic Wave + Induced + Stall Drag)
+      let cdParasitic = specs.cd0 + flapCD + gearCD + spoilerCD;
+      const transonicMachBuffet = specs.transonicMachBuffet || 0.78;
+      if (mach > transonicMachBuffet) {
+        cdParasitic += Math.pow(mach - transonicMachBuffet, 3.5) * 8.0;
+      }
+      const cDi = ((cL * cL) / (Math.PI * specs.aspectRatio * specs.oswaldEff)) * phiGround;
+      const cDStall = this.separation * 1.8 * Math.pow(Math.sin(this.aoa), 2);
+      const totalCD = cdParasitic + cDi + cDStall;
+      this.cd = totalCD;
 
       // 3차원 공기역학 벡터 힘 산출
       // 1) 양력: 비행 경로 벡터에 수직인 기체 대칭 평면 상방
@@ -734,10 +825,15 @@
       const rollDamping = (specs.rollDamping || 2.2) * qDynRatio;
       const yawDamping = (specs.yawDamping || 2.0) * qDynRatio;
 
+      // 동압 연동 조종간 반력 (Boeing 737 q-feel: 140kt ~ 360kt 영역 점진적 강성화)
+      const qFeelStiffness = Math.max(0.40, 1.0 - Math.max(0, (iasKnots - 140) / 220.0) * 0.55);
+      this.qFeelStiffness = qFeelStiffness;
+      const elevatorEffectiveness = Math.max(0.15, 1.0 - 0.80 * (this.separation || 0.0));
+
       // 1) 피치 제어: 동압 연동 조종면 효율 및 에어버스 플레어 법칙
-      let targetPitchRate = pitchInput * 0.018 * (specs.pitchAuthority || 0.55);
-      if (this.isStalling && pitchInput > 0) {
-        targetPitchRate *= 0.12; // 실속 시 엘리베이터 무력화
+      let targetPitchRate = pitchInput * 0.018 * (specs.pitchAuthority || 0.55) * qFeelStiffness;
+      if (pitchInput > 0) {
+        targetPitchRate *= elevatorEffectiveness; // 실속 후류 시 엘리베이터 권한 감소
       }
       // 선회 시 수직 양력 손실을 보상하는 FBW 피치 보정 (최대 33도 선회까지 자동 고도 유지)
       const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
@@ -762,7 +858,7 @@
       let targetRollRate = 0;
       if (isRollActive) {
         if ((rollInput > 0 && bankTilt > -maxBankTilt) || (rollInput < 0 && bankTilt < maxBankTilt)) {
-          targetRollRate = -rollInput * 0.024 * (specs.rollAuthority || 0.70);
+          targetRollRate = -rollInput * 0.024 * (specs.rollAuthority || 0.70) * qFeelStiffness;
         }
       } else {
         // 중립(Neutral) 시 FBW 비행 제어 법칙:
