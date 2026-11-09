@@ -176,6 +176,10 @@
             <span class="item-icon">🔴</span>
             <div><strong>엔진 시동/정지</strong><small id="mobile-engine-status">ON (가동)</small></div>
           </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.toggleGyroTilt(); window.toggleMobileMenu();">
+            <span class="item-icon">📱</span>
+            <div><strong>기기 틸트 조종</strong><small id="mobile-gyro-status">ON (737 감도)</small></div>
+          </button>
         </div>
 
         <div class="mobile-menu-section-title">🚨 시나리오 및 통신</div>
@@ -513,6 +517,10 @@
       <div class="touch-quadrant touch-right">
         <!-- Quick Action Buttons Row -->
         <div class="action-btn-row secondary-actions touch-quick-actions">
+          <button id="btn-touch-gyro" class="touch-btn mini-action-btn active" title="기기 기울기(틸트) 자이로 모드 토글 (Flight3d 737 표준 감도)" type="button" onclick="window.toggleGyroTilt()">
+            <span id="touch-gyro-icon">📱</span>
+            <small id="touch-gyro-label">틸트 ON</small>
+          </button>
           <button id="btn-touch-gear" class="touch-btn mini-action-btn" title="랜딩 기어 토글 (G)" type="button" onclick="window.toggleLandingGear()">
             <span>🛞</span>
             <small>기어</small>
@@ -698,8 +706,8 @@
               <span><strong>Thrustmaster T.Flight HOTAS One 비행 스틱 & 스로틀 레버</strong> 100% 지원! 에어버스 사이드스틱으로 피치/롤/요/스로틀 정밀 비행</span>
             </div>
             <div class="guide-item mobile-item" style="grid-column: 1 / -1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); padding: 8px;">
-              <span class="key" style="background:#059669; color:#fff;">📱 모바일 터치</span>
-              <span><strong>왼쪽 가상 조이스틱</strong>: 기수 상승/하강(피치) 및 선회(롤) • <strong>오른쪽 버튼군</strong>: BOOST(가속), BRAKE(감속), 🛞기어, 🪽플랩, 🎥시점</span>
+              <span class="key" style="background:#059669; color:#fff;">📱 기기 기울기 & 터치 (737 감도)</span>
+              <span><strong>기기 틸트(자이로)</strong>: 기기를 앞뒤(±25° 피치), 좌우(±30° 롤)로 기울여 보잉 737 조종간처럼 비행 (기본 ON) • <strong>오른쪽 FLIGHT YOKE</strong>: 터치 가상 스틱 동시 조작 • <strong>왼쪽 스로틀</strong>: 출력 쿼드런트 & 러더</span>
             </div>
             <div class="guide-item">
               <span class="key">0 ~ 9 키</span>

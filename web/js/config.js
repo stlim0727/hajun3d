@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - Aircraft Specifications and Flight Config Constants
  * Subsystem: config (1 methods)
  */
@@ -27,6 +27,46 @@
         maxThrust: 240000,    // N (CFM56-5B 트윈 터보팬 ~240 kN)
         vRotateKmh: 260,      // 이륙 로테이션 속도 (~140 kt)
         vStallCleanKmh: 215,  // 클린 실속 속도 (~116 kt)
+        pitchAuthority: 0.55,
+        rollAuthority: 0.70,
+        pitchDamping: 1.8,
+        rollDamping: 2.2
+      },
+      b737: {
+        name: 'Boeing 737-800',
+        mass: 66000,          // kg (자중 41.4t + 승객/연료 탑재 = 66,000kg)
+        wingArea: 124.6,      // m²
+        wingSpan: 35.8,       // m
+        aspectRatio: 9.45,    // 종횡비 AR
+        oswaldEff: 0.82,      // 오스왈드 효율 계수 e
+        cd0: 0.0185,          // 영양력 유해 항력 계수 C_D0
+        cl0: 0.22,            // 받음각 0도 기본 양력 계수 C_L0
+        clAlpha: 5.65,        // 양력선 기울기 C_L_alpha (per rad)
+        clMaxClean: 1.55,     // 클린 상태 최대 양력 계수
+        stallAlphaClean: 0.27,// 클린 실속 받음각 (~15.5도)
+        maxThrust: 242000,    // N (CFM56-7B26 트윈 터보팬 ~242 kN)
+        vRotateKmh: 270,      // 이륙 로테이션 속도 (~146 kt)
+        vStallCleanKmh: 220,  // 클린 실속 속도 (~119 kt)
+        pitchAuthority: 0.55, // 737 엘리베이터 피치 조종 권한
+        rollAuthority: 0.70,  // 737 에일러론 롤 조종 권한
+        pitchDamping: 1.8,    // 737 피치 레이트 댐핑
+        rollDamping: 2.2      // 737 롤 레이트 댐핑
+      },
+      b738: {
+        name: 'Boeing 737-800',
+        mass: 66000,
+        wingArea: 124.6,
+        wingSpan: 35.8,
+        aspectRatio: 9.45,
+        oswaldEff: 0.82,
+        cd0: 0.0185,
+        cl0: 0.22,
+        clAlpha: 5.65,
+        clMaxClean: 1.55,
+        stallAlphaClean: 0.27,
+        maxThrust: 242000,
+        vRotateKmh: 270,
+        vStallCleanKmh: 220,
         pitchAuthority: 0.55,
         rollAuthority: 0.70,
         pitchDamping: 1.8,

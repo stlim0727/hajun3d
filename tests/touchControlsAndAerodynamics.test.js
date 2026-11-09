@@ -182,3 +182,153 @@ test('validates FBW Normal Law Bank Angle Hold and coordinated turn behavior', (
   const turnAt20Deg = computeTurnRate(0.34, false, 0, 0);
   assert.ok(turnAt20Deg > 0.005, 'Banked aircraft must sustain turn rate even when roll stick is neutral');
 });
+
+test('validates Flight3d-style device orientation tilt projection and wraparound', () => {
+  const code = readFileSync('web/js/input.js', 'utf8');
+  const sandbox = {
+    AirplaneGame: { prototype: {} },
+    window: {},
+    globalThis: {}
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+
+  const screenTilt = sandbox.screenTilt || sandbox.AirplaneGame.prototype.screenTilt;
+  const angleDelta = sandbox.angleDelta || sandbox.AirplaneGame.prototype.angleDelta;
+  const isGyroSupportedDevice = sandbox.isGyroSupportedDevice || sandbox.AirplaneGame.prototype.isGyroSupportedDevice;
+
+  assert.equal(typeof screenTilt, 'function');
+  assert.equal(typeof angleDelta, 'function');
+  assert.equal(typeof isGyroSupportedDevice, 'function');
+
+  // 1. angleDelta wraparound tests
+  assert.equal(angleDelta(10, 0), 10);
+  assert.equal(angleDelta(-10, 0), -10);
+  assert.equal(Math.abs(angleDelta(190, 10)), 180);
+  assert.equal(angleDelta(170, -170), -20);
+  assert.equal(angleDelta(-170, 170), 20);
+
+  // 2. screenTilt projection tests
+  // Flat device: beta = 0, gamma = 0 -> pitch = 0, roll = 0
+  const flat = screenTilt(0, 0, 0);
+  assert.ok(Math.abs(flat.pitch) < 1e-4);
+  assert.ok(Math.abs(flat.roll) < 1e-4);
+
+  // Pitched up 20 degrees in portrait (angle = 0): beta = 20, gamma = 0
+  const pitchUp = screenTilt(20, 0, 0);
+  assert.ok(Math.abs(pitchUp.pitch - 20) < 1e-3);
+  assert.ok(Math.abs(pitchUp.roll) < 1e-3);
+
+  // Banked right 25 degrees in portrait: beta = 0, gamma = 25
+  const rollRight = screenTilt(0, 25, 0);
+  assert.ok(Math.abs(rollRight.pitch) < 1e-3);
+  assert.ok(Math.abs(rollRight.roll - 25) < 1e-3);
+
+  // Landscape orientation (angle = 90) projection test:
+  // In 90° landscape, pitch is derived from gamma and roll from beta
+  const landscapeTilt = screenTilt(0, 20, 90);
+  assert.ok(Math.abs(Math.abs(landscapeTilt.pitch) - 20) < 1e-3);
+
+  // 3. isGyroSupportedDevice detection test
+  const fakeMobileWin = {
+    DeviceOrientationEvent: function() {},
+    isSecureContext: true,
+    ontouchstart: null
+  };
+  const fakeMobileNav = {
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Mobile Safari/537.36',
+    maxTouchPoints: 5
+  };
+  assert.equal(isGyroSupportedDevice(fakeMobileWin, fakeMobileNav), true, 'Mobile touch device must be detected as gyro supported');
+
+  const fakeDesktopWin = {
+    DeviceOrientationEvent: function() {},
+    isSecureContext: true
+  };
+  const fakeDesktopNav = {
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64)',
+    maxTouchPoints: 0
+  };
+  assert.equal(isGyroSupportedDevice(fakeDesktopWin, fakeDesktopNav), false, 'Desktop without touch should not force default gyro');
+});
+
+test('validates Boeing 737 level tilt sensitivity (25° pitch, 30° roll) and dual-input fusion', () => {
+  const code = readFileSync('web/js/input.js', 'utf8');
+  const sandbox = {
+    AirplaneGame: { prototype: {} },
+    window: {
+      screen: { orientation: { angle: 0, type: 'portrait-primary' } },
+      innerWidth: 390,
+      innerHeight: 844,
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    },
+    globalThis: {},
+    document: {
+      getElementById: () => null,
+      querySelectorAll: () => []
+    }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+
+  const proto = sandbox.AirplaneGame.prototype;
+  const game = {
+    joystickData: { x: 0, y: 0, active: false, rawX: 0, rawY: 0 },
+    stickNormPitch: 0,
+    stickNormRoll: 0,
+    isStickActive: false,
+    gyroActive: true,
+    gyroEnabled: true,
+    gyroCalibration: null,
+    gyroNormPitch: 0,
+    gyroNormRoll: 0,
+    gyroScreen: { angle: 0, type: 'portrait' },
+    isTouchStickReleasing: false,
+    syncStickVisuals: () => {}
+  };
+  Object.assign(game, proto);
+
+  // 0. Initial flat posture calibrates zero-point at 0, 0
+  game.handleDeviceOrientation({ beta: 0, gamma: 0 });
+  assert.ok(game.gyroCalibration, 'Calibration zero-point must be captured');
+  assert.ok(Math.abs(game.gyroCalibration.pitch) < 1e-3);
+  assert.ok(Math.abs(game.gyroCalibration.roll) < 1e-3);
+
+  // 1. Full pitch deflection at 25 degrees (Boeing 737 elevator travel)
+  game.handleDeviceOrientation({ beta: 25, gamma: 0 });
+  assert.ok(Math.abs(game.gyroNormPitch - 1.0) < 1e-3, '25 deg pitch tilt must yield 1.0 normalized pitch');
+  assert.ok(Math.abs(game.gyroNormRoll) < 1e-3, 'Pure pitch must yield 0 roll');
+  assert.ok(Math.abs(game.joystickData.y - 1.0) < 1e-3, 'Shaped pitch at full deflection must be 1.0');
+
+  // 2. Full roll deflection at 30 degrees (Boeing 737 aileron wheel bank travel)
+  game.handleDeviceOrientation({ beta: 0, gamma: 30 });
+  assert.ok(Math.abs(game.gyroNormPitch) < 1e-3, 'Pure roll must yield 0 pitch');
+  assert.ok(Math.abs(game.gyroNormRoll - 1.0) < 1e-3, '30 deg roll tilt must yield 1.0 normalized roll');
+  assert.ok(Math.abs(game.joystickData.x - 1.0) < 1e-3, 'Shaped roll at full deflection must be 1.0');
+
+  // 3. Half deflection at 12.5 deg pitch and 15 deg roll follows 737 3rd-order curve
+  game.handleDeviceOrientation({ beta: 12.5, gamma: 0 });
+  assert.ok(Math.abs(game.gyroNormPitch - 0.5) < 1e-3, '12.5 deg pitch must yield 0.5 normalized raw pitch');
+  const expectedTravel = (0.5 - 0.06) / 0.94;
+  const expectedResp = 0.35 * expectedTravel + 0.65 * Math.pow(expectedTravel, 3);
+  assert.ok(Math.abs(game.joystickData.y - expectedResp) < 1e-3, 'Half pitch tilt follows 737 curve');
+
+  // 4. Dual-input fusion: combining touch stick and gyro without exceeding 1.0 magnitude
+  game.gyroNormPitch = 0.8;
+  game.gyroNormRoll = 0.0;
+  game.stickNormPitch = 0.0;
+  game.stickNormRoll = 0.8;
+  game.isStickActive = true;
+  game.updateTouchAndTiltOutput();
+
+  const combinedMag = Math.hypot(game.joystickData.rawY, game.joystickData.rawX);
+  assert.ok(combinedMag <= 1.0001, 'Combined stick + gyro input must clamp to magnitude 1.0');
+
+  // 5. Recenter recalibrates current tilt as zero-point
+  game.handleDeviceOrientation({ beta: 15, gamma: -10 });
+  game.recenterGyro();
+  game.handleDeviceOrientation({ beta: 15, gamma: -10 });
+  assert.ok(Math.abs(game.gyroNormPitch) < 1e-3, 'Recentered pitch must be zero at current angle');
+  assert.ok(Math.abs(game.gyroNormRoll) < 1e-3, 'Recentered roll must be zero at current angle');
+});

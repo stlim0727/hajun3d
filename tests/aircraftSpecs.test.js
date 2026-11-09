@@ -14,7 +14,7 @@ test('validates aircraft aerodynamic specs from config.js', () => {
   const getSpecs = sandbox.AirplaneGame.prototype.getAircraftSpecs;
   assert.equal(typeof getSpecs, 'function', 'getAircraftSpecs should be attached to AirplaneGame.prototype');
 
-  const requiredTypes = ['a320', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'];
+  const requiredTypes = ['a320', 'b737', 'b738', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'];
 
   for (const type of requiredTypes) {
     const spec = getSpecs(type);

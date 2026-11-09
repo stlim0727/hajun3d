@@ -84,6 +84,20 @@ class AirplaneGame {
     this.isTouchRudderReleasing = false;
     this.touchRudder = 0.0;
 
+    // 기기 기울기(틸트 / 자이로 센서) 제어 상태 (Flight3d 표준: 737 감도 25°/30°)
+    this.gyroEnabled = true;       // 기본 활성화 (기본 지원)
+    this.gyroActive = false;
+    this.gyroCalibration = null;   // { pitch, roll } 영점 기준각
+    this.gyroNormPitch = 0.0;      // [-1.0, 1.0] (737 엘리베이터 기준 ±25° 트래블)
+    this.gyroNormRoll = 0.0;       // [-1.0, 1.0] (737 에일러론 기준 ±30° 트래블)
+    this.gyroScreen = { angle: 0, type: 'landscape' };
+    this.stickNormPitch = 0.0;
+    this.stickNormRoll = 0.0;
+    this.isStickActive = false;
+    this.stickCurrentX = 0;
+    this.stickCurrentY = 0;
+    this.stickRadius = 50;
+
     // HOTAS 1 & 비행 조이스틱 컨트롤러 상태 (Thrustmaster T.Flight HOTAS One / Airbus TCA FBW)
     this.hotasState = {
       connected: false,

@@ -2758,6 +2758,13 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.6) !important;
 }
 
+.touch-btn.mini-action-btn.active,
+.touch-btn.mini-action-btn.gyro-active {
+  border-color: #06b6d4 !important;
+  background: rgba(6, 182, 212, 0.35) !important;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6) !important;
+}
+
 /* 4. Collapsible Controls Guide in Modal */
 .controls-guide-collapsible {
   background: rgba(15, 23, 42, 0.65) !important;

@@ -55,6 +55,9 @@ window.startDirectTakeoff = function() {
   try {
     if (!window.airplaneGame) initGame();
     if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
       window.airplaneGame.startDirectTakeoff();
     }
   } catch (err) {
@@ -75,6 +78,9 @@ window.startGateDeparture = function() {
   try {
     if (!window.airplaneGame) initGame();
     if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
       window.airplaneGame.startGateDeparture();
     }
   } catch (err) {
@@ -170,6 +176,25 @@ window.toggleCamera = function() {
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame) {
     window.airplaneGame.toggleCamera();
+  }
+};
+
+window.toggleGyroTilt = function() {
+  if (!debounceAction('toggleGyroTilt', 200)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.toggleGyroTilt === 'function') {
+    window.airplaneGame.toggleGyroTilt(true);
+  }
+};
+
+window.recenterGyro = function() {
+  if (!debounceAction('recenterGyro', 200)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.recenterGyro === 'function') {
+    window.airplaneGame.recenterGyro();
+    if (typeof window.airplaneGame.showPopup === 'function') {
+      window.airplaneGame.showPopup('📱 기기 기울기 영점 보정 완료');
+    }
   }
 };
 
@@ -411,6 +436,9 @@ window.toggleMobileMenu = function() {
 
       const engStat = document.getElementById('mobile-engine-status');
       if (engStat) engStat.textContent = window.airplaneGame.isEngineOff ? 'OFF (정지)' : 'ON (가동)';
+
+      const gyroStat = document.getElementById('mobile-gyro-status');
+      if (gyroStat) gyroStat.textContent = window.airplaneGame.gyroActive ? 'ON (737 감도)' : 'OFF';
     }
   }
 };
