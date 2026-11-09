@@ -152,8 +152,11 @@
     if (paBanner && showBanner) paBanner.classList.remove('hidden');
     if (paText) paText.textContent = '"기장님, 지금 말씀하세요! 마이크로 말씀하시거나 아래 방송 칩을 누르면 승객들이 AI로 즉각 반응합니다."';
 
+    const isMobile = (typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ''));
     this.playPAChime();
-    this.showPopup('🎙️ 조종석 마이크 상시 청취 가동! 편하게 말씀하세요.');
+    this.showPopup(isMobile
+      ? '🎙️ 조종석 마이크 ON (블루투스/통화 모드 전환 시 마이크를 끄면 고음질 미디어 사운드로 복원됩니다)'
+      : '🎙️ 조종석 마이크 상시 청취 가동! 편하게 말씀하세요.');
     this.triggerPassengerReaction('pa_start');
 
     // 1. Web Audio API 마이크 볼륨 실시간 분석 (getUserMedia)
@@ -357,6 +360,7 @@
     }
     if (micText) micText.textContent = '마이크 ON';
     this.flashSpeakingIndicator(false);
+    this.showPopup('🎙️ 마이크 OFF (고음질 미디어 사운드 복원)');
 
     if (this.micStream) {
       this.micStream.getTracks().forEach(t => t.stop());

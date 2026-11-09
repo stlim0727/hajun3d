@@ -356,3 +356,15 @@ test('audio subsystem: mute and unmute controls master gain cleanly', () => {
   assert.equal(game.soundEnabled, true);
   assert.equal(game.masterGain.gain.value, 1.0);
 });
+
+test('audio subsystem: mobile audio preserves high fidelity media mode without auto-starting microphone', () => {
+  const uiCode = readFileSync('web/js/ui.js', 'utf8');
+  const gameCode = readFileSync('web/game.js', 'utf8');
+
+  // Ensure flight departure and takeoff do not auto-start microphone (which triggers telephony/SCO mode)
+  assert.doesNotMatch(uiCode, /startTakeoffRun[\s\S]*?startMicrophone/, 'startTakeoffRun must not auto-start microphone');
+  assert.doesNotMatch(uiCode, /startGateDeparture[\s\S]*?startMicrophone/, 'startGateDeparture must not auto-start microphone');
+
+  // Ensure speakCaptainPreset does not force-start hardware microphone
+  assert.doesNotMatch(gameCode, /speakCaptainPreset[\s\S]*?startMicrophone/, 'speakCaptainPreset must not start hardware microphone');
+});

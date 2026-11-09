@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sky Jet Explorer 3D - Global Action Dispatcher & Bootstrap Controller
  * Handles DOM buttons, keyboard debouncing, and game lifecycle initialization.
  */
@@ -200,8 +200,9 @@ window.speakCaptainPreset = function(phrase) {
   if (!debounceAction('speakCaptainPreset', 300)) return;
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame) {
-    if (!window.airplaneGame.isMicActive) {
-      window.airplaneGame.startMicrophone();
+    const paBanner = document.getElementById('pa-broadcast-banner');
+    if (paBanner && paBanner.classList.contains('hidden')) {
+      paBanner.classList.remove('hidden');
     }
     window.airplaneGame.playPAChime();
     window.airplaneGame.handleCaptainSpeechAI(phrase);

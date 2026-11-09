@@ -302,11 +302,6 @@
       ? '🛫 대륙 3,800m 메가 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!' 
       : '🛫 3,800m 초대형 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!');
     this.startJetSound();
-
-    // 비행 시작 시 조종석 마이크 상시 청취 자동 활성화
-    setTimeout(() => {
-      if (!this.isMicActive) this.startMicrophone(false);
-    }, 400);
   },
 
   // 모드 2: 게이트 탑승 & 유도로 주행 (Full Gate Departure - 1번 게이트 정지선)
@@ -364,11 +359,6 @@
       ? '📢 새 승객 285명 탑승 완료! 다음 비행 임무를 시작합니다. 0~9 키로 출력을 올려 이동하세요.' 
       : '📢 승객 285명 탑승 완료! 0~9 키로 출력을 올려 유도로(황색선)로 이동하세요.');
     this.startJetSound();
-
-    // 비행 시작 시 조종석 마이크 상시 청취 자동 활성화
-    setTimeout(() => {
-      if (!this.isMicActive) this.startMicrophone(false);
-    }, 400);
   },
 
   toggleCamera() {
