@@ -333,6 +333,13 @@ test('validates Boeing 737 level tilt sensitivity (25° pitch, 30° roll) and du
   assert.ok(Math.abs(game.gyroNormRoll) < 1e-3, 'Recentered roll must be zero at current angle');
 });
 
+test('validates tilt recenter button in index.html and recenterGyro behavior', () => {
+  const html = readFileSync('web/index.html', 'utf8');
+  assert.ok(html.includes('id="btn-touch-gyro-recenter"'), 'btn-touch-gyro-recenter must be present in index.html');
+  assert.ok(html.includes('window.recenterGyro()'), 'window.recenterGyro() must be wired in index.html');
+  assert.ok(html.includes('id="touch-stick-header"'), 'touch-stick-header must be clickable for recentering');
+});
+
 test('validates ISA atmosphere model (troposphere & tropopause) from physics.js', () => {
   const code = readFileSync('web/js/physics.js', 'utf8');
   const sandbox = {

@@ -305,11 +305,29 @@
   },
 
   recenterGyro() {
+    if (!this.gyroActive && typeof this.enableGyro === 'function') {
+      this.enableGyro(true).then((success) => {
+        if (success) {
+          this.recenterGyro();
+        }
+      });
+      return;
+    }
     this.gyroCalibration = null;
     this.gyroNormPitch = 0.0;
     this.gyroNormRoll = 0.0;
     this.gyroScreen = readGyroScreen(typeof window !== 'undefined' ? window : globalThis);
     this.updateTouchAndTiltOutput();
+
+    const recenterBtn = (typeof document !== 'undefined') ? document.getElementById('btn-touch-gyro-recenter') : null;
+    if (recenterBtn) {
+      recenterBtn.classList.add('recenter-flash');
+      setTimeout(() => recenterBtn.classList.remove('recenter-flash'), 250);
+    }
+
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('🎯 기기 기울기(틸트) 영점 보정 완료');
+    }
   },
 
   async toggleGyroTilt(userGesture = true) {
@@ -347,6 +365,11 @@
     const mobileGyroStatus = document.getElementById('mobile-gyro-status');
     if (mobileGyroStatus) {
       mobileGyroStatus.textContent = this.gyroActive ? 'ON (737 감도)' : 'OFF';
+    }
+    const recenterBtn = document.getElementById('btn-touch-gyro-recenter');
+    if (recenterBtn) {
+      recenterBtn.classList.toggle('active', this.gyroActive);
+      recenterBtn.style.opacity = this.gyroActive ? '1.0' : '0.55';
     }
   },
 
@@ -467,6 +490,9 @@
           break;
         case 'KeyR':
           this.toggleReverseThrust();
+          break;
+        case 'KeyT':
+          this.recenterGyro();
           break;
         case 'KeyX':
           this.toggleCruiseSpeed();
@@ -877,6 +903,24 @@
         e.preventDefault();
         e.stopPropagation();
         this.toggleGyroTilt(true);
+      });
+    }
+
+    const gyroRecenterBtn = document.getElementById('btn-touch-gyro-recenter');
+    if (gyroRecenterBtn) {
+      gyroRecenterBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.recenterGyro();
+      });
+    }
+
+    const stickHeader = document.getElementById('touch-stick-header');
+    if (stickHeader) {
+      stickHeader.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.recenterGyro();
       });
     }
 

@@ -192,9 +192,6 @@ window.recenterGyro = function() {
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame && typeof window.airplaneGame.recenterGyro === 'function') {
     window.airplaneGame.recenterGyro();
-    if (typeof window.airplaneGame.showPopup === 'function') {
-      window.airplaneGame.showPopup('📱 기기 기울기 영점 보정 완료');
-    }
   }
 };
 

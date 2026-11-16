@@ -180,6 +180,10 @@
             <span class="item-icon">📱</span>
             <div><strong>기기 틸트 조종</strong><small id="mobile-gyro-status">ON (737 감도)</small></div>
           </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.recenterGyro(); window.toggleMobileMenu();">
+            <span class="item-icon">🎯</span>
+            <div><strong>틸트 영점 재설정</strong><small>현재 기기 자세를 0°로 설정</small></div>
+          </button>
         </div>
 
         <div class="mobile-menu-section-title">🚨 시나리오 및 통신</div>
@@ -521,6 +525,10 @@
             <span id="touch-gyro-icon">📱</span>
             <small id="touch-gyro-label">틸트 ON</small>
           </button>
+          <button id="btn-touch-gyro-recenter" class="touch-btn mini-action-btn active" title="기기 틸트 현재 자세로 기준점(영점) 잡기 (T)" type="button" onclick="window.recenterGyro()">
+            <span>🎯</span>
+            <small>영점</small>
+          </button>
           <button id="btn-touch-gear" class="touch-btn mini-action-btn" title="랜딩 기어 토글 (G)" type="button" onclick="window.toggleLandingGear()">
             <span>🛞</span>
             <small>기어</small>
@@ -541,8 +549,8 @@
 
         <!-- Virtual Flight Stick Yoke -->
         <div class="touch-stick-card">
-          <div class="touch-card-header">
-            <span class="touch-label">FLIGHT YOKE</span>
+          <div class="touch-card-header" id="touch-stick-header" onclick="window.recenterGyro()" style="cursor: pointer;" title="탭하여 현재 자세로 틸트 영점 재설정 (T)">
+            <span class="touch-label">FLIGHT YOKE 🎯</span>
             <span id="touch-stick-telemetry" class="touch-value">P: 0° | R: 0°</span>
           </div>
           <div id="joystick-zone" class="touch-stick-zone">
