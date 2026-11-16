@@ -208,6 +208,10 @@
 
         <div class="mobile-menu-section-title">📦 3D 모델 및 컨트롤러</div>
         <div class="mobile-menu-grid">
+          <button class="mobile-menu-item-btn" type="button" onclick="window.openGLBViewer()">
+            <span class="item-icon">🔍</span>
+            <div><strong>GLB 모델 뷰어</strong><small>360° 회전·줌 둘러보기</small></div>
+          </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.toggleGLBMenu(); window.toggleMobileMenu();">
             <span class="item-icon">📦</span>
             <div><strong>GLB 3D 시스템</strong><small>3D 파일 내보내기/불러오기</small></div>
@@ -292,6 +296,7 @@
             <span class="status-item">🏖️ 해운대·도시: <strong id="glb-status-city" class="text-green">GLB 바이너리 적용됨</strong></span>
           </div>
           <p class="glb-desc">비행기, 활주로, 인천 메가 허브 공항, 대륙 지형·산맥·섬, 해운대 해변 도시 전체가 100% glTF 2.0 / GLB 3D 바이너리 파일 방식으로 렌더링되고 있습니다.</p>
+          <button id="glb-viewer-modal-btn" class="btn-primary glb-action-btn" type="button" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);" onclick="window.openGLBViewer()">🔍 3D GLB 모델 갤러리에서 둘러보기 (360° 회전 · 줌 인/아웃)</button>
         </div>
 
         <div class="glb-section-title">🎁 AI 추천 내장 GLB 비행기 프리셋 (바이너리 GLB 파일 즉시 탑승)</div>
@@ -700,6 +705,7 @@
       <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
         <button id="takeoff-direct-btn" class="btn-primary" type="button" onclick="window.startDirectTakeoff()" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); pointer-events: auto !important; cursor: pointer !important;">🛫 활주로에서 즉시 이륙하기 (추천)</button>
         <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()" style="pointer-events: auto !important; cursor: pointer !important;">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
+        <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()" style="background: rgba(14, 165, 233, 0.18); border-color: rgba(56, 189, 248, 0.55); color: #e0f2fe; pointer-events: auto !important; cursor: pointer !important;">🔍 3D GLB 모델 갤러리 둘러보기 (회전 · 줌)</button>
       </div>
 
       <details class="controls-guide-collapsible">

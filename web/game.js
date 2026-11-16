@@ -276,6 +276,11 @@ window.toggleGLBMenu = function() {
   }
 };
 
+window.openGLBViewer = function(modelId) {
+  const query = modelId ? `?model=${encodeURIComponent(modelId)}` : '';
+  window.location.href = `glb-viewer.html${query}`;
+};
+
 window.triggerGLBFileSelect = function(targetType = 'plane') {
   window.glbSelectTargetType = targetType;
   const input = document.getElementById('glb-file-input');
