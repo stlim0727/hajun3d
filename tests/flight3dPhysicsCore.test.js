@@ -425,3 +425,29 @@ test('amphibian floats without sinking on gentle water landing and crashes on ex
   assert.ok(crashCause, 'Steep/hard amphibian water impact must trigger waterCrash');
   assert.equal(crashGame._flight3dCore.isCrashed, true, 'Amphibian core must enter isCrashed on fatal impact');
 });
+
+test('DC-10 and other jet airliners rotate nose-up and lift off cleanly at 160 kt', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { Flight3dPhysics, AirplaneGame, THREE } = sandbox;
+
+  const cfg = AirplaneGame.prototype.getFlight3dConfig('dc10');
+  const v160KtMs = 160 / 1.94384;
+  const core = new Flight3dPhysics.FlightPhysicsCore({
+    config: cfg,
+    position: new THREE.Vector3(0, cfg.landingGear.cgGroundHeightM, 0),
+    linearVelocity: new THREE.Vector3(0, 0, -v160KtMs),
+  });
+  core.aero.flapsIndex = 1;
+  core.aero.currentFlapAngle = core.aero.flapAngles[1] || 0;
+
+  let res;
+  for (let i = 0; i < 12; i++) {
+    res = core.step(1 / 60, { throttle: 1.0, elevator: 0, flapsIndex: 1, gearHandleDown: true }, {});
+  }
+  for (let i = 0; i < 180; i++) {
+    res = core.step(1 / 60, { throttle: 1.0, elevator: 1.0, flapsIndex: 1, gearHandleDown: true }, {});
+  }
+
+  assert.ok(res.telemetry.pitchDeg >= 8.0, `DC-10 must pitch up during 160 kt rotation (got ${res.telemetry.pitchDeg.toFixed(2)} deg)`);
+  assert.equal(res.telemetry.wow, false, 'DC-10 must lift off within 3s of rotation at 160 kt');
+});

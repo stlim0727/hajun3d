@@ -374,7 +374,9 @@
         transonicMachBuffet: s.transonicMachBuffet ?? 0.78,
         cm0: -0.02,
         cma: -0.90,
-        cmDe: -1.25 * (s.pitchAuthority ? s.pitchAuthority / 0.55 : 1.0),
+        // Do not attenuate cmDe below 1.0x for heavy airliners: Iyy already scales with mass * len^2,
+        // so scaling cmDe down double-penalizes elevator authority during takeoff rotation.
+        cmDe: -1.45 * Math.max(1.0, s.pitchAuthority ? s.pitchAuthority / 0.55 : 1.0),
         cmQ: -26.0 * (s.pitchDamping ? s.pitchDamping / 1.8 : 1.0),
         clBeta: -0.14,
         clDa: 0.18 * (s.rollAuthority ? s.rollAuthority / 0.70 : 1.0),
@@ -429,7 +431,7 @@
           {
             id: 'mainLeft',
             name: 'Left Main Gear',
-            localPos: { x: -3.2 * gearScale, y: mainGearY, z: 1.8 * gearScale },
+            localPos: { x: -3.2 * gearScale, y: mainGearY, z: 0.9 * gearScale },
             wheelRadius: 0.48 * Math.max(0.5, gearScale),
             restLength: 0.9 * Math.max(0.5, gearScale),
             kSpring: kMain,
@@ -439,7 +441,7 @@
           {
             id: 'mainRight',
             name: 'Right Main Gear',
-            localPos: { x: 3.2 * gearScale, y: mainGearY, z: 1.8 * gearScale },
+            localPos: { x: 3.2 * gearScale, y: mainGearY, z: 0.9 * gearScale },
             wheelRadius: 0.48 * Math.max(0.5, gearScale),
             restLength: 0.9 * Math.max(0.5, gearScale),
             kSpring: kMain,
