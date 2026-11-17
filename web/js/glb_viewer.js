@@ -643,6 +643,13 @@
             mats.forEach((m) => {
               materials.add(m);
               m.wireframe = this.wireframe;
+              if (m.transparent) {
+                m.depthWrite = true;
+              }
+              if (m.transmission > 0) {
+                m.transmission = 0;
+              }
+              m.needsUpdate = true;
             });
           }
         }

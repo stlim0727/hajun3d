@@ -287,10 +287,11 @@
     scene.scale.set(scale, scale, scale);
 
     // ★ 중심점 X=0 완벽 정렬 & 회전 영점화 (기우뚱 및 쏠림 100% 원천 차단)
+    const yawOffset = (this.currentPlaneType === 'amphibian') ? Math.PI : 0;
     scene.position.x = 0;
     scene.position.y = -center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2);
-    scene.position.z = -center.z * scale;
-    scene.rotation.set(0, 0, 0);
+    scene.position.z = (yawOffset ? center.z : -center.z) * scale;
+    scene.rotation.set(0, yawOffset, 0);
 
     scene.traverse((node) => {
       if (node.name) {
@@ -308,9 +309,15 @@
         node.castShadow = true;
         node.receiveShadow = true;
         if (node.material) {
-          node.material.roughness = Math.max(0.18, node.material.roughness || 0.4);
-          node.material.metalness = Math.min(0.85, node.material.metalness || 0.2);
-          node.material.side = THREE.DoubleSide;
+          const mats = Array.isArray(node.material) ? node.material : [node.material];
+          mats.forEach((m) => {
+            m.roughness = Math.max(0.18, m.roughness || 0.4);
+            m.metalness = Math.min(0.85, m.metalness || 0.2);
+            m.side = THREE.DoubleSide;
+            if (m.transparent) m.depthWrite = true;
+            if (m.transmission > 0) m.transmission = 0;
+            m.needsUpdate = true;
+          });
         }
       }
     });
