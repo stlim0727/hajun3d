@@ -186,6 +186,7 @@ class AirplaneGame {
     this.speedLinesGroup = null;
     this.speedLineData = [];
     this.speedLineMaterial = null;
+    this.speedEffectIntensity = this.loadSpeedEffectIntensity ? this.loadSpeedEffectIntensity() : 0.35;
     this.oceanTexture = null;
     this.speedVignetteEl = null;
     this.jetWindSrc = null;

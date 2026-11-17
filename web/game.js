@@ -195,6 +195,22 @@ window.toggleCameraMenu = function() {
   }
 };
 
+window.toggleEffectMenu = function() {
+  if (!debounceAction('toggleEffectMenu', 140)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.toggleEffectMenu === 'function') {
+    window.airplaneGame.toggleEffectMenu();
+  }
+};
+
+window.setSpeedEffectIntensityPercent = function(percent, announce = false) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setSpeedEffectIntensity === 'function') {
+    const val = Math.min(100, Math.max(0, Number(percent) || 0)) / 100;
+    window.airplaneGame.setSpeedEffectIntensity(val, { announce: Boolean(announce) });
+  }
+};
+
 window.resetCameraLook = function() {
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame && typeof window.airplaneGame.resetCameraLook === 'function') {

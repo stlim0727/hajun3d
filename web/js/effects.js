@@ -6,6 +6,9 @@
 (function() {
   'use strict';
 
+  const DEFAULT_SPEED_EFFECT_INTENSITY = 0.35;
+  const SPEED_EFFECT_STORAGE_KEY = 'hajun3d_speed_effect_intensity';
+
   Object.assign(AirplaneGame.prototype, {
   // AI 항공기 굵고 웅장한 선명한 제트 비행운 파티클 (하늘에 뚜렷이 남음)
   createContrailParticle(pos, quat, sideOffset = 0) {
@@ -62,7 +65,59 @@
   // ----------------------------------------------------------------
   // 속도감 시각 효과 (High-Speed Streamlines & Wingtip Trails)
   // ----------------------------------------------------------------
+  loadSpeedEffectIntensity() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem(SPEED_EFFECT_STORAGE_KEY);
+        if (saved !== null && saved !== '') {
+          const parsed = parseFloat(saved);
+          if (Number.isFinite(parsed)) {
+            return Math.min(1.0, Math.max(0.0, parsed));
+          }
+        }
+      }
+    } catch (_) {
+      // ignore storage errors in restricted environments
+    }
+    return DEFAULT_SPEED_EFFECT_INTENSITY;
+  },
+
+  setSpeedEffectIntensity(value, options = {}) {
+    const num = Number(value);
+    const clamped = Number.isFinite(num) ? Math.min(1.0, Math.max(0.0, num)) : DEFAULT_SPEED_EFFECT_INTENSITY;
+    this.speedEffectIntensity = clamped;
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(SPEED_EFFECT_STORAGE_KEY, clamped.toFixed(2));
+      }
+    } catch (_) {
+      // ignore storage errors in restricted environments
+    }
+
+    if (clamped <= 0.005) {
+      if (this.speedLineMaterial) this.speedLineMaterial.opacity = 0;
+      if (this.speedLinesGroup) this.speedLinesGroup.visible = false;
+      if (this.speedVignetteEl) this.speedVignetteEl.style.opacity = '0';
+    } else if (this.speedLinesGroup) {
+      this.speedLinesGroup.visible = true;
+    }
+
+    if (typeof this.updateSpeedEffectUI === 'function') {
+      this.updateSpeedEffectUI();
+    }
+
+    if (options.announce && typeof this.showPopup === 'function') {
+      const pct = Math.round(clamped * 100);
+      this.showPopup(pct === 0
+        ? '💨 기류/속도선 이펙트: 끄기 (0%)'
+        : `💨 기류/속도선 이펙트 강도: ${pct}%`);
+    }
+  },
+
   initSpeedEffects() {
+    this.speedEffectIntensity = this.loadSpeedEffectIntensity();
+
     // 1. 고속 공기 기류 스트림 라인 (3D Speed Lines)
     const lineCount = 180;
     const geometry = new THREE.BufferGeometry();
@@ -101,25 +156,35 @@
 
     this.speedLinesGroup = new THREE.LineSegments(geometry, this.speedLineMaterial);
     this.speedLinesGroup.frustumCulled = false;
+    this.speedLinesGroup.visible = this.speedEffectIntensity > 0.005;
     this.scene.add(this.speedLinesGroup);
 
     this.speedVignetteEl = document.getElementById('speed-vignette');
+    if (typeof this.updateSpeedEffectUI === 'function') {
+      this.updateSpeedEffectUI();
+    }
   },
 
   updateSpeedEffects(dt, currentKmh) {
     if (!this.speedLinesGroup || !this.speedLineMaterial) return;
 
+    const intensity = typeof this.speedEffectIntensity === 'number'
+      ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
+      : DEFAULT_SPEED_EFFECT_INTENSITY;
+
     // 시속 240 km/h 이상부터 스트림 라인 점진 등장, 800 km/h에서 최고조
     const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 220) / 580)); // 0.0 ~ 1.0
 
-    const targetOpacity = speedRatio > 0.04 ? (0.15 + speedRatio * 0.68) : 0.0;
+    const rawTargetOpacity = speedRatio > 0.04 ? (0.06 + speedRatio * 0.62) : 0.0;
+    const targetOpacity = rawTargetOpacity * intensity;
     this.speedLineMaterial.opacity = THREE.MathUtils.lerp(this.speedLineMaterial.opacity, targetOpacity, 0.1);
+    this.speedLinesGroup.visible = this.speedLineMaterial.opacity > 0.005;
 
     // 스피드 라인 위치 및 회전을 기체 중심으로 추종
     this.speedLinesGroup.position.copy(this.planeGroup.position);
     this.speedLinesGroup.quaternion.copy(this.planeGroup.quaternion);
 
-    if (this.speedLineMaterial.opacity > 0.01) {
+    if (this.speedLinesGroup.visible && this.speedLineMaterial.opacity > 0.01) {
       const posAttr = this.speedLinesGroup.geometry.attributes.position;
       const posArr = posAttr.array;
       const moveSpeed = (28.0 + speedRatio * 110.0) * dt * 60;
@@ -158,8 +223,8 @@
 
     // 3. 화면 테두리 스피드 비네트 효과
     if (this.speedVignetteEl) {
-      if (currentKmh > 420) {
-        const vigOpacity = Math.min(0.85, (currentKmh - 420) / 400);
+      if (intensity > 0.01 && currentKmh > 420) {
+        const vigOpacity = Math.min(0.85, (currentKmh - 420) / 400) * intensity;
         this.speedVignetteEl.style.opacity = vigOpacity.toFixed(2);
       } else {
         this.speedVignetteEl.style.opacity = '0';

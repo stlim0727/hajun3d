@@ -117,6 +117,7 @@
     this.micToggleBtn = document.getElementById('mic-toggle-btn');
     this.engineShutdownBtn = document.getElementById('engine-shutdown-btn');
     this.gateEngineShutdownBtn = document.getElementById('gate-engine-shutdown-btn');
+    this.updateSpeedEffectUI();
   },
 
   // ----------------------------------------------------------------
@@ -411,8 +412,50 @@
       menu.classList.add('hidden');
       return;
     }
+    this.toggleEffectMenu(true);
     menu.classList.toggle('hidden');
     this.updateCameraModeUI();
+  },
+
+  toggleEffectMenu(forceClose = false) {
+    const menu = document.getElementById('effect-settings-menu');
+    if (!menu) return;
+    if (forceClose) {
+      menu.classList.add('hidden');
+      return;
+    }
+    const camMenu = document.getElementById('cam-mode-menu');
+    if (camMenu) camMenu.classList.add('hidden');
+    menu.classList.toggle('hidden');
+    this.updateSpeedEffectUI();
+  },
+
+  updateSpeedEffectUI() {
+    const intensity = typeof this.speedEffectIntensity === 'number'
+      ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
+      : 0.35;
+    const pct = Math.round(intensity * 100);
+    const labelText = pct === 0 ? '기류 OFF' : `기류 ${pct}%`;
+
+    const btnText = document.getElementById('effect-intensity-text');
+    if (btnText) btnText.textContent = labelText;
+
+    const valPc = document.getElementById('effect-slider-val-pc');
+    if (valPc) valPc.textContent = pct === 0 ? 'OFF (0%)' : `${pct}%`;
+
+    const valMob = document.getElementById('effect-slider-val-mobile');
+    if (valMob) valMob.textContent = pct === 0 ? 'OFF (0%)' : `${pct}%`;
+
+    const sliderPc = document.getElementById('effect-intensity-slider-pc');
+    if (sliderPc && Number(sliderPc.value) !== pct) sliderPc.value = String(pct);
+
+    const sliderMob = document.getElementById('effect-intensity-slider-mobile');
+    if (sliderMob && Number(sliderMob.value) !== pct) sliderMob.value = String(pct);
+
+    document.querySelectorAll('[data-effect-preset]').forEach((btn) => {
+      if (Number(btn.dataset.effectPreset) === pct) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
   },
 
   toggleCamera() {
