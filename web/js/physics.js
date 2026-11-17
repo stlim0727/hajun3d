@@ -555,7 +555,9 @@
   },
 
   buildFlight3dEnvironment() {
-    const seaSimY = -((this.groundY || 6.84) - 0.8);
+    const seaWorldY = -1.5;
+    const groundOffset = this._flight3dGroundOffset ?? 3.5;
+    const seaSimY = seaWorldY - (this.groundY || 6.84) + groundOffset;
     const isOverAirportFn = typeof this.isOverAirport === 'function'
       ? (sx, sz) => this.isOverAirport(sx, sz)
       : () => true;
@@ -635,6 +637,18 @@
         }
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('belly_landing');
+        }
+      } else if (ev.type === 'waterCrash') {
+        if (typeof this.clearGPWS === 'function') this.clearGPWS();
+        const cause = (ev.sinkRate || 0) > 4.5
+          ? '해상 과속 강하 격돌 추락'
+          : (ev.speedMs || 0) > 115
+            ? '해상 고속 격돌 추락'
+            : Math.abs(ev.rollDeg || 0) > 16
+              ? '해상 주익 접촉 전복 추락'
+              : '해상 기수 급강하 격돌 추락';
+        if (typeof this.triggerWaterCrash === 'function') {
+          this.triggerWaterCrash(cause);
         }
       } else if (ev.type === 'waterDitching') {
         this.isWaterLanding = true;

@@ -423,6 +423,19 @@
       gearResult.waterDitching = this.waterDitching;
       gearResult.waterResult = waterResult;
   
+      if (waterResult.catastrophic && !this.isCrashed) {
+        this.isCrashed = true;
+        this.landingIncident = true;
+        this.engines.setThrottle(0.0);
+        events.push({
+          type: 'waterCrash',
+          sinkRate: Math.max(0, -this.linearVelocity.y),
+          speedMs: this.linearVelocity.length(),
+          pitchDeg: stepPitchDeg,
+          rollDeg: stepRollDeg,
+        });
+      }
+
       if (waterResult.onWater && waterResult.ditchingContact) {
         if (!this.waterDitchingNoticed) {
           this.waterDitchingNoticed = true;

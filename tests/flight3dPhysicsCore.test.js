@@ -278,3 +278,74 @@ test('updateFlightPhysics drives 120 Hz FlightPhysicsCore takeoff acceleration a
   assert.ok(Number.isFinite(game.n1) && game.n1 > 90, 'N1 must spool up toward TOGA');
   assert.ok(Number.isFinite(game.currentG), 'G-force telemetry must remain finite');
 });
+
+test('catastrophic water impact triggers waterCrash, marks core crashed, and invokes triggerWaterCrash', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { THREE, AirplaneGame } = sandbox;
+
+  let waterCrashCause = null;
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentPlaneType = 'b738';
+  game.groundY = 6.84;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 1.5, -10000),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.velocity = new THREE.Vector3(0, -10, -80);
+  game.throttle = 0.2;
+  game.n1 = 40;
+  game.flapIndex = 0;
+  game.gearExtended = false;
+  game.isOnGround = false;
+  game.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  game.isOverAirport = () => false;
+  game.showPopup = () => {};
+  game.checkFlightMovementReactions = () => {};
+  game.checkGPWS = () => {};
+  game.clearGPWS = () => {};
+  game.triggerWaterCrash = (cause) => { waterCrashCause = cause; };
+
+  for (let i = 0; i < 60 && !waterCrashCause; i++) {
+    game.updateFlightPhysics(1 / 60);
+  }
+
+  assert.ok(waterCrashCause, 'High-sink-rate water impact must invoke triggerWaterCrash');
+  assert.equal(game._flight3dCore.isCrashed, true, 'FlightPhysicsCore must enter isCrashed state');
+  assert.equal(game._flight3dCore.waterDitching.catastrophic, true, 'WaterDitching must record catastrophic impact');
+});
+
+test('survivable water ditching floats and decelerates at sea surface without plunging underwater', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { THREE, AirplaneGame } = sandbox;
+
+  let waterCrashCalled = false;
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentPlaneType = 'b738';
+  game.groundY = 6.84;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 1.0, -10000),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.velocity = new THREE.Vector3(0, -1.5, -75);
+  game.throttle = 0.0;
+  game.n1 = 30;
+  game.flapIndex = 2;
+  game.gearExtended = false;
+  game.isOnGround = false;
+  game.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  game.isOverAirport = () => false;
+  game.showPopup = () => {};
+  game.checkFlightMovementReactions = () => {};
+  game.checkGPWS = () => {};
+  game.clearGPWS = () => {};
+  game.triggerWaterCrash = () => { waterCrashCalled = true; };
+
+  for (let i = 0; i < 180; i++) {
+    game.updateFlightPhysics(1 / 60);
+  }
+
+  assert.equal(waterCrashCalled, false, 'Gentle level water ditching must not trigger waterCrash');
+  assert.equal(game.isWaterLanding, true, 'Gentle ditching must latch isWaterLanding');
+  assert.ok(game.planeGroup.position.y > -5.0, `Aircraft must remain near sea surface (got y=${game.planeGroup.position.y.toFixed(2)})`);
+  assert.ok(game.groundSpeed < 75, `Hydrodynamic drag must decelerate aircraft (got ${game.groundSpeed.toFixed(2)} m/s)`);
+});
