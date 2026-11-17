@@ -440,9 +440,9 @@
     const quat = this.planeGroup ? this.planeGroup.quaternion : new THREE.Quaternion();
 
     const simPos = new THREE.Vector3(
-      pos.x * 1.4786,
+      pos.x,
       groundOffset + (pos.y - (this.groundY || 6.84)) * 10.0,
-      pos.z * 1.4786
+      pos.z
     );
     const simVel = this.velocity ? this.velocity.clone() : new THREE.Vector3();
 
@@ -557,7 +557,7 @@
   buildFlight3dEnvironment() {
     const seaSimY = -((this.groundY || 6.84) - 0.8) * 10.0;
     const isOverAirportFn = typeof this.isOverAirport === 'function'
-      ? (sx, sz) => this.isOverAirport(sx / 1.4786, sz / 1.4786)
+      ? (sx, sz) => this.isOverAirport(sx, sz)
       : () => true;
 
     return {
@@ -678,9 +678,9 @@
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
     if (this.planeGroup) {
       this.planeGroup.position.set(
-        result.position.x / 1.4786,
+        result.position.x,
         (this.groundY || 6.84) + (result.position.y - groundOffset) / 10.0,
-        result.position.z / 1.4786
+        result.position.z
       );
       this.planeGroup.quaternion.copy(result.quaternion);
     }

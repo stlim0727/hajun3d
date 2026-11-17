@@ -23,9 +23,9 @@
     this.airportGroup.add(airportGround);
 
     // --------------------------------------------------------------
-    // 36L 정밀 활주로 (100m x 3800m 메가 런웨이, Y = 2.10)
+    // 36L 정밀 활주로 (60m x 3800m ICAO 4F 규격 런웨이, Y = 2.10)
     // --------------------------------------------------------------
-    const runwayGeo = new THREE.PlaneGeometry(100, 3800);
+    const runwayGeo = new THREE.PlaneGeometry(60, 3800);
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: 0x1e293b, 
       roughness: 0.7,
@@ -47,17 +47,17 @@
       polygonOffsetUnits: -2
     });
     [-1800, 1800].forEach(zBase => {
-      for (let k = -42; k <= 42; k += 5.5) {
-        const bar = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 50), whiteMat);
+      for (let k = -26; k <= 26; k += 4.0) {
+        const bar = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 36), whiteMat);
         bar.rotation.x = -Math.PI / 2;
         bar.position.set(160 + k, 2.14, zBase);
         this.airportGroup.add(bar);
       }
     });
 
-    // 활주로 중앙선 (Centerline Stripes - Y = 2.14)
-    for (let z = -1750; z <= 1750; z += 55) {
-      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 36), whiteMat);
+    // 활주로 중앙선 (Centerline Stripes - ICAO 규격: 폭 0.9m, 길이 30m, 주기 50m, Y = 2.14)
+    for (let z = -1750; z <= 1750; z += 50) {
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 30), whiteMat);
       stripe.rotation.x = -Math.PI / 2;
       stripe.position.set(160, 2.14, z);
       this.airportGroup.add(stripe);
@@ -65,8 +65,8 @@
 
     // 착륙 목표 지점 (Aiming Point - Z = ±1400, Y = 2.14)
     [-1400, 1400].forEach(z => {
-      [-24, 24].forEach(xOff => {
-        const aim = new THREE.Mesh(new THREE.PlaneGeometry(9.0, 65), whiteMat);
+      [-14, 14].forEach(xOff => {
+        const aim = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 50), whiteMat);
         aim.rotation.x = -Math.PI / 2;
         aim.position.set(160 + xOff, 2.14, z);
         this.airportGroup.add(aim);
@@ -80,11 +80,11 @@
         new THREE.BoxGeometry(2.4, 1.4, 2.0),
         new THREE.MeshStandardMaterial({ color: 0xfacc15 })
       );
-      papiBox.position.set(95, 2.6, 1250 + p * 8);
+      papiBox.position.set(118, 2.6, 1250 + p * 8);
       this.airportGroup.add(papiBox);
 
       const lamp = new THREE.PointLight(0xffffff, 2.2, 90);
-      lamp.position.set(97, 3.2, 1250 + p * 8);
+      lamp.position.set(120, 3.2, 1250 + p * 8);
       this.airportGroup.add(lamp);
       this.papiLights.push(lamp);
     }
@@ -144,13 +144,13 @@
     const redBulbMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
     const blueBulbMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
 
-    // 1. 활주로 양측 측면 유도등 (Runway Edge Lights: X = 160 ± 52, Z = -1800 ~ 1800)
+    // 1. 활주로 양측 측면 유도등 (Runway Edge Lights: X = 160 ± 32, Z = -1800 ~ 1800)
     for (let z = -1800; z <= 1800; z += 60) {
       const isThreshold = (z > 1650);
       const isEnd = (z < -1650);
       const mat = isThreshold ? greenBulbMat : (isEnd ? redBulbMat : whiteBulbMat);
 
-      [-52, 52].forEach(xOff => {
+      [-32, 32].forEach(xOff => {
         const bulb = new THREE.Mesh(edgeBulbGeo, mat);
         bulb.position.set(160 + xOff, 2.45, z);
         nightGroup.add(bulb);
@@ -715,10 +715,10 @@
     apron.receiveShadow = true;
     this.incheonAirportGroup.add(apron);
 
-    // 2. 복수 평행 4,000m 메가 활주로 2본 (16R/34L & 15L/33R)
+    // 2. 복수 평행 4,000m 메가 활주로 2본 (16R/34L & 15L/33R, ICAO 4F 폭 60m)
     [160, 820].forEach((rX, rIdx) => {
       const rName = rIdx === 0 ? '16R/34L (서측 메인 활주로)' : '15L/33R (동측 평행 활주로)';
-      const rMesh = new THREE.Mesh(new THREE.PlaneGeometry(100, 4000), runwayMat);
+      const rMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 4000), runwayMat);
       rMesh.rotation.x = -Math.PI / 2;
       rMesh.position.set(rX, 2.10, incheonZ);
       rMesh.receiveShadow = true;
@@ -726,17 +726,17 @@
 
       // 활주로 시단 피아노 건반 (Threshold Keys)
       [-1900, 1900].forEach(zOff => {
-        for (let k = -44; k <= 44; k += 5.5) {
-          const bar = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 52), whiteLineMat);
+        for (let k = -26; k <= 26; k += 4.0) {
+          const bar = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 36), whiteLineMat);
           bar.rotation.x = -Math.PI / 2;
           bar.position.set(rX + k, 2.14, incheonZ + zOff);
           this.incheonAirportGroup.add(bar);
         }
       });
 
-      // 중앙선
-      for (let z = -1850; z <= 1850; z += 55) {
-        const stripe = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 38), whiteLineMat);
+      // 중앙선 (ICAO 규격: 폭 0.9m, 길이 30m, 주기 50m)
+      for (let z = -1850; z <= 1850; z += 50) {
+        const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 30), whiteLineMat);
         stripe.rotation.x = -Math.PI / 2;
         stripe.position.set(rX, 2.14, incheonZ + z);
         this.incheonAirportGroup.add(stripe);
@@ -744,8 +744,8 @@
 
       // 착륙 목표 지점 (Aiming Point)
       [-1450, 1450].forEach(z => {
-        [-24, 24].forEach(xOff => {
-          const aim = new THREE.Mesh(new THREE.PlaneGeometry(9.0, 70), whiteLineMat);
+        [-14, 14].forEach(xOff => {
+          const aim = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 50), whiteLineMat);
           aim.rotation.x = -Math.PI / 2;
           aim.position.set(rX + xOff, 2.14, incheonZ + z);
           this.incheonAirportGroup.add(aim);
@@ -755,7 +755,7 @@
       // 4구 PAPI 진입각 지시등
       for (let p = 0; p < 4; p++) {
         const lamp = new THREE.PointLight(0xffffff, 2.2, 90);
-        lamp.position.set(rX - 65, 3.2, incheonZ + 1250 + p * 8);
+        lamp.position.set(rX - 42, 3.2, incheonZ + 1250 + p * 8);
         this.scene.add(lamp);
         this.papiLights.push(lamp);
       }
