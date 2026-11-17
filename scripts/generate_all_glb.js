@@ -11,6 +11,8 @@ const {
   createSweptWing,
   createCone,
   createHorizontalPlane,
+  createOrganicBeachGeometry,
+  createProceduralTerrainGeometry,
   mergeGeometries,
   computeNormals
 } = require('./geometry_utils');
@@ -1557,11 +1559,10 @@ function generateTerrain() {
   const mContinent = b.addMaterial('ContinentalMainlandGrass', { color: [0.14, 0.38, 0.18, 1.0], roughness: 0.90, metallic: 0.08 });
   const mGoldenBeach = b.addMaterial('GoldenCoastlineSand', { color: [0.96, 0.82, 0.25, 1.0], roughness: 0.95 });
   const mIslandSand = b.addMaterial('IslandTropicalSand', { color: [0.98, 0.88, 0.45, 1.0], roughness: 0.95 });
-  const mIslandHill = b.addMaterial('IslandTropicalHill', { color: [0.08, 0.50, 0.24, 1.0], roughness: 0.92 });
+  const mIslandHill = b.addMaterial('IslandTropicalHill', { color: [1.0, 1.0, 1.0, 1.0], roughness: 0.92, metallic: 0.02 });
   const mPalmWood = b.addMaterial('PalmTrunkWood', { color: [0.47, 0.21, 0.06, 1.0], roughness: 0.85 });
   const mPalmLeaf = b.addMaterial('PalmLeafGreen', { color: [0.09, 0.64, 0.29, 1.0], roughness: 0.80 });
-  const mMountain1 = b.addMaterial('MountainSlopeForest', { color: [0.18, 0.42, 0.31, 1.0], roughness: 0.95 });
-  const mMountain2 = b.addMaterial('MountainPeakRock', { color: [0.25, 0.57, 0.42, 1.0], roughness: 0.95 });
+  const mMountainVertex = b.addMaterial('MountainProceduralTerrain', { color: [1.0, 1.0, 1.0, 1.0], roughness: 0.94, metallic: 0.02 });
   const mShipHull = b.addMaterial('CargoShipHullRed', { color: [0.60, 0.11, 0.11, 1.0], roughness: 0.60 });
   const mShipDeck = b.addMaterial('CargoShipDeckSlate', { color: [0.20, 0.25, 0.33, 1.0], roughness: 0.50 });
   const mContainer = b.addMaterial('CargoContainersColors', { color: [0.15, 0.40, 0.90, 1.0], roughness: 0.45 });
@@ -1576,14 +1577,14 @@ function generateTerrain() {
   // 3. Golden Beach Coastline (50,000m x 600m at Y = 0.04, Z = -28,000)
   const coast = createHorizontalPlane(50000.0, 600.0, 0, 0.04, -28000.0);
 
-  // 4. 6 Tropical Offshore Islands
+  // 4. 6 Tropical Offshore Islands (High-poly organic coastlines & sculpted hills)
   const islandDefs = [
-    { x: -450, z: -3500, r: 90, h: 30 },
-    { x: 480, z: -7500, r: 120, h: 38 },
-    { x: -380, z: -12500, r: 110, h: 35 },
-    { x: 520, z: -17500, r: 130, h: 42 },
-    { x: -480, z: -22000, r: 140, h: 48 },
-    { x: 380, z: -26000, r: 110, h: 38 }
+    { x: -450, z: -3500, r: 90, h: 30, variant: 'rolling' },
+    { x: 480, z: -7500, r: 120, h: 38, variant: 'twin' },
+    { x: -380, z: -12500, r: 110, h: 35, variant: 'ridge' },
+    { x: 520, z: -17500, r: 130, h: 42, variant: 'volcanic' },
+    { x: -480, z: -22000, r: 140, h: 48, variant: 'twin' },
+    { x: 380, z: -26000, r: 110, h: 38, variant: 'rolling' }
   ];
 
   const islandSands = [];
@@ -1591,16 +1592,29 @@ function generateTerrain() {
   const palmTrunks = [];
   const palmLeaves = [];
 
-  islandDefs.forEach(isl => {
-    // Beach cylinder
-    islandSands.push(createCylinder(isl.r, isl.r * 1.15, 3.5, 18, isl.x, 0.5, isl.z, 'y'));
-    // Center hill
-    islandHills.push(createCone(isl.r * 0.75, isl.h, 14, isl.x, 1.0, isl.z));
+  islandDefs.forEach((isl, idx) => {
+    const islSeed = 101 + idx * 37.3;
+    // Organic beach cylinder
+    islandSands.push(createOrganicBeachGeometry(isl.r, 3.5, 32, isl.x, 0.5, isl.z, islSeed));
+    // High-poly sculpted island hill
+    islandHills.push(createProceduralTerrainGeometry({
+      radius: isl.r * 0.82,
+      height: isl.h,
+      radialSegments: 32,
+      heightRings: 12,
+      variant: isl.variant,
+      seed: islSeed + 13.7,
+      isMountain: false,
+      hasSnow: false,
+      cx: isl.x,
+      cy: 1.6,
+      cz: isl.z
+    }));
 
     // Palm trees
     for (let p = 0; p < 5; p++) {
       const pAng = (p / 5) * Math.PI * 2;
-      const pDist = isl.r * 0.45;
+      const pDist = isl.r * 0.78;
       const tx = isl.x + Math.cos(pAng) * pDist;
       const tz = isl.z + Math.sin(pAng) * pDist;
       palmTrunks.push(createCylinder(0.4, 0.6, 7.0, 6, tx, 3.5, tz, 'y'));
@@ -1640,33 +1654,42 @@ function generateTerrain() {
   const shipContainersGeo = mergeGeometries(shipContainers);
   const shipWakesGeo = mergeGeometries(shipWakes);
 
-  // 6. 13 Majestic Mountain Peaks
+  // 6. Majestic Mountain Ranges & Foothills (High-poly procedural terrain with vertex colors)
   const mountainDefs = [
-    { x: -3200, z: -2500, r: 550, h: 580 },
-    { x: 3300, z: -2200, r: 580, h: 620 },
-    { x: -4200, z: -12000, r: 850, h: 920 },
-    { x: 4200, z: -18000, r: 900, h: 960 },
-    { x: -5500, z: -28500, r: 1100, h: 1150 },
-    { x: 5500, z: -28500, r: 1100, h: 1150 },
-    { x: -3800, z: -47500, r: 1250, h: 1300 },
-    { x: 3800, z: -47800, r: 1200, h: 1250 },
-    { x: -5500, z: -52000, r: 1550, h: 1650 },
-    { x: 5500, z: -52000, r: 1500, h: 1600 },
-    { x: 0, z: -56000, r: 1850, h: 1850 },
-    { x: -3500, z: -58000, r: 1650, h: 1700 },
-    { x: 3500, z: -58000, r: 1600, h: 1680 }
+    { x: -3200, z: -2500, r: 580, h: 580, variant: 'ridge' },
+    { x: 3300, z: -2200, r: 600, h: 620, variant: 'twin' },
+    { x: -4200, z: -12000, r: 880, h: 920, variant: 'alpine' },
+    { x: 4200, z: -18000, r: 920, h: 960, variant: 'massif' },
+    { x: -5500, z: -28500, r: 1150, h: 1150, variant: 'ridge' },
+    { x: 5500, z: -28500, r: 1150, h: 1150, variant: 'twin' },
+    { x: -3800, z: -47500, r: 1300, h: 1300, variant: 'massif' },
+    { x: 3800, z: -47800, r: 1250, h: 1250, variant: 'ridge' },
+    { x: -5500, z: -52000, r: 1600, h: 1650, variant: 'alpine' },
+    { x: 5500, z: -52000, r: 1550, h: 1600, variant: 'twin' },
+    { x: 0, z: -56000, r: 1900, h: 1850, variant: 'alpine' },
+    { x: -3500, z: -58000, r: 1700, h: 1700, variant: 'ridge' },
+    { x: 3500, z: -58000, r: 1650, h: 1680, variant: 'massif' },
+    { x: -2900, z: -49200, r: 900, h: 640, variant: 'rolling' },
+    { x: 2950, z: -49600, r: 880, h: 610, variant: 'twin' },
+    { x: -6400, z: -55000, r: 1200, h: 980, variant: 'ridge' },
+    { x: 6400, z: -55200, r: 1180, h: 950, variant: 'alpine' }
   ];
 
-  const mountainBases = [];
-  const mountainPeaks = [];
+  const mountainMeshes = mountainDefs.map((m, idx) => createProceduralTerrainGeometry({
+    radius: m.r,
+    height: m.h,
+    radialSegments: 44,
+    heightRings: 18,
+    variant: m.variant,
+    seed: 501 + idx * 43.9,
+    isMountain: true,
+    hasSnow: m.h >= 850,
+    cx: m.x,
+    cy: -20.0,
+    cz: m.z
+  }));
 
-  mountainDefs.forEach(m => {
-    mountainBases.push(createCone(m.r, m.h * 0.65, 12, m.x, -20.0, m.z));
-    mountainPeaks.push(createCone(m.r * 0.45, m.h * 0.35, 10, m.x, m.h * 0.65 - 20.0, m.z));
-  });
-
-  const mountainBasesGeo = mergeGeometries(mountainBases);
-  const mountainPeaksGeo = mergeGeometries(mountainPeaks);
+  const mountainsGeo = mergeGeometries(mountainMeshes);
 
   const landMesh = b.addMesh('Terrain_Land_And_Ocean_Mesh', [
     { positions: ocean.positions, indices: ocean.indices, normals: ocean.normals, materialIndex: mOcean },
@@ -1676,7 +1699,7 @@ function generateTerrain() {
 
   const islandsMesh = b.addMesh('Tropical_Islands_And_Ships_Mesh', [
     { positions: islandSandsGeo.positions, indices: islandSandsGeo.indices, normals: islandSandsGeo.normals, materialIndex: mIslandSand },
-    { positions: islandHillsGeo.positions, indices: islandHillsGeo.indices, normals: islandHillsGeo.normals, materialIndex: mIslandHill },
+    { positions: islandHillsGeo.positions, indices: islandHillsGeo.indices, normals: islandHillsGeo.normals, colors: islandHillsGeo.colors, materialIndex: mIslandHill },
     { positions: palmTrunksGeo.positions, indices: palmTrunksGeo.indices, normals: palmTrunksGeo.normals, materialIndex: mPalmWood },
     { positions: palmLeavesGeo.positions, indices: palmLeavesGeo.indices, normals: palmLeavesGeo.normals, materialIndex: mPalmLeaf },
     { positions: shipHullsGeo.positions, indices: shipHullsGeo.indices, normals: shipHullsGeo.normals, materialIndex: mShipHull },
@@ -1686,8 +1709,7 @@ function generateTerrain() {
   ]);
 
   const mountainsMesh = b.addMesh('Majestic_Mountain_Ranges_Mesh', [
-    { positions: mountainBasesGeo.positions, indices: mountainBasesGeo.indices, normals: mountainBasesGeo.normals, materialIndex: mMountain1 },
-    { positions: mountainPeaksGeo.positions, indices: mountainPeaksGeo.indices, normals: mountainPeaksGeo.normals, materialIndex: mMountain2 }
+    { positions: mountainsGeo.positions, indices: mountainsGeo.indices, normals: mountainsGeo.normals, colors: mountainsGeo.colors, materialIndex: mMountainVertex }
   ]);
 
   const nLand = b.addNode({ name: 'Ocean_And_Continental_Mainland', meshIndex: landMesh });
@@ -1774,7 +1796,7 @@ function generateWorldEnvironment() {
   const mWhite = b.addMaterial('MasterWhiteMarkings', { color: [0.97, 0.97, 0.99, 1.0], roughness: 0.35 });
   const mBuildings = b.addMaterial('MasterArchitecture', { color: [0.88, 0.90, 0.94, 1.0], roughness: 0.35, metallic: 0.5 });
   const mGlass = b.addMaterial('MasterGlass', { color: [0.10, 0.48, 0.80, 1.0], roughness: 0.10, metallic: 0.90 });
-  const mMountain = b.addMaterial('MasterMountains', { color: [0.20, 0.45, 0.32, 1.0], roughness: 0.95 });
+  const mMountain = b.addMaterial('MasterMountains', { color: [1.0, 1.0, 1.0, 1.0], roughness: 0.94, metallic: 0.02 });
 
   // 1. Ocean & Mainland
   const ocean = createHorizontalPlane(120000.0, 120000.0, 0, -1.5, -25000.0);
@@ -1801,18 +1823,31 @@ function generateWorldEnvironment() {
   const bridgeP1 = createBox(16.0, 120.0, 20.0, 350.0, 60.0, -27400.0);
   const bridgeP2 = createBox(16.0, 120.0, 20.0, -350.0, 60.0, -27400.0);
 
-  // 5. Continental Mountains
-  const mountains = [
-    createCone(550.0, 580.0, 10, -3200.0, -20.0, -2500.0),
-    createCone(580.0, 620.0, 10, 3300.0, -20.0, -2200.0),
-    createCone(850.0, 920.0, 10, -4200.0, -20.0, -12000.0),
-    createCone(900.0, 960.0, 10, 4200.0, -20.0, -18000.0),
-    createCone(1100.0, 1150.0, 12, -5500.0, -20.0, -28500.0),
-    createCone(1100.0, 1150.0, 12, 5500.0, -20.0, -28500.0),
-    createCone(1250.0, 1300.0, 12, -3800.0, -20.0, -47500.0),
-    createCone(1550.0, 1650.0, 12, -5500.0, -20.0, -52000.0),
-    createCone(1850.0, 1850.0, 14, 0, -20.0, -56000.0)
+  // 5. Continental Mountains (High-poly procedural terrain with vertex colors)
+  const worldMountainDefs = [
+    { x: -3200.0, z: -2500.0, r: 580.0, h: 580.0, variant: 'ridge' },
+    { x: 3300.0, z: -2200.0, r: 600.0, h: 620.0, variant: 'twin' },
+    { x: -4200.0, z: -12000.0, r: 880.0, h: 920.0, variant: 'alpine' },
+    { x: 4200.0, z: -18000.0, r: 920.0, h: 960.0, variant: 'massif' },
+    { x: -5500.0, z: -28500.0, r: 1150.0, h: 1150.0, variant: 'ridge' },
+    { x: 5500.0, z: -28500.0, r: 1150.0, h: 1150.0, variant: 'twin' },
+    { x: -3800.0, z: -47500.0, r: 1300.0, h: 1300.0, variant: 'massif' },
+    { x: -5500.0, z: -52000.0, r: 1600.0, h: 1650.0, variant: 'alpine' },
+    { x: 0.0, z: -56000.0, r: 1900.0, h: 1850.0, variant: 'alpine' }
   ];
+  const mountains = worldMountainDefs.map((m, idx) => createProceduralTerrainGeometry({
+    radius: m.r,
+    height: m.h,
+    radialSegments: 36,
+    heightRings: 14,
+    variant: m.variant,
+    seed: 501 + idx * 43.9,
+    isMountain: true,
+    hasSnow: m.h >= 850,
+    cx: m.x,
+    cy: -20.0,
+    cz: m.z
+  }));
   const mountainsGeo = mergeGeometries(mountains);
 
   const worldRunways = mergeGeometries([depRunway, incRunwayW, incRunwayE]);
@@ -1831,7 +1866,7 @@ function generateWorldEnvironment() {
   const structuresMesh = b.addMesh('Master_World_Structures_Mesh', [
     { positions: worldBuildings.positions, indices: worldBuildings.indices, normals: worldBuildings.normals, materialIndex: mBuildings },
     { positions: worldGlass.positions, indices: worldGlass.indices, normals: worldGlass.normals, materialIndex: mGlass },
-    { positions: mountainsGeo.positions, indices: mountainsGeo.indices, normals: mountainsGeo.normals, materialIndex: mMountain }
+    { positions: mountainsGeo.positions, indices: mountainsGeo.indices, normals: mountainsGeo.normals, colors: mountainsGeo.colors, materialIndex: mMountain }
   ]);
 
   const nGround = b.addNode({ name: 'World_Terrain_And_Runways', meshIndex: groundMesh });

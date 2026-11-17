@@ -280,11 +280,24 @@ function createSweptWing({
 function mergeGeometries(geoList) {
   const allPositions = [];
   const allIndices = [];
+  const hasColors = geoList.some(g => Array.isArray(g.colors) && g.colors.length === g.positions.length);
+  const allColors = hasColors ? [] : null;
   let offset = 0;
 
   for (const g of geoList) {
     for (let i = 0; i < g.positions.length; i++) {
       allPositions.push(g.positions[i]);
+    }
+    if (hasColors) {
+      if (g.colors && g.colors.length === g.positions.length) {
+        for (let i = 0; i < g.colors.length; i++) {
+          allColors.push(g.colors[i]);
+        }
+      } else {
+        for (let i = 0; i < g.positions.length; i++) {
+          allColors.push(1.0);
+        }
+      }
     }
     for (let i = 0; i < g.indices.length; i++) {
       allIndices.push(g.indices[i] + offset);
@@ -293,7 +306,9 @@ function mergeGeometries(geoList) {
   }
 
   const normals = computeNormals(allPositions, allIndices);
-  return { positions: allPositions, indices: allIndices, normals };
+  return hasColors
+    ? { positions: allPositions, indices: allIndices, normals, colors: allColors }
+    : { positions: allPositions, indices: allIndices, normals };
 }
 
 // Cone geometry along Y axis (for mountains, hills, palm trees)
@@ -348,6 +363,262 @@ function createHorizontalPlane(width, length, cx = 0, cy = 0, cz = 0) {
   return { positions, indices, normals };
 }
 
+function _terrainHash2D(ix, iz, seed) {
+  const n = Math.sin(ix * 127.1 + iz * 311.7 + seed * 74.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+function _terrainNoise2D(x, z, seed) {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fz = z - iz;
+  const ux = fx * fx * (3.0 - 2.0 * fx);
+  const uz = fz * fz * (3.0 - 2.0 * fz);
+
+  const a = _terrainHash2D(ix, iz, seed);
+  const b = _terrainHash2D(ix + 1, iz, seed);
+  const c = _terrainHash2D(ix, iz + 1, seed);
+  const d = _terrainHash2D(ix + 1, iz + 1, seed);
+
+  return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+
+function _terrainFbm(x, z, seed, octaves = 4) {
+  let val = 0;
+  let amp = 0.5;
+  let freq = 1.0;
+  let norm = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += amp * (_terrainNoise2D(x * freq, z * freq, seed + i * 17.3) * 2 - 1);
+    norm += amp;
+    amp *= 0.5;
+    freq *= 2.07;
+  }
+  return val / norm;
+}
+
+function _terrainRidgedFbm(x, z, seed, octaves = 4) {
+  let val = 0;
+  let amp = 0.5;
+  let freq = 1.0;
+  let norm = 0;
+  for (let i = 0; i < octaves; i++) {
+    const n = _terrainNoise2D(x * freq, z * freq, seed + i * 29.1) * 2 - 1;
+    const ridge = 1.0 - Math.abs(n);
+    val += amp * (ridge * ridge);
+    norm += amp;
+    amp *= 0.5;
+    freq *= 2.13;
+  }
+  return val / norm;
+}
+
+function _hexToLinearRgb(hex) {
+  const r = Math.pow(((hex >> 16) & 255) / 255, 2.2);
+  const g = Math.pow(((hex >> 8) & 255) / 255, 2.2);
+  const b = Math.pow((hex & 255) / 255, 2.2);
+  return [r, g, b];
+}
+
+function createOrganicBeachGeometry(radius, height, radialSegments = 32, cx = 0, cy = 0, cz = 0, seed = 1) {
+  const geo = createCylinder(radius, radius * 1.15, height, radialSegments, 0, 0, 0, 'y');
+  for (let i = 0; i < geo.positions.length; i += 3) {
+    const x = geo.positions[i];
+    const z = geo.positions[i + 2];
+    const len = Math.hypot(x, z);
+    if (len > 0.001) {
+      const warp = 1.0 + 0.16 * _terrainFbm((x / len) * 2.2, (z / len) * 2.2, seed, 3);
+      geo.positions[i] = x * warp + cx;
+      geo.positions[i + 2] = z * warp + cz;
+    } else {
+      geo.positions[i] = x + cx;
+      geo.positions[i + 2] = z + cz;
+    }
+    geo.positions[i + 1] += cy;
+  }
+  geo.normals = computeNormals(geo.positions, geo.indices);
+  return geo;
+}
+
+function createProceduralTerrainGeometry({
+  radius,
+  height,
+  radialSegments = 44,
+  heightRings = 18,
+  variant = 'alpine',
+  seed = 1,
+  isMountain = true,
+  hasSnow = false,
+  cx = 0,
+  cy = 0,
+  cz = 0
+}) {
+  const vertexCount = 1 + radialSegments * heightRings;
+  const positions = new Array(vertexCount * 3);
+  const colors = new Array(vertexCount * 3);
+  const indices = [];
+
+  const aspectX = variant === 'ridge' ? 1.32 : (variant === 'twin' ? 1.24 : (variant === 'massif' ? 1.15 : 1.0));
+  const aspectZ = variant === 'ridge' ? 0.74 : (variant === 'twin' ? 0.84 : 1.0);
+  const ridgeRot = (seed * 1.37) % Math.PI;
+  const cosR = Math.cos(ridgeRot);
+  const sinR = Math.sin(ridgeRot);
+  const summitOffsetX = (_terrainHash2D(1, 2, seed) - 0.5) * 0.22;
+  const summitOffsetZ = (_terrainHash2D(3, 4, seed) - 0.5) * 0.22;
+  const spurCount = 3 + Math.floor(_terrainHash2D(5, 6, seed) * 4);
+  const spurPhase = _terrainHash2D(7, 8, seed) * Math.PI * 2;
+
+  const evalPoint = (t, theta) => {
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+
+    const edgeNoise = _terrainFbm(cosT * 2.1, sinT * 2.1, seed + 5.1, 3);
+    const rScale = 1.0 + 0.18 * edgeNoise * Math.pow(t, 0.65);
+
+    let lx = cosT * t * rScale * aspectX;
+    let lz = sinT * t * rScale * aspectZ;
+
+    const shiftFade = Math.pow(1 - t, 1.4);
+    lx += summitOffsetX * shiftFade;
+    lz += summitOffsetZ * shiftFade;
+
+    const wx = cx + (lx * cosR - lz * sinR) * radius;
+    const wz = cz + (lx * sinR + lz * cosR) * radius;
+
+    const distNorm = Math.min(1.0, Math.hypot(lx / aspectX, lz / aspectZ));
+    let baseProfile = 0;
+
+    if (variant === 'twin') {
+      const d1 = Math.hypot((lx - 0.30) / 0.72, lz / 0.85);
+      const d2 = Math.hypot((lx + 0.34) / 0.76, (lz - 0.08) / 0.88);
+      const p1 = Math.max(0, 1 - d1);
+      const p2 = Math.max(0, 1 - d2) * 0.82;
+      const saddle = Math.max(p1, p2) + 0.22 * Math.min(p1, p2);
+      baseProfile = Math.pow(Math.min(1, saddle), 1.2) * (1 - Math.pow(t, 3.2));
+    } else if (variant === 'massif') {
+      baseProfile = Math.pow(Math.max(0, 1 - distNorm * distNorm), 0.85);
+      baseProfile += 0.045 * Math.sin(baseProfile * Math.PI * 5.0) * (1 - t);
+    } else if (variant === 'ridge') {
+      const spineDist = Math.abs(lz / aspectZ);
+      const alongSpine = Math.abs(lx / aspectX);
+      const spineProfile = Math.max(0, 1 - spineDist * 1.15) * Math.max(0, 1 - alongSpine * 0.82);
+      baseProfile = Math.pow(spineProfile, 1.15) * (1 - Math.pow(t, 3.5));
+    } else if (variant === 'volcanic') {
+      baseProfile = Math.pow(Math.max(0, 1 - t), 1.25);
+      if (t < 0.14) {
+        const crater = (0.14 - t) / 0.14;
+        baseProfile -= 0.07 * crater * crater;
+      }
+    } else if (variant === 'rolling') {
+      baseProfile = 0.5 * (1 + Math.cos(Math.min(1, t) * Math.PI));
+      baseProfile = Math.pow(baseProfile, 0.85);
+    } else {
+      baseProfile = Math.pow(Math.max(0, 1 - t), 1.32);
+    }
+
+    const ridgeNoise = _terrainRidgedFbm(lx * 2.6, lz * 2.6, seed + 11.7, 4);
+    const detailNoise = _terrainFbm(lx * 5.2, lz * 5.2, seed + 23.4, 3);
+    const spurWave = 0.5 + 0.5 * Math.cos(theta * spurCount + spurPhase + edgeNoise * 1.6);
+
+    const envelope = Math.sin(Math.min(1, t) * Math.PI);
+    const upperEnvelope = (1 - t) * Math.pow(t, 0.35);
+
+    const ridgeAmp = isMountain ? 0.34 : 0.24;
+    const spurAmp = isMountain ? 0.14 : 0.10;
+    const detailAmp = isMountain ? 0.09 : 0.07;
+
+    let hNorm = baseProfile
+      + (ridgeNoise - 0.42) * ridgeAmp * (0.35 + 0.65 * envelope)
+      + (spurWave - 0.5) * spurAmp * upperEnvelope
+      + detailNoise * detailAmp * envelope;
+
+    const baseFade = t > 0.82 ? Math.max(0, 1 - (t - 0.82) / 0.18) : 1.0;
+    hNorm = Math.max(0, hNorm * baseFade);
+
+    const wy = cy + hNorm * height;
+    return { x: wx, y: wy, z: wz, hNorm, ridgeNoise, detailNoise };
+  };
+
+  const assignColor = (idx, hNorm, ridgeNoise, detailNoise) => {
+    let rgb;
+    if (isMountain) {
+      const snowLine = hasSnow ? (0.73 + detailNoise * 0.08 - (ridgeNoise - 0.5) * 0.06) : 1.5;
+      const rockThreshold = 0.36 + detailNoise * 0.08 - (ridgeNoise - 0.5) * 0.14;
+      if (hNorm >= snowLine) {
+        rgb = _hexToLinearRgb(hNorm > snowLine + 0.08 ? 0xf8fafc : 0xe2e8f0);
+      } else if (hNorm >= 0.58 || (hNorm >= rockThreshold && ridgeNoise > 0.52)) {
+        rgb = _hexToLinearRgb(detailNoise > 0.05 ? 0x64748b : 0x78716c);
+      } else if (hNorm >= 0.26) {
+        const blend = (hNorm - 0.26) / 0.32;
+        const c1 = _hexToLinearRgb(detailNoise > 0 ? 0x2d6a4f : 0x3a6b4c);
+        const c2 = _hexToLinearRgb(0x52796f);
+        rgb = [
+          c1[0] + (c2[0] - c1[0]) * blend,
+          c1[1] + (c2[1] - c1[1]) * blend,
+          c1[2] + (c2[2] - c1[2]) * blend
+        ];
+      } else {
+        rgb = _hexToLinearRgb(detailNoise > 0 ? 0x1b4332 : 0x2d6a4f);
+      }
+    } else {
+      if (hNorm >= 0.68 && (variant === 'volcanic' || ridgeNoise > 0.58)) {
+        rgb = _hexToLinearRgb(0x57534e);
+      } else if (hNorm >= 0.50) {
+        rgb = _hexToLinearRgb(detailNoise > 0 ? 0x2d6a4f : 0x3f7d3a);
+      } else if (hNorm >= 0.18) {
+        rgb = _hexToLinearRgb(detailNoise > 0 ? 0x15803d : 0x166534);
+      } else {
+        rgb = _hexToLinearRgb(0x16a34a);
+      }
+    }
+    colors[idx * 3] = rgb[0];
+    colors[idx * 3 + 1] = rgb[1];
+    colors[idx * 3 + 2] = rgb[2];
+  };
+
+  const apex = evalPoint(0, 0);
+  positions[0] = apex.x;
+  positions[1] = apex.y;
+  positions[2] = apex.z;
+  assignColor(0, apex.hNorm, apex.ridgeNoise, apex.detailNoise);
+
+  for (let ring = 1; ring <= heightRings; ring++) {
+    const t = ring / heightRings;
+    for (let seg = 0; seg < radialSegments; seg++) {
+      const theta = (seg / radialSegments) * Math.PI * 2;
+      const vIdx = 1 + (ring - 1) * radialSegments + seg;
+      const p = evalPoint(t, theta);
+      positions[vIdx * 3] = p.x;
+      positions[vIdx * 3 + 1] = p.y;
+      positions[vIdx * 3 + 2] = p.z;
+      assignColor(vIdx, p.hNorm, p.ridgeNoise, p.detailNoise);
+    }
+  }
+
+  for (let seg = 0; seg < radialSegments; seg++) {
+    const nextSeg = (seg + 1) % radialSegments;
+    indices.push(0, 1 + nextSeg, 1 + seg);
+  }
+
+  for (let ring = 1; ring < heightRings; ring++) {
+    const rowStart = 1 + (ring - 1) * radialSegments;
+    const nextRowStart = 1 + ring * radialSegments;
+    for (let seg = 0; seg < radialSegments; seg++) {
+      const nextSeg = (seg + 1) % radialSegments;
+      const a = rowStart + seg;
+      const b = rowStart + nextSeg;
+      const c = nextRowStart + seg;
+      const d = nextRowStart + nextSeg;
+      indices.push(a, b, d);
+      indices.push(a, d, c);
+    }
+  }
+
+  const normals = computeNormals(positions, indices);
+  return { positions, indices, normals, colors };
+}
+
 module.exports = {
   createBox,
   createCylinder,
@@ -355,6 +626,8 @@ module.exports = {
   createSweptWing,
   createCone,
   createHorizontalPlane,
+  createOrganicBeachGeometry,
+  createProceduralTerrainGeometry,
   mergeGeometries,
   computeNormals
 };

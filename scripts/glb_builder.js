@@ -102,6 +102,21 @@ class GLBBuilder {
         });
       }
 
+      // 2-B. Vertex Colors (COLOR_0) if provided
+      let colorAccessor = null;
+      if (p.colors && p.colors.length === p.positions.length) {
+        const colBuf = new Float32Array(p.colors);
+        const colView = this.appendBuffer(colBuf, 34962);
+        colorAccessor = this.accessors.length;
+        this.accessors.push({
+          bufferView: colView,
+          byteOffset: 0,
+          componentType: 5126,
+          count: p.colors.length / 3,
+          type: 'VEC3'
+        });
+      }
+
       // 3. Indices
       const idxBuf = (p.positions.length / 3 > 65535) ? new Uint32Array(p.indices) : new Uint16Array(p.indices);
       const idxComponentType = (p.positions.length / 3 > 65535) ? 5125 : 5123;
@@ -120,6 +135,9 @@ class GLBBuilder {
       };
       if (normAccessor !== null) {
         attributes.NORMAL = normAccessor;
+      }
+      if (colorAccessor !== null) {
+        attributes.COLOR_0 = colorAccessor;
       }
 
       return {
