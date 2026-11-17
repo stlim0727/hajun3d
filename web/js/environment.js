@@ -276,6 +276,269 @@
     }
   },
 
+  // ----------------------------------------------------------------
+  // 2-A. 고폴리곤 절차적 언덕 · 산맥 지형 생성기 (Procedural Terrain Geometry)
+  // ----------------------------------------------------------------
+  _terrainHash2D(ix, iz, seed) {
+    const n = Math.sin(ix * 127.1 + iz * 311.7 + seed * 74.7) * 43758.5453123;
+    return n - Math.floor(n);
+  },
+
+  _terrainNoise2D(x, z, seed) {
+    const ix = Math.floor(x);
+    const iz = Math.floor(z);
+    const fx = x - ix;
+    const fz = z - iz;
+    const ux = fx * fx * (3.0 - 2.0 * fx);
+    const uz = fz * fz * (3.0 - 2.0 * fz);
+
+    const a = this._terrainHash2D(ix, iz, seed);
+    const b = this._terrainHash2D(ix + 1, iz, seed);
+    const c = this._terrainHash2D(ix, iz + 1, seed);
+    const d = this._terrainHash2D(ix + 1, iz + 1, seed);
+
+    return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+  },
+
+  _terrainFbm(x, z, seed, octaves = 4) {
+    let val = 0;
+    let amp = 0.5;
+    let freq = 1.0;
+    let norm = 0;
+    for (let i = 0; i < octaves; i++) {
+      val += amp * (this._terrainNoise2D(x * freq, z * freq, seed + i * 17.3) * 2 - 1);
+      norm += amp;
+      amp *= 0.5;
+      freq *= 2.07;
+    }
+    return val / norm;
+  },
+
+  _terrainRidgedFbm(x, z, seed, octaves = 4) {
+    let val = 0;
+    let amp = 0.5;
+    let freq = 1.0;
+    let norm = 0;
+    for (let i = 0; i < octaves; i++) {
+      const n = this._terrainNoise2D(x * freq, z * freq, seed + i * 29.1) * 2 - 1;
+      const ridge = 1.0 - Math.abs(n);
+      val += amp * (ridge * ridge);
+      norm += amp;
+      amp *= 0.5;
+      freq *= 2.13;
+    }
+    return val / norm;
+  },
+
+  createOrganicBeachGeometry(radius, height, radialSegments = 32, seed = 1) {
+    const geo = new THREE.CylinderGeometry(radius, radius * 1.15, height, radialSegments, 1);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const len = Math.hypot(x, z);
+      if (len > 0.001) {
+        const nx = x / len;
+        const nz = z / len;
+        const warp = 1.0 + 0.16 * this._terrainFbm(nx * 2.2, nz * 2.2, seed, 3);
+        pos.setX(i, x * warp);
+        pos.setZ(i, z * warp);
+      }
+      pos.setY(i, y);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  },
+
+  createProceduralTerrainGeometry({
+    radius,
+    height,
+    radialSegments = 44,
+    heightRings = 18,
+    variant = 'alpine',
+    seed = 1,
+    isMountain = true,
+    hasSnow = false
+  }) {
+    const vertexCount = 1 + radialSegments * heightRings;
+    const positions = new Float32Array(vertexCount * 3);
+    const colors = new Float32Array(vertexCount * 3);
+    const indices = [];
+
+    const aspectX = variant === 'ridge' ? 1.32 : (variant === 'twin' ? 1.24 : (variant === 'massif' ? 1.15 : 1.0));
+    const aspectZ = variant === 'ridge' ? 0.74 : (variant === 'twin' ? 0.84 : 1.0);
+    const ridgeRot = (seed * 1.37) % Math.PI;
+    const cosR = Math.cos(ridgeRot);
+    const sinR = Math.sin(ridgeRot);
+    const summitOffsetX = (this._terrainHash2D(1, 2, seed) - 0.5) * 0.22;
+    const summitOffsetZ = (this._terrainHash2D(3, 4, seed) - 0.5) * 0.22;
+    const spurCount = 3 + Math.floor(this._terrainHash2D(5, 6, seed) * 4);
+    const spurPhase = this._terrainHash2D(7, 8, seed) * Math.PI * 2;
+
+    const evalPoint = (t, theta) => {
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+
+      // Organic base footprint warp
+      const edgeNoise = this._terrainFbm(cosT * 2.1, sinT * 2.1, seed + 5.1, 3);
+      const rScale = 1.0 + 0.18 * edgeNoise * Math.pow(t, 0.65);
+
+      let lx = cosT * t * rScale * aspectX;
+      let lz = sinT * t * rScale * aspectZ;
+
+      // Subtle summit shift that fades to 0 at the base perimeter
+      const shiftFade = Math.pow(1 - t, 1.4);
+      lx += summitOffsetX * shiftFade;
+      lz += summitOffsetZ * shiftFade;
+
+      // World-space oriented local coords
+      const wx = (lx * cosR - lz * sinR) * radius;
+      const wz = (lx * sinR + lz * cosR) * radius;
+
+      // Base elevation profile by archetype
+      const distNorm = Math.min(1.0, Math.hypot(lx / aspectX, lz / aspectZ));
+      let baseProfile = 0;
+
+      if (variant === 'twin') {
+        const d1 = Math.hypot((lx - 0.30) / 0.72, lz / 0.85);
+        const d2 = Math.hypot((lx + 0.34) / 0.76, (lz - 0.08) / 0.88);
+        const p1 = Math.max(0, 1 - d1);
+        const p2 = Math.max(0, 1 - d2) * 0.82;
+        const saddle = Math.max(p1, p2) + 0.22 * Math.min(p1, p2);
+        baseProfile = Math.pow(Math.min(1, saddle), 1.2) * (1 - Math.pow(t, 3.2));
+      } else if (variant === 'massif') {
+        baseProfile = Math.pow(Math.max(0, 1 - distNorm * distNorm), 0.85);
+        // Subtle geological terraces
+        baseProfile += 0.045 * Math.sin(baseProfile * Math.PI * 5.0) * (1 - t);
+      } else if (variant === 'ridge') {
+        const spineDist = Math.abs(lz / aspectZ);
+        const alongSpine = Math.abs(lx / aspectX);
+        const spineProfile = Math.max(0, 1 - spineDist * 1.15) * Math.max(0, 1 - alongSpine * 0.82);
+        baseProfile = Math.pow(spineProfile, 1.15) * (1 - Math.pow(t, 3.5));
+      } else if (variant === 'volcanic') {
+        baseProfile = Math.pow(Math.max(0, 1 - t), 1.25);
+        if (t < 0.14) {
+          const crater = (0.14 - t) / 0.14;
+          baseProfile -= 0.07 * crater * crater;
+        }
+      } else if (variant === 'rolling') {
+        baseProfile = 0.5 * (1 + Math.cos(Math.min(1, t) * Math.PI));
+        baseProfile = Math.pow(baseProfile, 0.85);
+      } else {
+        // 'alpine' sharp peak
+        baseProfile = Math.pow(Math.max(0, 1 - t), 1.32);
+      }
+
+      // Ridged multifractal + radiating buttress spurs
+      const ridgeNoise = this._terrainRidgedFbm(lx * 2.6, lz * 2.6, seed + 11.7, 4);
+      const detailNoise = this._terrainFbm(lx * 5.2, lz * 5.2, seed + 23.4, 3);
+      const spurWave = 0.5 + 0.5 * Math.cos(theta * spurCount + spurPhase + edgeNoise * 1.6);
+
+      const envelope = Math.sin(Math.min(1, t) * Math.PI); // 0 at apex & base, peak mid-slope
+      const upperEnvelope = (1 - t) * Math.pow(t, 0.35);
+
+      const ridgeAmp = isMountain ? 0.34 : 0.24;
+      const spurAmp = isMountain ? 0.14 : 0.10;
+      const detailAmp = isMountain ? 0.09 : 0.07;
+
+      let hNorm = baseProfile
+        + (ridgeNoise - 0.42) * ridgeAmp * (0.35 + 0.65 * envelope)
+        + (spurWave - 0.5) * spurAmp * upperEnvelope
+        + detailNoise * detailAmp * envelope;
+
+      // Smoothly clamp base perimeter to y = 0
+      const baseFade = t > 0.82 ? Math.max(0, 1 - (t - 0.82) / 0.18) : 1.0;
+      hNorm = Math.max(0, hNorm * baseFade);
+
+      const wy = hNorm * height;
+      return { x: wx, y: wy, z: wz, hNorm, ridgeNoise, detailNoise };
+    };
+
+    const assignColor = (idx, hNorm, ridgeNoise, detailNoise) => {
+      const c = new THREE.Color();
+      if (isMountain) {
+        const snowLine = hasSnow ? (0.73 + detailNoise * 0.08 - (ridgeNoise - 0.5) * 0.06) : 1.5;
+        const rockThreshold = 0.36 + detailNoise * 0.08 - (ridgeNoise - 0.5) * 0.14;
+        if (hNorm >= snowLine) {
+          c.setHex(hNorm > snowLine + 0.08 ? 0xf8fafc : 0xe2e8f0);
+        } else if (hNorm >= 0.58 || (hNorm >= rockThreshold && ridgeNoise > 0.52)) {
+          c.setHex(detailNoise > 0.05 ? 0x64748b : 0x78716c);
+        } else if (hNorm >= 0.26) {
+          const blend = (hNorm - 0.26) / 0.32;
+          const forest = new THREE.Color(detailNoise > 0 ? 0x2d6a4f : 0x3a6b4c);
+          const slate = new THREE.Color(0x52796f);
+          c.copy(forest).lerp(slate, blend);
+        } else {
+          c.setHex(detailNoise > 0 ? 0x1b4332 : 0x2d6a4f);
+        }
+      } else {
+        // Island hills: lush coastal greens with rocky cliff accents on ridges
+        if (hNorm >= 0.68 && (variant === 'volcanic' || ridgeNoise > 0.58)) {
+          c.setHex(0x57534e);
+        } else if (hNorm >= 0.50) {
+          c.setHex(detailNoise > 0 ? 0x2d6a4f : 0x3f7d3a);
+        } else if (hNorm >= 0.18) {
+          c.setHex(detailNoise > 0 ? 0x15803d : 0x166534);
+        } else {
+          c.setHex(0x16a34a);
+        }
+      }
+      colors[idx * 3] = c.r;
+      colors[idx * 3 + 1] = c.g;
+      colors[idx * 3 + 2] = c.b;
+    };
+
+    // Vertex 0: Apex
+    const apex = evalPoint(0, 0);
+    positions[0] = apex.x;
+    positions[1] = apex.y;
+    positions[2] = apex.z;
+    assignColor(0, apex.hNorm, apex.ridgeNoise, apex.detailNoise);
+
+    // Rings 1..heightRings
+    for (let ring = 1; ring <= heightRings; ring++) {
+      const t = ring / heightRings;
+      for (let seg = 0; seg < radialSegments; seg++) {
+        const theta = (seg / radialSegments) * Math.PI * 2;
+        const vIdx = 1 + (ring - 1) * radialSegments + seg;
+        const p = evalPoint(t, theta);
+        positions[vIdx * 3] = p.x;
+        positions[vIdx * 3 + 1] = p.y;
+        positions[vIdx * 3 + 2] = p.z;
+        assignColor(vIdx, p.hNorm, p.ridgeNoise, p.detailNoise);
+      }
+    }
+
+    // Apex fan triangles (CCW looking from outside/above)
+    for (let seg = 0; seg < radialSegments; seg++) {
+      const nextSeg = (seg + 1) % radialSegments;
+      indices.push(0, 1 + nextSeg, 1 + seg);
+    }
+
+    // Quad bands between rings
+    for (let ring = 1; ring < heightRings; ring++) {
+      const rowStart = 1 + (ring - 1) * radialSegments;
+      const nextRowStart = 1 + ring * radialSegments;
+      for (let seg = 0; seg < radialSegments; seg++) {
+        const nextSeg = (seg + 1) % radialSegments;
+        const a = rowStart + seg;
+        const b = rowStart + nextSeg;
+        const c = nextRowStart + seg;
+        const d = nextRowStart + nextSeg;
+        indices.push(a, b, d);
+        indices.push(a, d, c);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setIndex(indices);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    return geo;
+  },
+
   initTerrainAndSky() {
     // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5)
     this.oceanTexture = this.createOceanCanvasTexture();
@@ -322,30 +585,42 @@
     // 2. 해상 섬 군락 (Islands along 45km flight path - 속도 체감 시각적 이정표)
     this.islandsGroup = new THREE.Group();
     const sandMat = new THREE.MeshLambertMaterial({ color: 0xfde047 });
-    const grassMat = new THREE.MeshLambertMaterial({ color: 0x15803d, flatShading: true });
+    const grassMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const palmTrunkMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
     const palmLeafMat = new THREE.MeshLambertMaterial({ color: 0x16a34a });
 
     const islandDefs = [
-      { x: -450, z: -3500, r: 90, h: 30 },
-      { x: 480, z: -7500, r: 120, h: 38 },
-      { x: -380, z: -12500, r: 110, h: 35 },
-      { x: 520, z: -17500, r: 130, h: 42 },
-      { x: -480, z: -22000, r: 140, h: 48 },
-      { x: 380, z: -26000, r: 110, h: 38 },
+      { x: -450, z: -3500, r: 90, h: 30, variant: 'rolling' },
+      { x: 480, z: -7500, r: 120, h: 38, variant: 'twin' },
+      { x: -380, z: -12500, r: 110, h: 35, variant: 'ridge' },
+      { x: 520, z: -17500, r: 130, h: 42, variant: 'volcanic' },
+      { x: -480, z: -22000, r: 140, h: 48, variant: 'twin' },
+      { x: 380, z: -26000, r: 110, h: 38, variant: 'rolling' },
     ];
 
-    islandDefs.forEach(isl => {
+    islandDefs.forEach((isl, idx) => {
       const island = new THREE.Group();
-      // 해변 모래사장
-      const beach = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 1.15, 3.5, 18), sandMat);
+      const islSeed = 101 + idx * 37.3;
+
+      // 해변 모래사장 (유기적 해안선)
+      const beach = new THREE.Mesh(this.createOrganicBeachGeometry(isl.r, 3.5, 32, islSeed), sandMat);
       beach.position.y = 0.5;
       beach.receiveShadow = true;
       island.add(beach);
 
-      // 녹색 중앙 언덕
-      const hill = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.75, isl.h, 12), grassMat);
-      hill.position.y = isl.h / 2 + 1;
+      // 고폴리곤 다형성 녹색 중앙 언덕
+      const hillGeo = this.createProceduralTerrainGeometry({
+        radius: isl.r * 0.82,
+        height: isl.h,
+        radialSegments: 32,
+        heightRings: 12,
+        variant: isl.variant,
+        seed: islSeed + 13.7,
+        isMountain: false,
+        hasSnow: false
+      });
+      const hill = new THREE.Mesh(hillGeo, grassMat);
+      hill.position.y = 1.6;
       hill.castShadow = true;
       hill.receiveShadow = true;
       island.add(hill);
@@ -353,7 +628,7 @@
       // 야자수 몇 그루
       for (let p = 0; p < 5; p++) {
         const pAng = (p / 5) * Math.PI * 2 + Math.random() * 0.5;
-        const pDist = isl.r * 0.45;
+        const pDist = isl.r * 0.78;
         const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 7, 5), palmTrunkMat);
         trunk.position.set(Math.cos(pAng) * pDist, 3.5, Math.sin(pAng) * pDist);
         trunk.rotation.z = (Math.random() - 0.5) * 0.2;
@@ -418,38 +693,50 @@
     });
     this.scene.add(this.shipsGroup);
 
-    // 4. 원경 산맥 (Mountain Ranges in distance - 대륙 배경 웅장한 대산맥 추가)
+    // 4. 원경 산맥 (Mountain Ranges in distance - 고폴리곤 다형성 대륙 대산맥)
     this.mountainsGroup = new THREE.Group();
-    const mountainMat1 = new THREE.MeshLambertMaterial({ color: 0x2d6a4f, flatShading: true });
-    const mountainMat2 = new THREE.MeshLambertMaterial({ color: 0x40916c, flatShading: true });
-    const mountainMat3 = new THREE.MeshLambertMaterial({ color: 0x52796f, flatShading: true });
+    const mountainMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 
     const mountainDefs = [
       // 출발 해상 공항 주변 원경
-      { x: -3200, z: -2500, r: 550, h: 580 },
-      { x: 3300, z: -2200, r: 580, h: 620 },
+      { x: -3200, z: -2500, r: 580, h: 580, variant: 'ridge' },
+      { x: 3300, z: -2200, r: 600, h: 620, variant: 'twin' },
       // 항로 주변
-      { x: -4200, z: -12000, r: 850, h: 920 },
-      { x: 4200, z: -18000, r: 900, h: 960 },
+      { x: -4200, z: -12000, r: 880, h: 920, variant: 'alpine' },
+      { x: 4200, z: -18000, r: 920, h: 960, variant: 'massif' },
       // 대륙 해안선 좌우 거대 곶 (Z = -28000)
-      { x: -5500, z: -28500, r: 1100, h: 1150 },
-      { x: 5500, z: -28500, r: 1100, h: 1150 },
+      { x: -5500, z: -28500, r: 1150, h: 1150, variant: 'ridge' },
+      { x: 5500, z: -28500, r: 1150, h: 1150, variant: 'twin' },
       // ★ 목적지 대륙 육지 공항 배후의 웅장한 대륙 산맥 능선 (Continental Majestic Mountain Range: Z = -47000 ~ -60000)
-      { x: -3800, z: -47500, r: 1250, h: 1300 },
-      { x: 3800, z: -47800, r: 1200, h: 1250 },
-      { x: -5500, z: -52000, r: 1550, h: 1650 },
-      { x: 5500, z: -52000, r: 1500, h: 1600 },
-      { x: 0, z: -56000, r: 1850, h: 1850 },
-      { x: -3500, z: -58000, r: 1650, h: 1700 },
-      { x: 3500, z: -58000, r: 1600, h: 1680 },
+      { x: -3800, z: -47500, r: 1300, h: 1300, variant: 'massif' },
+      { x: 3800, z: -47800, r: 1250, h: 1250, variant: 'ridge' },
+      { x: -5500, z: -52000, r: 1600, h: 1650, variant: 'alpine' },
+      { x: 5500, z: -52000, r: 1550, h: 1600, variant: 'twin' },
+      { x: 0, z: -56000, r: 1900, h: 1850, variant: 'alpine' },
+      { x: -3500, z: -58000, r: 1700, h: 1700, variant: 'ridge' },
+      { x: 3500, z: -58000, r: 1650, h: 1680, variant: 'massif' },
+      // 산맥 앞자락 구릉지대 (Foothills for layered mountain range depth)
+      { x: -2900, z: -49200, r: 900, h: 640, variant: 'rolling' },
+      { x: 2950, z: -49600, r: 880, h: 610, variant: 'twin' },
+      { x: -6400, z: -55000, r: 1200, h: 980, variant: 'ridge' },
+      { x: 6400, z: -55200, r: 1180, h: 950, variant: 'alpine' },
     ];
 
-    mountainDefs.forEach(m => {
-      const geo = new THREE.ConeGeometry(m.r, m.h, 7);
-      const mat = Math.random() > 0.6 ? mountainMat1 : (Math.random() > 0.5 ? mountainMat2 : mountainMat3);
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(m.x, m.h / 2 - 20, m.z);
-      mesh.rotation.y = Math.random() * Math.PI;
+    mountainDefs.forEach((m, idx) => {
+      const mSeed = 501 + idx * 43.9;
+      const geo = this.createProceduralTerrainGeometry({
+        radius: m.r,
+        height: m.h,
+        radialSegments: 44,
+        heightRings: 18,
+        variant: m.variant,
+        seed: mSeed,
+        isMountain: true,
+        hasSnow: m.h >= 850
+      });
+      const mesh = new THREE.Mesh(geo, mountainMat);
+      mesh.position.set(m.x, -20, m.z);
+      mesh.rotation.y = (idx * 1.17) % (Math.PI * 2);
       this.mountainsGroup.add(mesh);
     });
     this.scene.add(this.mountainsGroup);
