@@ -335,7 +335,7 @@
 
     // 4. 항공사 정식 브랜드 레터링 & 등록 부호 (Airline Titles & Tail Number)
     const regCode = (type === 'b747') ? 'HL7472' : (type === 'dc10' ? 'HL7310' : (type === 'md80' ? 'HL7204' : (type === 'a320' ? 'HL8031' : (type === 'concorde' ? 'F-BTSC' : 'RESCUE-01'))));
-    const modelTitle = (type === 'b747') ? 'BOEING 747-400' : (type === 'dc10' ? 'McDONNELL DOUGLAS DC-10' : (type === 'md80' ? 'MD-80 TWIN JET' : (type === 'a320' ? 'AIRBUS A320' : (type === 'concorde' ? 'CONCORDE SST' : 'AMPHIBIAN EXPLORER'))));
+    const modelTitle = (type === 'b747') ? 'BOEING 747-400' : (type === 'dc10' ? 'McDONNELL DOUGLAS DC-10' : (type === 'md80' ? 'MD-80 TWIN JET' : (type === 'a320' ? 'AIRBUS A320' : (type === 'concorde' ? 'CONCORDE SST' : 'CANADAIR CL-215'))));
 
     // 좌현(Port, X=1536) 텍스트
     ctx.save();

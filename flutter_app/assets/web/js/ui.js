@@ -34,7 +34,7 @@
       a320: 'A320 제트기',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
-      amphibian: '수륙양용 비행기',
+      amphibian: 'CL-215 수륙양용기',
       ancestor: '1903 조상 비행기'
     };
     const nameText = names[type] || type.toUpperCase();
@@ -724,7 +724,7 @@
       a320: 'A320 제트기',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
-      amphibian: '수륙양용 비행기',
+      amphibian: 'CL-215 수륙양용기',
       ancestor: '1903 조상 비행기'
     };
     const planeName = names[this.currentPlaneType] || '항공기';

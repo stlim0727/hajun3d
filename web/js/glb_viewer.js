@@ -14,7 +14,7 @@
     { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기', file: 'dc10.glb' },
     { id: 'md80', name: 'McDonnell Douglas MD-80', category: 'aircraft', icon: '✈️', desc: '리어 엔진 T-테일 쌍발 제트기', file: 'md80.glb' },
     { id: 'concorde', name: 'Concorde SST', category: 'aircraft', icon: '🚀', desc: '초음속 델타익 여객기', file: 'concorde.glb' },
-    { id: 'amphibian', name: 'Amphibian Seaplane', category: 'aircraft', icon: '🌊', desc: '수상 이착륙 가능 수륙양용 비행정', file: 'amphibian.glb' },
+    { id: 'amphibian', name: 'Canadair CL-215', category: 'aircraft', icon: '🌊', desc: '수상 이착륙 가능 수륙양용 비행정', file: 'amphibian.glb' },
     { id: 'ancestor', name: 'Classic Biplane', category: 'aircraft', icon: '🕰️', desc: '클래식 프로펠러 복엽기', file: 'ancestor.glb' },
     { id: 'airplane', name: 'Airplane (Standard)', category: 'aircraft', icon: '🛫', desc: '표준 항공기 베이스 GLB 모델', file: 'airplane.glb' },
 
