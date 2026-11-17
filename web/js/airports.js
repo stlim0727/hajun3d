@@ -7,6 +7,130 @@
   'use strict';
 
   Object.assign(AirplaneGame.prototype, {
+  createRunwayAsphaltTexture(repeatY = 190) {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // 아스팔트 기본 바탕
+    ctx.fillStyle = '#243044';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 세로 방향 포장 레인 명암 (60m 폭 기준 6레인)
+    for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.025)' : 'rgba(15, 23, 42, 0.08)';
+      ctx.fillRect(i * (512 / 6), 0, 512 / 6, 512);
+    }
+
+    // 중앙선 주변 타이어 고무 스키드 마크
+    const tireGrad = ctx.createLinearGradient(196, 0, 316, 0);
+    tireGrad.addColorStop(0.0, 'rgba(10, 15, 25, 0.0)');
+    tireGrad.addColorStop(0.3, 'rgba(10, 15, 25, 0.28)');
+    tireGrad.addColorStop(0.5, 'rgba(10, 15, 25, 0.10)');
+    tireGrad.addColorStop(0.7, 'rgba(10, 15, 25, 0.28)');
+    tireGrad.addColorStop(1.0, 'rgba(10, 15, 25, 0.0)');
+    ctx.fillStyle = tireGrad;
+    ctx.fillRect(196, 0, 120, 512);
+
+    // 아스팔트 골재 입자 노이즈 (결정론적 패턴)
+    let seed = 1337;
+    const nextRand = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+    for (let i = 0; i < 6500; i++) {
+      const x = nextRand() * 512;
+      const y = nextRand() * 512;
+      const bright = nextRand() > 0.5;
+      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.07)' : 'rgba(10, 15, 28, 0.14)';
+      ctx.fillRect(x, y, 2, 2);
+    }
+
+    // 20m 간격 횡방향 포장 이음새 (광학 흐름 기준선)
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.45)';
+    ctx.fillRect(0, 0, 512, 4);
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.14)';
+    ctx.fillRect(0, 4, 512, 2);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, repeatY);
+    tex.anisotropy = 8;
+    return tex;
+  },
+
+  addRunwayVisualDetails(group, xCenter, zCenter, length, whiteMat) {
+    // 1. 활주로 양측 백색 측선 (Side Edge Stripes - 폭 0.9m)
+    const sideLen = length - 120;
+    [-28.5, 28.5].forEach(xOff => {
+      const edgeStripe = new THREE.Mesh(new THREE.PlaneGeometry(0.9, sideLen), whiteMat);
+      edgeStripe.rotation.x = -Math.PI / 2;
+      edgeStripe.position.set(xCenter + xOff, 2.14, zCenter);
+      group.add(edgeStripe);
+    });
+
+    // 2. 접지대 마킹 (Touchdown Zone Bars - 양단 시단 안쪽)
+    const halfLen = length / 2;
+    [-1, 1].forEach(dir => {
+      [250, 400, 650].forEach((distFromEnd, idx) => {
+        const zPos = zCenter + dir * (halfLen - distFromEnd);
+        const barCount = 3 - idx;
+        for (let b = 0; b < barCount; b++) {
+          [-16 - b * 2.6, 16 + b * 2.6].forEach(xOff => {
+            const tdz = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 22), whiteMat);
+            tdz.rotation.x = -Math.PI / 2;
+            tdz.position.set(xCenter + xOff, 2.14, zPos);
+            group.add(tdz);
+          });
+        }
+      });
+    });
+
+    // 3. 활주로 좌측 잔여 거리 표지판 (Distance-Remaining Signs - 300m 간격)
+    if (typeof document === 'undefined') return;
+    if (!this._distSignMatCache) this._distSignMatCache = {};
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
+    const signStep = 300;
+    const totalSteps = Math.floor((length - 400) / signStep);
+    for (let i = 1; i <= totalSteps; i++) {
+      const zPos = zCenter + halfLen - 200 - i * signStep;
+      const remKmLabel = String(Math.max(1, Math.round((halfLen + (zPos - zCenter)) / 300)));
+      if (!this._distSignMatCache[remKmLabel]) {
+        const c = document.createElement('canvas');
+        c.width = 128;
+        c.height = 96;
+        const sctx = c.getContext('2d');
+        sctx.fillStyle = '#090d16';
+        sctx.fillRect(0, 0, 128, 96);
+        sctx.strokeStyle = '#facc15';
+        sctx.lineWidth = 6;
+        sctx.strokeRect(4, 4, 120, 88);
+        sctx.fillStyle = '#ffffff';
+        sctx.font = 'bold 54px sans-serif';
+        sctx.textAlign = 'center';
+        sctx.textBaseline = 'middle';
+        sctx.fillText(remKmLabel, 64, 50);
+        const stex = new THREE.CanvasTexture(c);
+        this._distSignMatCache[remKmLabel] = new THREE.MeshBasicMaterial({ map: stex });
+      }
+      const signBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.45, 1.8, 2.6),
+        [frameMat, frameMat, frameMat, frameMat, this._distSignMatCache[remKmLabel], this._distSignMatCache[remKmLabel]]
+      );
+      signBoard.position.set(xCenter - 35.0, 3.15, zPos);
+      signBoard.rotation.y = Math.PI / 2;
+      group.add(signBoard);
+
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.1, 0.25), postMat);
+      post.position.set(xCenter - 35.0, 2.1, zPos);
+      group.add(post);
+    }
+  },
+
   // ----------------------------------------------------------------
   // 4. 고해상도 국제공항 & 정밀 탑승교 & PAPI 유도등 (초대형 메가 에어포트)
   // ----------------------------------------------------------------
@@ -26,9 +150,11 @@
     // 36L 정밀 활주로 (60m x 3800m ICAO 4F 규격 런웨이, Y = 2.10)
     // --------------------------------------------------------------
     const runwayGeo = new THREE.PlaneGeometry(60, 3800);
+    const runwayTex = this.createRunwayAsphaltTexture(190);
     const runwayMat = new THREE.MeshStandardMaterial({ 
-      color: 0x1e293b, 
-      roughness: 0.7,
+      color: runwayTex ? 0xffffff : 0x1e293b,
+      map: runwayTex || null,
+      roughness: 0.78,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1
@@ -72,6 +198,8 @@
         this.airportGroup.add(aim);
       });
     });
+
+    this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3800, whiteMat);
 
     // PAPI (Precision Approach Path Indicator) 4구 진입각 지시등
     this.papiLights = [];
@@ -680,9 +808,11 @@
 
     // 공용 재질
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x242e3d, roughness: 0.85, metalness: 0.1 });
+    const incheonRunwayTex = this.createRunwayAsphaltTexture(200);
     const runwayMat = new THREE.MeshStandardMaterial({ 
-      color: 0x1e293b, 
-      roughness: 0.7, 
+      color: incheonRunwayTex ? 0xffffff : 0x1e293b, 
+      map: incheonRunwayTex || null,
+      roughness: 0.78, 
       polygonOffset: true, 
       polygonOffsetFactor: -1, 
       polygonOffsetUnits: -1 
@@ -751,6 +881,8 @@
           this.incheonAirportGroup.add(aim);
         });
       });
+
+      this.addRunwayVisualDetails(this.incheonAirportGroup, rX, incheonZ, 4000, whiteLineMat);
 
       // 4구 PAPI 진입각 지시등
       for (let p = 0; p < 4; p++) {
