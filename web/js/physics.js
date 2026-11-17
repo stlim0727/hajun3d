@@ -215,9 +215,9 @@
       const gearNode = this.glbMovingParts.landingGear;
       const gearFactor = isExtending ? progress : (1.0 - progress);
       const basePosY = gearNode.userData.basePosY || 0;
-      gearNode.visible = gearFactor > 0.04;
-      gearNode.scale.y = Math.max(0.01, gearFactor);
-      gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.35;
+      gearNode.visible = gearFactor > 0.15;
+      gearNode.scale.y = 1.0;
+      gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
     }
 
     // 시퀀스 완료 처리

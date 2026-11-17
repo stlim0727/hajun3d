@@ -289,22 +289,22 @@
     // ★ 중심점 X=0 완벽 정렬 & 회전 영점화 (기우뚱 및 쏠림 100% 원천 차단)
     scene.position.x = 0;
     scene.position.y = (this.currentPlaneType === 'amphibian')
-      ? (-box.min.y * scale - 3.35)
+      ? (-box.min.y * scale - 4.05)
       : (-center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2));
     scene.position.z = -center.z * scale;
     scene.rotation.set(0, 0, 0);
 
     scene.traverse((node) => {
       if (node.name) {
-        if (/^Fan Blades/i.test(node.name)) {
+        if (/^Fan[_ ]?Blades/i.test(node.name)) {
           this.glbMovingParts.fans.push(node);
         } else if (/^Rudder/i.test(node.name)) {
           node.userData.baseRotY = node.rotation.y;
           this.glbMovingParts.rudder = node;
-        } else if (/^Flaps (Inner|Outer)/i.test(node.name)) {
+        } else if (/^Flaps[_ ]?(Inner|Outer)/i.test(node.name)) {
           node.userData.baseRotX = node.rotation.x;
           this.glbMovingParts.flaps.push(node);
-        } else if (/^LandingGear/i.test(node.name)) {
+        } else if (/^Landing[_ ]?Gear/i.test(node.name)) {
           node.userData.basePosY = node.position.y;
           this.glbMovingParts.landingGear = node;
           if (this.gearExtended === false) {
