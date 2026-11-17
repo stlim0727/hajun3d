@@ -296,9 +296,9 @@
     this.flapIndex = 1; // 이륙 기본 플랩 1 (Takeoff Flaps 1)
     this.spoilerExtended = false;
     this.reverseThrustActive = false;
-    this.groundSpeed = 50.0; // ~180 km/h 활주 초기 가속 속도
-    this.velocity.set(0, 0, -50.0);
-    this.speed = this.velocity.length() / 77.777;
+    this.groundSpeed = 0.0; // 정지 상태(0 km/h)에서 이륙 활주 시작
+    this.velocity.set(0, 0, 0);
+    this.speed = 0.0;
     if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
     this.updateFlapsUI();
     this.updateSpoilerUI();
