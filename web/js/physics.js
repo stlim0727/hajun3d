@@ -211,6 +211,15 @@
       this.glbMixer.update(0);
     }
 
+    if (this.glbMovingParts && this.glbMovingParts.landingGear) {
+      const gearNode = this.glbMovingParts.landingGear;
+      const gearFactor = isExtending ? progress : (1.0 - progress);
+      const basePosY = gearNode.userData.basePosY || 0;
+      gearNode.visible = gearFactor > 0.04;
+      gearNode.scale.y = Math.max(0.01, gearFactor);
+      gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.35;
+    }
+
     // 시퀀스 완료 처리
     if (progress >= 1.0) {
       if (isExtending) {
@@ -219,6 +228,12 @@
         if (this.glbMixer && this.glbGearAction) {
           this.glbGearAction.time = this.glbGearDuration || 1.0;
           this.glbMixer.update(0);
+        }
+        if (this.glbMovingParts && this.glbMovingParts.landingGear) {
+          const gearNode = this.glbMovingParts.landingGear;
+          gearNode.visible = true;
+          gearNode.scale.y = 1.0;
+          gearNode.position.y = gearNode.userData.basePosY || 0;
         }
         this.landingGears.forEach(gear => {
           const u = gear.userData;
@@ -241,6 +256,12 @@
         if (this.glbMixer && this.glbGearAction) {
           this.glbGearAction.time = 0;
           this.glbMixer.update(0);
+        }
+        if (this.glbMovingParts && this.glbMovingParts.landingGear) {
+          const gearNode = this.glbMovingParts.landingGear;
+          gearNode.visible = false;
+          gearNode.scale.y = 0.01;
+          gearNode.position.y = (gearNode.userData.basePosY || 0) + 1.35;
         }
         this.landingGears.forEach(gear => {
           const u = gear.userData;

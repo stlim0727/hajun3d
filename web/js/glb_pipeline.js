@@ -288,7 +288,9 @@
 
     // ★ 중심점 X=0 완벽 정렬 & 회전 영점화 (기우뚱 및 쏠림 100% 원천 차단)
     scene.position.x = 0;
-    scene.position.y = -center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2);
+    scene.position.y = (this.currentPlaneType === 'amphibian')
+      ? (-box.min.y * scale - 3.35)
+      : (-center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2));
     scene.position.z = -center.z * scale;
     scene.rotation.set(0, 0, 0);
 
@@ -302,6 +304,12 @@
         } else if (/^Flaps (Inner|Outer)/i.test(node.name)) {
           node.userData.baseRotX = node.rotation.x;
           this.glbMovingParts.flaps.push(node);
+        } else if (/^LandingGear/i.test(node.name)) {
+          node.userData.basePosY = node.position.y;
+          this.glbMovingParts.landingGear = node;
+          if (this.gearExtended === false) {
+            node.visible = false;
+          }
         }
       }
       if (node.isMesh) {
