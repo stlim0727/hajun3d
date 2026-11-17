@@ -421,7 +421,7 @@
     if (!this.audioCtx || this.audioCtx.state !== 'running') return;
 
     const now = this.audioCtx.currentTime;
-    const isPiston = this.currentPlaneType === 'ancestor';
+    const isPiston = this.currentPlaneType === 'ancestor' || this.currentPlaneType === 'amphibian';
     const isRunning = this.jetSoundActive && !this.isEngineOff && !this.isDestroyed;
 
     // 1. 조종석 팩 에어컨/항전장비 팬 앰비언트 (엔진 꺼지면 대기 전원 수준 0.05로 감쇠)
@@ -528,6 +528,30 @@
   updatePistonSynth(now, isRunning) {
     if (!isRunning || !this.soundEnabled) {
       this.silencePistonEngines(now);
+      return;
+    }
+
+    if (this.currentPlaneType === 'amphibian') {
+      // Canadair CL-215: 2x Pratt & Whitney R-2800 18-cylinder twin-row radial + 3-blade reversible propellers
+      const n1Ratio = Math.max(0.0, Math.min(1.0, ((this.n1 ?? 22) - 22) / 78.0));
+      const power = Math.max(n1Ratio, Math.max(0.0, Math.min(1.0, this.throttle || 0)) * 0.85);
+      const propRpm = 560 + power * 790; // ~560–1,350 prop RPM (2:1 reduction from 1,120–2,700 crank RPM)
+      const radialGrowlHz = 52 + power * 64; // Deep twin-row radial exhaust pulse fundamental
+      const bladePassHz = (propRpm / 60) * 3; // 3-blade propeller chop (~28–67.5 Hz)
+      const reverseBoost = this.reverseThrustActive ? 0.14 : 0.0;
+
+      if (this.pistonPulse && this.pistonFilter && this.pistonGain) {
+        this.pistonPulse.frequency.setTargetAtTime(radialGrowlHz, now, 0.08);
+        this.pistonFilter.frequency.setTargetAtTime(360 + power * 760, now, 0.08);
+        this.pistonGain.gain.setTargetAtTime(0.32 + power * 0.42, now, 0.08);
+      }
+
+      if (this.propBeat && this.propFilter && this.propGain && this.propModGain) {
+        this.propBeat.frequency.setTargetAtTime(bladePassHz, now, 0.08);
+        this.propFilter.frequency.setTargetAtTime(240 + power * 420 + (this.reverseThrustActive ? 140 : 0), now, 0.08);
+        this.propGain.gain.setTargetAtTime(0.14 + power * 0.24 + reverseBoost, now, 0.08);
+        this.propModGain.gain.setTargetAtTime(0.06 + power * 0.11, now, 0.08);
+      }
       return;
     }
 
