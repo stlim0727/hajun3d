@@ -1048,6 +1048,34 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   margin-bottom: 20px;
 }
 
+.modal-card .build-info,
+.build-info {
+  margin: 0 0 14px;
+  color: #94a3b8;
+  font: 11px/1.6 system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.build-info [data-build-branch],
+.build-info [data-build-commit] {
+  font-family: ui-monospace, monospace;
+}
+
+.build-info [data-build-age] {
+  white-space: nowrap;
+}
+
+.build-info a {
+  color: #bae6fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.build-info a:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 3px;
+}
+
 /* Plane Selector Box */
 .plane-selector-box {
   background: rgba(15, 23, 42, 0.7);
