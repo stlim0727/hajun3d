@@ -1,6 +1,6 @@
 /**
  * Sky Jet Explorer 3D - Aircraft Specifications and Flight Config Constants
- * Subsystem: config (1 methods)
+ * Subsystem: config (2 methods)
  */
 
 (function() {
@@ -8,27 +8,32 @@
 
   Object.assign(AirplaneGame.prototype, {
   // ----------------------------------------------------------------
-  // 공기역학 및 기체 제원 데이터베이스 (Airliner Aerodynamics DB)
+  // 공기역학 및 기체 제원 데이터베이스 (Real-World Airliner Aerodynamics DB)
   // ----------------------------------------------------------------
   getAircraftSpecs(type) {
     const specs = {
       a320: {
-        name: 'Airbus A320',
-        mass: 68000,          // kg (자중 42t + 승객/연료 탑재 = 68,000kg)
+        name: 'Airbus A320-200',
+        emptyWeightKg: 42600, // OEW (kg)
+        mtowKg: 77000,        // MTOW (kg)
+        mass: 68000,          // Typical Takeoff Mass (kg)
+        fuelCapacityKg: 19000,// Standard usable fuel ~24,209 L (kg)
         wingArea: 122.6,      // m²
-        wingSpan: 34.1,       // m
+        wingSpan: 35.80,      // m (with wingtip fences / sharklets)
         meanChord: 4.19,      // m (MAC)
-        aspectRatio: 9.5,     // 종횡비 AR
-        oswaldEff: 0.82,      // 오스왈드 효율 계수 e
-        cd0: 0.020,           // 영양력 유해 항력 계수 C_D0
-        cl0: 0.24,            // 받음각 0도 기본 양력 계수 C_L0
-        clAlpha: 5.2,         // 양력선 기울기 C_L_alpha (per rad)
-        clMaxClean: 1.55,     // 클린 상태 최대 양력 계수
-        clFlapBoostMax: 0.95, // 풀 플랩 양력 증강 계수
-        stallAlphaClean: 0.25,// 클린 실속 받음각 (약 14.3도)
-        maxThrust: 240000,    // N (CFM56-5B 트윈 터보팬 ~240 kN)
-        vRotateKmh: 260,      // 이륙 로테이션 속도 (~140 kt)
-        vStallCleanKmh: 215,  // 클린 실속 속도 (~116 kt)
+        wingLoadingKgM2: 554.6, // 68,000 / 122.6 kg/m² (MTOW: 628.1)
+        aspectRatio: 10.45,   // b² / S
+        oswaldEff: 0.83,
+        cd0: 0.0195,
+        cl0: 0.24,
+        clAlpha: 5.45,
+        clMaxClean: 1.55,
+        clFlapBoostMax: 0.95,
+        stallAlphaClean: 0.255, // ~14.6°
+        numEngines: 2,
+        maxThrust: 240000,    // N (2 × CFM56-5B4 @ 120 kN / 27,000 lbf)
+        vRotateKmh: 260,      // ~140 kt
+        vStallCleanKmh: 215,  // ~116 kt
         pitchAuthority: 0.55,
         rollAuthority: 0.70,
         pitchDamping: 1.8,
@@ -39,36 +44,45 @@
       },
       b737: {
         name: 'Boeing 737-800',
-        mass: 66000,          // kg (자중 41.4t + 승객/연료 탑재 = 66,000kg)
+        emptyWeightKg: 41413, // OEW (kg)
+        mtowKg: 79010,        // MTOW (kg)
+        mass: 66000,          // Typical Takeoff Mass (kg)
+        fuelCapacityKg: 14200,// Standard mission fuel (kg)
         wingArea: 124.6,      // m²
-        wingSpan: 35.8,       // m
+        wingSpan: 35.80,      // m
         meanChord: 3.99,      // m (MAC)
-        aspectRatio: 9.45,    // 종횡비 AR
-        oswaldEff: 0.82,      // 오스왈드 효율 계수 e
-        cd0: 0.0185,          // 영양력 유해 항력 계수 C_D0
-        cl0: 0.22,            // 받음각 0도 기본 양력 계수 C_L0
-        clAlpha: 5.65,        // 양력선 기울기 C_L_alpha (per rad)
-        clMaxClean: 1.55,     // 클린 상태 최대 양력 계수
-        clFlapBoostMax: 0.95, // 풀 플랩 양력 증강 계수
-        stallAlphaClean: 0.27,// 클린 실속 받음각 (~15.5도)
-        maxThrust: 242000,    // N (CFM56-7B26 트윈 터보팬 ~242 kN)
-        vRotateKmh: 270,      // 이륙 로테이션 속도 (~146 kt)
-        vStallCleanKmh: 220,  // 클린 실속 속도 (~119 kt)
-        pitchAuthority: 0.55, // 737 엘리베이터 피치 조종 권한
-        rollAuthority: 0.70,  // 737 에일러론 롤 조종 권한
-        pitchDamping: 1.8,    // 737 피치 레이트 댐핑
-        rollDamping: 2.2,     // 737 롤 레이트 댐핑
+        wingLoadingKgM2: 529.7, // 66,000 / 124.6 kg/m² (MTOW: 634.1)
+        aspectRatio: 10.29,   // b² / S (flight3d B738 standard)
+        oswaldEff: 0.82,
+        cd0: 0.0185,
+        cl0: 0.22,
+        clAlpha: 5.65,
+        clMaxClean: 1.55,
+        clFlapBoostMax: 0.95,
+        stallAlphaClean: 0.27,// ~15.5°
+        numEngines: 2,
+        maxThrust: 242000,    // N (2 × CFM56-7B26 @ 121 kN / 27,000 lbf)
+        vRotateKmh: 270,      // ~146 kt
+        vStallCleanKmh: 220,  // ~119 kt
+        pitchAuthority: 0.55,
+        rollAuthority: 0.70,
+        pitchDamping: 1.8,
+        rollDamping: 2.2,
         yawAuthority: 0.45,
         yawDamping: 2.0,
         transonicMachBuffet: 0.78
       },
       b738: {
         name: 'Boeing 737-800',
+        emptyWeightKg: 41413,
+        mtowKg: 79010,
         mass: 66000,
+        fuelCapacityKg: 14200,
         wingArea: 124.6,
-        wingSpan: 35.8,
+        wingSpan: 35.80,
         meanChord: 3.99,
-        aspectRatio: 9.45,
+        wingLoadingKgM2: 529.7,
+        aspectRatio: 10.29,
         oswaldEff: 0.82,
         cd0: 0.0185,
         cl0: 0.22,
@@ -76,6 +90,7 @@
         clMaxClean: 1.55,
         clFlapBoostMax: 0.95,
         stallAlphaClean: 0.27,
+        numEngines: 2,
         maxThrust: 242000,
         vRotateKmh: 270,
         vStallCleanKmh: 220,
@@ -88,124 +103,184 @@
         transonicMachBuffet: 0.78
       },
       b747: {
-        name: 'Boeing 747-400 Jumbo',
-        mass: 285000,         // kg (점보 제트기 육중한 관성 질량)
-        wingArea: 525.0,      // m²
-        wingSpan: 64.4,       // m
-        aspectRatio: 7.9,
+        name: 'Boeing 747-400',
+        emptyWeightKg: 179014,// OEW 394,150 lb
+        mtowKg: 396893,       // MTOW 875,000 lb
+        mass: 320000,         // Typical Long-Haul Takeoff Mass (kg)
+        fuelCapacityKg: 173480,// 216,840 L usable fuel
+        wingArea: 525.0,      // m² (w/ winglet footprint)
+        wingSpan: 64.44,      // m (211 ft 5 in)
+        meanChord: 8.32,      // m (MAC 27.3 ft)
+        wingLoadingKgM2: 609.5, // 320,000 / 525.0 kg/m² (MTOW: 756.0)
+        aspectRatio: 7.91,
         oswaldEff: 0.80,
-        cd0: 0.022,
+        cd0: 0.0215,
         cl0: 0.26,
-        clAlpha: 5.0,
+        clAlpha: 5.05,
         clMaxClean: 1.50,
+        clFlapBoostMax: 0.95,
         stallAlphaClean: 0.26,
-        maxThrust: 1120000,   // N (4발 GE CF6-80C2 ~1120 kN)
-        vRotateKmh: 295,
-        vStallCleanKmh: 245,
+        numEngines: 4,
+        maxThrust: 1104000,   // N (4 × GE CF6-80C2B5F @ 276 kN / 62,100 lbf)
+        vRotateKmh: 300,      // ~162 kt
+        vStallCleanKmh: 250,  // ~135 kt
         pitchAuthority: 0.38,
         rollAuthority: 0.45,
         pitchDamping: 2.5,
-        rollDamping: 2.8
+        rollDamping: 2.8,
+        yawAuthority: 0.40,
+        yawDamping: 2.3,
+        transonicMachBuffet: 0.82
       },
       dc10: {
-        name: 'McDonnell Douglas DC-10',
-        mass: 165000,         // kg
-        wingArea: 367.0,      // m²
-        wingSpan: 50.4,       // m
-        aspectRatio: 6.9,
+        name: 'McDonnell Douglas DC-10-30',
+        emptyWeightKg: 121563,// OEW 267,990 lb
+        mtowKg: 259460,       // MTOW 572,000 lb
+        mass: 215000,         // Typical Takeoff Mass (kg)
+        fuelCapacityKg: 111100,// ~138,904 L
+        wingArea: 367.7,      // m²
+        wingSpan: 50.40,      // m (165 ft 4 in)
+        meanChord: 7.50,      // m
+        wingLoadingKgM2: 584.7, // 215,000 / 367.7 kg/m² (MTOW: 705.6)
+        aspectRatio: 6.91,
         oswaldEff: 0.78,
-        cd0: 0.023,
+        cd0: 0.0225,
         cl0: 0.25,
-        clAlpha: 4.9,
+        clAlpha: 4.95,
         clMaxClean: 1.52,
-        stallAlphaClean: 0.25,
-        maxThrust: 690000,    // N (삼발 GE CF6-50 ~690 kN)
-        vRotateKmh: 280,
-        vStallCleanKmh: 230,
+        clFlapBoostMax: 0.90,
+        stallAlphaClean: 0.255,
+        numEngines: 3,
+        maxThrust: 700500,    // N (3 × GE CF6-50C2 @ 233.5 kN / 52,500 lbf)
+        vRotateKmh: 285,      // ~154 kt
+        vStallCleanKmh: 235,  // ~127 kt
         pitchAuthority: 0.44,
         rollAuthority: 0.52,
         pitchDamping: 2.1,
-        rollDamping: 2.4
+        rollDamping: 2.4,
+        yawAuthority: 0.42,
+        yawDamping: 2.1,
+        transonicMachBuffet: 0.80
       },
       md80: {
-        name: 'McDonnell Douglas MD-80',
-        mass: 64000,          // kg
-        wingArea: 112.0,      // m²
-        wingSpan: 32.8,       // m
-        aspectRatio: 9.6,
+        name: 'McDonnell Douglas MD-82',
+        emptyWeightKg: 37300, // OEW ~82,200 lb
+        mtowKg: 67812,        // MTOW 149,500 lb
+        mass: 58000,          // Typical Takeoff Mass (kg)
+        fuelCapacityKg: 18944,// 22,104 L (41,765 lb)
+        wingArea: 112.3,      // m²
+        wingSpan: 32.82,      // m (107 ft 8 in)
+        meanChord: 3.62,      // m
+        wingLoadingKgM2: 516.5, // 58,000 / 112.3 kg/m² (MTOW: 603.8)
+        aspectRatio: 9.59,
         oswaldEff: 0.81,
-        cd0: 0.021,
+        cd0: 0.0205,
         cl0: 0.23,
-        clAlpha: 5.1,
+        clAlpha: 5.15,
         clMaxClean: 1.54,
-        stallAlphaClean: 0.24,
-        maxThrust: 192000,    // N (JT8D 후방 쌍발 ~192 kN)
-        vRotateKmh: 255,
-        vStallCleanKmh: 210,
+        clFlapBoostMax: 0.92,
+        stallAlphaClean: 0.245,
+        numEngines: 2,
+        maxThrust: 186000,    // N (2 × P&W JT8D-217C @ 93 kN / 20,890 lbf)
+        vRotateKmh: 255,      // ~138 kt
+        vStallCleanKmh: 210,  // ~113 kt
         pitchAuthority: 0.58,
         rollAuthority: 0.65,
         pitchDamping: 1.9,
-        rollDamping: 2.1
+        rollDamping: 2.1,
+        yawAuthority: 0.46,
+        yawDamping: 2.0,
+        transonicMachBuffet: 0.78
       },
       concorde: {
         name: 'Aérospatiale/BAC Concorde',
-        mass: 110000,         // kg
-        wingArea: 358.0,      // m² (오지브 델타익)
-        wingSpan: 25.6,       // m
+        emptyWeightKg: 78700, // OEW 173,500 lb
+        mtowKg: 185070,       // MTOW 408,000 lb
+        mass: 150000,         // Typical Takeoff Mass (kg)
+        fuelCapacityKg: 95680,// 119,500 L
+        wingArea: 358.25,     // m² (ogival delta)
+        wingSpan: 25.60,      // m (84 ft)
+        meanChord: 15.50,     // m
+        wingLoadingKgM2: 418.7, // 150,000 / 358.25 kg/m² (MTOW: 516.6)
         aspectRatio: 1.83,
         oswaldEff: 0.65,
-        cd0: 0.018,
+        cd0: 0.0175,
         cl0: 0.12,
         clAlpha: 3.2,
         clMaxClean: 1.30,
-        stallAlphaClean: 0.35,// 와류 양력(Vortex Lift)으로 고받음각 비행
-        maxThrust: 680000,    // N (4발 Olympus 593 롤스로이스 터보제트)
-        vRotateKmh: 350,
-        vStallCleanKmh: 275,
+        clFlapBoostMax: 0.0,  // No flaps (vortex lift delta)
+        stallAlphaClean: 0.36,// Vortex lift high-alpha capability
+        numEngines: 4,
+        maxThrust: 677200,    // N (4 × Olympus 593 Mk 610 @ 169.3 kN reheat)
+        vRotateKmh: 365,      // ~197 kt
+        vStallCleanKmh: 280,  // ~151 kt
         pitchAuthority: 0.62,
         rollAuthority: 0.75,
         pitchDamping: 1.7,
-        rollDamping: 1.8
+        rollDamping: 1.8,
+        yawAuthority: 0.48,
+        yawDamping: 1.9,
+        transonicMachBuffet: 1.15
       },
       amphibian: {
         name: 'Canadair CL-415 Amphibian',
-        mass: 19800,          // kg
+        emptyWeightKg: 12882, // OEW 28,400 lb
+        mtowKg: 19890,        // Land MTOW 43,850 lb (Water: 17,170 kg)
+        mass: 17500,          // Typical Operating Mass (kg)
+        fuelCapacityKg: 4650, // 5,812 L
         wingArea: 100.0,      // m²
-        wingSpan: 28.6,       // m
-        aspectRatio: 8.2,
+        wingSpan: 28.60,      // m (93 ft 11 in)
+        meanChord: 3.54,      // m
+        wingLoadingKgM2: 175.0, // 17,500 / 100.0 kg/m² (MTOW: 198.9)
+        aspectRatio: 8.18,
         oswaldEff: 0.76,
-        cd0: 0.032,
+        cd0: 0.031,
         cl0: 0.32,
         clAlpha: 5.0,
         clMaxClean: 1.70,
+        clFlapBoostMax: 0.85,
         stallAlphaClean: 0.26,
-        maxThrust: 70000,     // N (PW123 터보프롭)
-        vRotateKmh: 155,
-        vStallCleanKmh: 125,
+        numEngines: 2,
+        maxThrust: 70000,     // N (2 × PW123AF 2,380 shp / 1,775 kW turboprops)
+        vRotateKmh: 150,      // ~81 kt
+        vStallCleanKmh: 120,  // ~65 kt
         pitchAuthority: 0.65,
         rollAuthority: 0.68,
         pitchDamping: 1.6,
-        rollDamping: 1.8
+        rollDamping: 1.8,
+        yawAuthority: 0.50,
+        yawDamping: 1.7,
+        transonicMachBuffet: 0.55
       },
       ancestor: {
         name: '1903 Wright Flyer',
-        mass: 340,            // kg
-        wingArea: 47.4,       // m²
-        wingSpan: 12.3,       // m
+        emptyWeightKg: 274,   // 605 lb empty without pilot
+        mtowKg: 340,          // ~750 lb gross with pilot
+        mass: 338,            // 745 lb loaded weight
+        fuelCapacityKg: 2.0,  // ~1.5 L fuel tank
+        wingArea: 47.4,       // m² (510 sq ft)
+        wingSpan: 12.29,      // m (40 ft 4 in)
+        meanChord: 1.98,      // m (6 ft 6 in biplane chord)
+        wingLoadingKgM2: 7.13,// 338 / 47.4 kg/m²
         aspectRatio: 6.4,
         oswaldEff: 0.70,
         cd0: 0.055,
         cl0: 0.40,
         clAlpha: 4.8,
         clMaxClean: 1.45,
+        clFlapBoostMax: 0.0,
         stallAlphaClean: 0.22,
-        maxThrust: 800,       // N
-        vRotateKmh: 50,
-        vStallCleanKmh: 42,
+        numEngines: 1,
+        maxThrust: 450,       // N (~100 lbf from 12 hp inline-4 twin chain-driven props)
+        vRotateKmh: 48,       // ~30 mph
+        vStallCleanKmh: 40,
         pitchAuthority: 0.70,
         rollAuthority: 0.50,
         pitchDamping: 1.5,
-        rollDamping: 1.4
+        rollDamping: 1.4,
+        yawAuthority: 0.45,
+        yawDamping: 1.4,
+        transonicMachBuffet: 0.30
       }
     };
     return specs[type] || specs.a320;
@@ -224,6 +299,9 @@
     const s = this.getAircraftSpecs(type);
     const refB738 = f3d && f3d.BOEING_737_800;
     const mass = s.mass || 66000;
+    const emptyWeight = s.emptyWeightKg || Math.round(mass * 0.625);
+    const maxTakeoffWeight = s.mtowKg || Math.round(mass * 1.2);
+    const fuelCapacity = s.fuelCapacityKg || Math.max(2, Math.round(mass * 0.215));
     const span = s.wingSpan || 35.8;
     const area = s.wingArea || 124.6;
     const chord = s.meanChord || (area / Math.max(1, span));
@@ -236,12 +314,13 @@
     const Iyy = Math.max(200, 3450000 * massRatio * lenRatio * lenRatio);
     const Izz = Math.max(280, 4850000 * massRatio * ((spanRatio * spanRatio + lenRatio * lenRatio) * 0.5));
 
-    const numEngines = (type === 'b747' || type === 'concorde') ? 4 : (type === 'dc10' ? 3 : (type === 'ancestor' ? 1 : 2));
+    const numEngines = s.numEngines || 2;
     const maxThrustTotal = s.maxThrust || 242000;
     const maxThrustPerEngine = maxThrustTotal / numEngines;
-    const fuelCapacity = Math.max(20, Math.round(mass * 0.215));
-    const emptyWeight = Math.max(150, Math.round(mass * 0.625));
-    const maxTakeoffWeight = Math.round(mass * 1.2);
+
+    const initialFuelKg = Math.min(fuelCapacity, Math.max(0.5, Math.round((mass - emptyWeight) * 0.55)));
+    const initialPayloadKg = Math.max(0, mass - emptyWeight - initialFuelKg);
+    const referenceMassKg = Math.min(maxTakeoffWeight, Math.max(mass, emptyWeight + fuelCapacity + Math.round(initialPayloadKg * 0.3)));
 
     const kNose = Math.max(4000, 420000 * massRatio);
     const cNose = Math.max(600, 48000 * Math.sqrt(massRatio));
@@ -263,6 +342,17 @@
         Ixx,
         Iyy,
         Izz,
+      },
+      massDistribution: {
+        referenceMassKg,
+        initialFuelKg,
+        initialPayloadKg,
+        tanks: [
+          { id: 'main', capacityKg: fuelCapacity, priority: 0, position: { x: 0, y: 0, z: 0 } }
+        ],
+        stations: [
+          { id: 'payload', capacityKg: maxTakeoffWeight, position: { x: 0, y: 0, z: 0 } }
+        ],
       },
       aerodynamics: {
         wingspanM: span,
@@ -292,7 +382,7 @@
         cnDr: -0.12 * (s.yawAuthority ? s.yawAuthority / 0.45 : 1.0),
         cnR: -0.32 * (s.yawDamping ? s.yawDamping / 2.0 : 1.0),
         adverseYaw: -0.025,
-        flapAngles: type === 'ancestor' ? [0, 0, 0, 0] : [0, 10, 25, 40],
+        flapAngles: (type === 'ancestor' || type === 'concorde') ? [0, 0, 0, 0] : [0, 10, 25, 40],
       },
       stallWarning: { type: 'stickShaker', marginDeg: 2.0 },
       propulsion: {
@@ -354,4 +444,3 @@
 
   });
 })();
-
