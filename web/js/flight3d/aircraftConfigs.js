@@ -66,7 +66,7 @@
       // Longitudinal (Pitch) Stability Derivatives
       cm0: -0.02,            // Trim pitching moment at zero AoA
       cma: -0.90,            // Static pitch stability (dCm/dAlpha < 0)
-      cmDe: -1.25,           // Elevator pitch control authority (dCm/dDe per rad)
+      cmDe: -1.45,           // Elevator pitch control authority (dCm/dDe per rad)
       cmQ: -26.0,            // Heavy transport pitch rate damping derivative
   
       // Lateral-Directional (Roll & Yaw) Stability Derivatives
@@ -120,7 +120,7 @@
         {
           id: 'mainLeft',
           name: 'Left Main Gear',
-          localPos: { x: -3.2, y: -3.30, z: 1.8 },
+          localPos: { x: -3.2, y: -3.30, z: 0.9 },
           wheelRadius: 0.48,
           restLength: 0.9,
           kSpring: 850000,
@@ -130,7 +130,7 @@
         {
           id: 'mainRight',
           name: 'Right Main Gear',
-          localPos: { x: 3.2, y: -3.30, z: 1.8 },
+          localPos: { x: 3.2, y: -3.30, z: 0.9 },
           wheelRadius: 0.48,
           restLength: 0.9,
           kSpring: 850000,
