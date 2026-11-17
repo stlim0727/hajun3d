@@ -154,3 +154,38 @@ test('createOrganicBeachGeometry warps coastline organically with finite vertice
     assert.ok(Number.isFinite(pos.getZ(i)));
   }
 });
+
+test('getTerrainColliderHit detects mountain impacts and skips high-altitude or outside positions', () => {
+  const proto = loadEnvironmentPrototype();
+  const radius = 1900;
+  const height = 1850;
+  const seed = 501 + 10 * 43.9;
+  const variant = 'alpine';
+  const maxR = radius * 1.6;
+  const game = Object.create(proto);
+  game.terrainColliders = [{
+    x: 0,
+    z: -56000,
+    baseY: -20,
+    radius,
+    maxRadiusSq: maxR * maxR,
+    height,
+    variant,
+    seed,
+    isMountain: true,
+    params: proto._getTerrainParams(variant, seed),
+    name: '대륙 산악 지형 (1850m)'
+  }];
+
+  // Inside mountain core at low altitude -> collision
+  const hit = game.getTerrainColliderHit(0, 300, -56000, 6.0);
+  assert.ok(hit, 'Expected collision inside mountain core at 300m altitude');
+  assert.equal(hit.collider.name, '대륙 산악 지형 (1850m)');
+  assert.ok(hit.terrainY > 300);
+
+  // High above the summit -> no collision
+  assert.equal(game.getTerrainColliderHit(0, 2200, -56000, 6.0), null);
+
+  // Far outside the mountain footprint -> no collision
+  assert.equal(game.getTerrainColliderHit(5000, 300, -56000, 6.0), null);
+});

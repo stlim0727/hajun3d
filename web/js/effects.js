@@ -1253,17 +1253,36 @@
   },
 
   // ----------------------------------------------------------------
-  // 11. 공항 건물 충돌 검사 (고고도 스킵 및 성능 최적화)
+  // 11. 공항 건물 및 산악·언덕 지형 충돌 검사 (고도별 스킵 및 성능 최적화)
   // ----------------------------------------------------------------
   checkObstacleCollisions() {
     if (this.isDestroyed || !this.planeGroup) return;
 
-    // 비행기 고도가 최고층 마천루(해운대 엘시티 411m) 이상이면 지상 건물 충돌 검사 스킵 (CPU 부하 0)
-    const planePos = this.planeGroup.position;
-    if (planePos.y > 450) return;
-
     this.collisionFrameCount = (this.collisionFrameCount || 0) + 1;
     if (this.collisionFrameCount % 2 !== 0) return; // 2프레임에 1회 검사
+
+    const planePos = this.planeGroup.position;
+    const currentKmh = this.speed * 280;
+
+    // 1) 산악·언덕 지형 충돌 검사 (최고봉 1,850m 이하 구간)
+    if (planePos.y <= 1900 && typeof this.getTerrainColliderHit === 'function') {
+      const terrainHit = this.getTerrainColliderHit(planePos.x, planePos.y, planePos.z, 6.0);
+      if (terrainHit) {
+        if (currentKmh > 55) {
+          this.triggerExplosion(`${terrainHit.collider.name} 정면 충돌 폭발`);
+          return;
+        } else {
+          this.applyNoseDent();
+          this.speed = -0.15;
+          const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
+          this.planeGroup.position.addScaledVector(backward, 4.0);
+          return;
+        }
+      }
+    }
+
+    // 2) 공항/도심 건물 충돌 검사 (최고층 엘시티 411m 이상이면 스킵)
+    if (planePos.y > 450) return;
 
     // 비행기 중심 기준 충돌 스피어
     const planeSphere = new THREE.Sphere(planePos, 8.0);
@@ -1271,8 +1290,6 @@
     for (let i = 0; i < this.obstacles.length; i++) {
       const obs = this.obstacles[i];
       if (obs.box.intersectsSphere(planeSphere)) {
-        const currentKmh = this.speed * 280;
-
         if (currentKmh > 55) {
           // 시속 55km 이상 고속 격돌: 대폭발!
           this.triggerExplosion(`${obs.name} 건물 정면 충돌 폭발`);

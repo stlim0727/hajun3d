@@ -16,24 +16,38 @@
     this.scene.add(this.hemiLight);
 
     this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
-    this.sunLight.position.set(500, 900, 400);
+    this.sunLightOffset = new THREE.Vector3(500, 900, 400);
+    this.sunLight.position.copy(this.sunLightOffset);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 1024;
     this.sunLight.shadow.mapSize.height = 1024;
     this.sunLight.shadow.camera.near = 10;
-    this.sunLight.shadow.camera.far = 5000;
-    const d = 900;
+    this.sunLight.shadow.camera.far = 3200;
+    const d = 420;
     this.sunLight.shadow.camera.left = -d;
     this.sunLight.shadow.camera.right = d;
     this.sunLight.shadow.camera.top = d;
     this.sunLight.shadow.camera.bottom = -d;
     this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
+    this.scene.add(this.sunLight.target);
 
     // 야간 달빛 (Soft Moonlight for Night Flying)
     this.moonLight = new THREE.DirectionalLight(0x93c5fd, 0.0);
     this.moonLight.position.set(-600, 950, -450);
     this.scene.add(this.moonLight);
+  },
+
+  updateSunShadowTarget() {
+    if (!this.sunLight || !this.planeGroup) return;
+    const frustumSize = 840;
+    const texelSize = frustumSize / 1024;
+    const px = Math.round(this.planeGroup.position.x / texelSize) * texelSize;
+    const pz = Math.round(this.planeGroup.position.z / texelSize) * texelSize;
+    this.sunLight.target.position.set(px, 0, pz);
+    const offset = this.sunLightOffset || { x: 500, y: 900, z: 400 };
+    this.sunLight.position.set(px + offset.x, offset.y, pz + offset.z);
+    this.sunLight.target.updateMatrixWorld();
   },
 
   // ----------------------------------------------------------------
@@ -106,26 +120,38 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
 
-    // 물결 패턴 & 포말 (Wave foam lines)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
-    ctx.lineWidth = 2.0;
+    // 물결 패턴 & 포말 (Wave foam lines + fine surface ripples for low-altitude optical flow)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+    ctx.lineWidth = 1.6;
     ctx.lineCap = 'round';
 
-    for (let y = 12; y < 512; y += 24) {
+    for (let y = 8; y < 512; y += 16) {
+      ctx.beginPath();
+      for (let x = 0; x < 512; x += 24) {
+        const offset = Math.sin((x + y) * 0.08) * 5;
+        ctx.bezierCurveTo(x + 8, y + offset, x + 16, y - offset, x + 24, y + offset * 0.5);
+      }
+      ctx.stroke();
+    }
+
+    // 미세 해수면 음영 리플 (Subtle dark troughs for depth)
+    ctx.strokeStyle = 'rgba(3, 105, 161, 0.38)';
+    ctx.lineWidth = 1.2;
+    for (let y = 16; y < 512; y += 20) {
       ctx.beginPath();
       for (let x = 0; x < 512; x += 32) {
-        const offset = Math.sin((x + y) * 0.06) * 7;
-        ctx.bezierCurveTo(x + 10, y + offset, x + 22, y - offset, x + 32, y + offset * 0.5);
+        const offset = Math.cos((x - y) * 0.07) * 4;
+        ctx.lineTo(x + 16, y + offset);
       }
       ctx.stroke();
     }
 
     // 미세 백색 포말 물보라 점들
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    for (let i = 0; i < 280; i++) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    for (let i = 0; i < 420; i++) {
       const px = Math.random() * 512;
       const py = Math.random() * 512;
-      const pr = 0.8 + Math.random() * 1.8;
+      const pr = 0.7 + Math.random() * 1.6;
       ctx.beginPath();
       ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
@@ -134,7 +160,47 @@
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(160, 160);
+    tex.repeat.set(1200, 1200); // 100m x 100m 타일로 저고도 수면 속도감 극대화
+    tex.anisotropy = 4;
+    return tex;
+  },
+
+  createTerrainCanvasTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#245a30';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 자연스러운 초원/농지/지형 패치 (Optical flow patches for low-altitude terrain feel)
+    const patchColors = [
+      'rgba(22, 101, 52, 0.38)',
+      'rgba(45, 106, 79, 0.35)',
+      'rgba(74, 124, 68, 0.28)',
+      'rgba(30, 70, 40, 0.35)'
+    ];
+    for (let i = 0; i < 90; i++) {
+      ctx.fillStyle = patchColors[i % patchColors.length];
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const w = 28 + Math.random() * 68;
+      const h = 24 + Math.random() * 64;
+      ctx.fillRect(x, y, w, h);
+    }
+
+    // 미세 지면 텍스처 그레인 (Ground grain)
+    for (let i = 0; i < 1600; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(134, 239, 172, 0.14)' : 'rgba(20, 45, 25, 0.2)';
+      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 2 + Math.random() * 2);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(500, 400); // ~100m x 100m 타일
+    tex.anisotropy = 4;
     return tex;
   },
 
@@ -224,6 +290,20 @@
       },
       {
         box: new THREE.Box3(
+          new THREE.Vector3(-103, 0, -28773),
+          new THREE.Vector3(-57, 310, -28727)
+        ),
+        name: '해운대 엘시티 레지던스 타워 A (310m)'
+      },
+      {
+        box: new THREE.Box3(
+          new THREE.Vector3(-303, 0, -28773),
+          new THREE.Vector3(-257, 310, -28727)
+        ),
+        name: '해운대 엘시티 레지던스 타워 B (310m)'
+      },
+      {
+        box: new THREE.Box3(
           new THREE.Vector3(340, 0, -27415),
           new THREE.Vector3(360, 120, -27385)
         ),
@@ -237,6 +317,18 @@
         name: '광안대교 서측 주탑'
       }
     ];
+    const marineCityX = [120, 220, 340, 460, 600, 750, 900, -420, -560, -720, -900];
+    marineCityX.forEach((cx, i) => {
+      const h = 150 + (i % 5) * 45;
+      const cz = -28800 - (i % 3) * 70;
+      this.obstacles.push({
+        box: new THREE.Box3(
+          new THREE.Vector3(cx - 21, 0, cz - 21),
+          new THREE.Vector3(cx + 21, h, cz + 21)
+        ),
+        name: `해운대 마린시티 마천루 #${i + 1} (${h}m)`
+      });
+    });
   },
 
   initPAPILights() {
@@ -351,6 +443,111 @@
     return geo;
   },
 
+  _getTerrainParams(variant, seed) {
+    const aspectX = variant === 'ridge' ? 1.32 : (variant === 'twin' ? 1.24 : (variant === 'massif' ? 1.15 : 1.0));
+    const aspectZ = variant === 'ridge' ? 0.74 : (variant === 'twin' ? 0.84 : 1.0);
+    const ridgeRot = (seed * 1.37) % Math.PI;
+    return {
+      aspectX,
+      aspectZ,
+      ridgeRot,
+      cosR: Math.cos(ridgeRot),
+      sinR: Math.sin(ridgeRot),
+      summitOffsetX: (this._terrainHash2D(1, 2, seed) - 0.5) * 0.22,
+      summitOffsetZ: (this._terrainHash2D(3, 4, seed) - 0.5) * 0.22,
+      spurCount: 3 + Math.floor(this._terrainHash2D(5, 6, seed) * 4),
+      spurPhase: this._terrainHash2D(7, 8, seed) * Math.PI * 2
+    };
+  },
+
+  _evalTerrainHeightNorm(lx, lz, t, theta, edgeNoise, variant, seed, isMountain, params) {
+    const { aspectX, aspectZ, spurCount, spurPhase } = params;
+    const distNorm = Math.min(1.0, Math.hypot(lx / aspectX, lz / aspectZ));
+    let baseProfile = 0;
+
+    if (variant === 'twin') {
+      const d1 = Math.hypot((lx - 0.30) / 0.72, lz / 0.85);
+      const d2 = Math.hypot((lx + 0.34) / 0.76, (lz - 0.08) / 0.88);
+      const p1 = Math.max(0, 1 - d1);
+      const p2 = Math.max(0, 1 - d2) * 0.82;
+      const saddle = Math.max(p1, p2) + 0.22 * Math.min(p1, p2);
+      baseProfile = Math.pow(Math.min(1, saddle), 1.2) * (1 - Math.pow(t, 3.2));
+    } else if (variant === 'massif') {
+      baseProfile = Math.pow(Math.max(0, 1 - distNorm * distNorm), 0.85);
+      baseProfile += 0.045 * Math.sin(baseProfile * Math.PI * 5.0) * (1 - t);
+    } else if (variant === 'ridge') {
+      const spineDist = Math.abs(lz / aspectZ);
+      const alongSpine = Math.abs(lx / aspectX);
+      const spineProfile = Math.max(0, 1 - spineDist * 1.15) * Math.max(0, 1 - alongSpine * 0.82);
+      baseProfile = Math.pow(spineProfile, 1.15) * (1 - Math.pow(t, 3.5));
+    } else if (variant === 'volcanic') {
+      baseProfile = Math.pow(Math.max(0, 1 - t), 1.25);
+      if (t < 0.14) {
+        const crater = (0.14 - t) / 0.14;
+        baseProfile -= 0.07 * crater * crater;
+      }
+    } else if (variant === 'rolling') {
+      baseProfile = 0.5 * (1 + Math.cos(Math.min(1, t) * Math.PI));
+      baseProfile = Math.pow(baseProfile, 0.85);
+    } else {
+      baseProfile = Math.pow(Math.max(0, 1 - t), 1.32);
+    }
+
+    const ridgeNoise = this._terrainRidgedFbm(lx * 2.6, lz * 2.6, seed + 11.7, 4);
+    const detailNoise = this._terrainFbm(lx * 5.2, lz * 5.2, seed + 23.4, 3);
+    const spurWave = 0.5 + 0.5 * Math.cos(theta * spurCount + spurPhase + edgeNoise * 1.6);
+
+    const envelope = Math.sin(Math.min(1, t) * Math.PI);
+    const upperEnvelope = (1 - t) * Math.pow(t, 0.35);
+
+    const ridgeAmp = isMountain ? 0.34 : 0.24;
+    const spurAmp = isMountain ? 0.14 : 0.10;
+    const detailAmp = isMountain ? 0.09 : 0.07;
+
+    let hNorm = baseProfile
+      + (ridgeNoise - 0.42) * ridgeAmp * (0.35 + 0.65 * envelope)
+      + (spurWave - 0.5) * spurAmp * upperEnvelope
+      + detailNoise * detailAmp * envelope;
+
+    const baseFade = t > 0.82 ? Math.max(0, 1 - (t - 0.82) / 0.18) : 1.0;
+    hNorm = Math.max(0, hNorm * baseFade);
+
+    return { hNorm, ridgeNoise, detailNoise };
+  },
+
+  getTerrainColliderHit(worldX, worldY, worldZ, clearance = 6.0) {
+    if (!this.terrainColliders || this.terrainColliders.length === 0) return null;
+    for (let i = 0; i < this.terrainColliders.length; i++) {
+      const c = this.terrainColliders[i];
+      if (worldY - clearance > c.baseY + c.height) continue;
+      const dx = worldX - c.x;
+      const dz = worldZ - c.z;
+      if (dx * dx + dz * dz > c.maxRadiusSq) continue;
+
+      const p = c.params;
+      const ndx = dx / c.radius;
+      const ndz = dz / c.radius;
+      const lx = ndx * p.cosR + ndz * p.sinR;
+      const lz = -ndx * p.sinR + ndz * p.cosR;
+      const u = lx / p.aspectX;
+      const v = lz / p.aspectZ;
+      const rScaled = Math.hypot(u, v);
+      if (rScaled >= 1.2) continue;
+
+      const theta = Math.atan2(v, u);
+      const edgeNoise = this._terrainFbm(Math.cos(theta) * 2.1, Math.sin(theta) * 2.1, c.seed + 5.1, 3);
+      const t = rScaled / (1.0 + 0.18 * edgeNoise * Math.pow(Math.min(1, rScaled), 0.65));
+      if (t >= 1.0) continue;
+
+      const { hNorm } = this._evalTerrainHeightNorm(lx, lz, t, theta, edgeNoise, c.variant, c.seed, c.isMountain, p);
+      const terrainY = c.baseY + hNorm * c.height;
+      if (worldY - clearance <= terrainY) {
+        return { collider: c, terrainY };
+      }
+    }
+    return null;
+  },
+
   createProceduralTerrainGeometry({
     radius,
     height,
@@ -366,15 +563,8 @@
     const colors = new Float32Array(vertexCount * 3);
     const indices = [];
 
-    const aspectX = variant === 'ridge' ? 1.32 : (variant === 'twin' ? 1.24 : (variant === 'massif' ? 1.15 : 1.0));
-    const aspectZ = variant === 'ridge' ? 0.74 : (variant === 'twin' ? 0.84 : 1.0);
-    const ridgeRot = (seed * 1.37) % Math.PI;
-    const cosR = Math.cos(ridgeRot);
-    const sinR = Math.sin(ridgeRot);
-    const summitOffsetX = (this._terrainHash2D(1, 2, seed) - 0.5) * 0.22;
-    const summitOffsetZ = (this._terrainHash2D(3, 4, seed) - 0.5) * 0.22;
-    const spurCount = 3 + Math.floor(this._terrainHash2D(5, 6, seed) * 4);
-    const spurPhase = this._terrainHash2D(7, 8, seed) * Math.PI * 2;
+    const params = this._getTerrainParams(variant, seed);
+    const { aspectX, aspectZ, cosR, sinR, summitOffsetX, summitOffsetZ } = params;
 
     const evalPoint = (t, theta) => {
       const cosT = Math.cos(theta);
@@ -396,60 +586,9 @@
       const wx = (lx * cosR - lz * sinR) * radius;
       const wz = (lx * sinR + lz * cosR) * radius;
 
-      // Base elevation profile by archetype
-      const distNorm = Math.min(1.0, Math.hypot(lx / aspectX, lz / aspectZ));
-      let baseProfile = 0;
-
-      if (variant === 'twin') {
-        const d1 = Math.hypot((lx - 0.30) / 0.72, lz / 0.85);
-        const d2 = Math.hypot((lx + 0.34) / 0.76, (lz - 0.08) / 0.88);
-        const p1 = Math.max(0, 1 - d1);
-        const p2 = Math.max(0, 1 - d2) * 0.82;
-        const saddle = Math.max(p1, p2) + 0.22 * Math.min(p1, p2);
-        baseProfile = Math.pow(Math.min(1, saddle), 1.2) * (1 - Math.pow(t, 3.2));
-      } else if (variant === 'massif') {
-        baseProfile = Math.pow(Math.max(0, 1 - distNorm * distNorm), 0.85);
-        // Subtle geological terraces
-        baseProfile += 0.045 * Math.sin(baseProfile * Math.PI * 5.0) * (1 - t);
-      } else if (variant === 'ridge') {
-        const spineDist = Math.abs(lz / aspectZ);
-        const alongSpine = Math.abs(lx / aspectX);
-        const spineProfile = Math.max(0, 1 - spineDist * 1.15) * Math.max(0, 1 - alongSpine * 0.82);
-        baseProfile = Math.pow(spineProfile, 1.15) * (1 - Math.pow(t, 3.5));
-      } else if (variant === 'volcanic') {
-        baseProfile = Math.pow(Math.max(0, 1 - t), 1.25);
-        if (t < 0.14) {
-          const crater = (0.14 - t) / 0.14;
-          baseProfile -= 0.07 * crater * crater;
-        }
-      } else if (variant === 'rolling') {
-        baseProfile = 0.5 * (1 + Math.cos(Math.min(1, t) * Math.PI));
-        baseProfile = Math.pow(baseProfile, 0.85);
-      } else {
-        // 'alpine' sharp peak
-        baseProfile = Math.pow(Math.max(0, 1 - t), 1.32);
-      }
-
-      // Ridged multifractal + radiating buttress spurs
-      const ridgeNoise = this._terrainRidgedFbm(lx * 2.6, lz * 2.6, seed + 11.7, 4);
-      const detailNoise = this._terrainFbm(lx * 5.2, lz * 5.2, seed + 23.4, 3);
-      const spurWave = 0.5 + 0.5 * Math.cos(theta * spurCount + spurPhase + edgeNoise * 1.6);
-
-      const envelope = Math.sin(Math.min(1, t) * Math.PI); // 0 at apex & base, peak mid-slope
-      const upperEnvelope = (1 - t) * Math.pow(t, 0.35);
-
-      const ridgeAmp = isMountain ? 0.34 : 0.24;
-      const spurAmp = isMountain ? 0.14 : 0.10;
-      const detailAmp = isMountain ? 0.09 : 0.07;
-
-      let hNorm = baseProfile
-        + (ridgeNoise - 0.42) * ridgeAmp * (0.35 + 0.65 * envelope)
-        + (spurWave - 0.5) * spurAmp * upperEnvelope
-        + detailNoise * detailAmp * envelope;
-
-      // Smoothly clamp base perimeter to y = 0
-      const baseFade = t > 0.82 ? Math.max(0, 1 - (t - 0.82) / 0.18) : 1.0;
-      hNorm = Math.max(0, hNorm * baseFade);
+      const { hNorm, ridgeNoise, detailNoise } = this._evalTerrainHeightNorm(
+        lx, lz, t, theta, edgeNoise, variant, seed, isMountain, params
+      );
 
       const wy = hNorm * height;
       return { x: wx, y: wy, z: wz, hNorm, ridgeNoise, detailNoise };
@@ -558,8 +697,10 @@
     // 1-B. 거대한 대륙 육지 (Continental Mainland: Z = -28000 ~ -68000, 상단 표면 정확히 Y = 0.0)
     // 폭 50km x 길이 40km, 두께 8m, 중심 Y = -4.0 -> 상단면 Y = 0.0 (공항 바닥 Y = 2.0과 2.0m 완벽한 단차로 Z-Fighting 원천 차단!)
     const continentGeo = new THREE.BoxGeometry(50000, 8.0, 40000);
+    this.continentTexture = this.createTerrainCanvasTexture();
     const continentMat = new THREE.MeshStandardMaterial({
-      color: 0x245a30,
+      color: 0xffffff,
+      map: this.continentTexture,
       roughness: 0.88,
       metalness: 0.1
     });
@@ -583,6 +724,7 @@
     this.scene.add(coast);
 
     // 2. 해상 섬 군락 (Islands along 45km flight path - 속도 체감 시각적 이정표)
+    this.terrainColliders = [];
     this.islandsGroup = new THREE.Group();
     const sandMat = new THREE.MeshLambertMaterial({ color: 0xfde047 });
     const grassMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
@@ -609,13 +751,15 @@
       island.add(beach);
 
       // 고폴리곤 다형성 녹색 중앙 언덕
+      const hillRadius = isl.r * 0.82;
+      const hillSeed = islSeed + 13.7;
       const hillGeo = this.createProceduralTerrainGeometry({
-        radius: isl.r * 0.82,
+        radius: hillRadius,
         height: isl.h,
         radialSegments: 32,
         heightRings: 12,
         variant: isl.variant,
-        seed: islSeed + 13.7,
+        seed: hillSeed,
         isMountain: false,
         hasSnow: false
       });
@@ -624,6 +768,21 @@
       hill.castShadow = true;
       hill.receiveShadow = true;
       island.add(hill);
+
+      const hillMaxR = hillRadius * 1.6;
+      this.terrainColliders.push({
+        x: isl.x,
+        z: isl.z,
+        baseY: 1.6,
+        radius: hillRadius,
+        maxRadiusSq: hillMaxR * hillMaxR,
+        height: isl.h,
+        variant: isl.variant,
+        seed: hillSeed,
+        isMountain: false,
+        params: this._getTerrainParams(isl.variant, hillSeed),
+        name: `해상 섬 언덕 #${idx + 1}`
+      });
 
       // 야자수 몇 그루
       for (let p = 0; p < 5; p++) {
@@ -736,8 +895,22 @@
       });
       const mesh = new THREE.Mesh(geo, mountainMat);
       mesh.position.set(m.x, -20, m.z);
-      mesh.rotation.y = (idx * 1.17) % (Math.PI * 2);
       this.mountainsGroup.add(mesh);
+
+      const mMaxR = m.r * 1.6;
+      this.terrainColliders.push({
+        x: m.x,
+        z: m.z,
+        baseY: -20,
+        radius: m.r,
+        maxRadiusSq: mMaxR * mMaxR,
+        height: m.h,
+        variant: m.variant,
+        seed: mSeed,
+        isMountain: true,
+        params: this._getTerrainParams(m.variant, mSeed),
+        name: `대륙 산악 지형 (${Math.round(m.h)}m)`
+      });
     });
     this.scene.add(this.mountainsGroup);
 
