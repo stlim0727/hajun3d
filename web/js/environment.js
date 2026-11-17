@@ -224,6 +224,20 @@
       },
       {
         box: new THREE.Box3(
+          new THREE.Vector3(-103, 0, -28773),
+          new THREE.Vector3(-57, 310, -28727)
+        ),
+        name: '해운대 엘시티 레지던스 타워 A (310m)'
+      },
+      {
+        box: new THREE.Box3(
+          new THREE.Vector3(-303, 0, -28773),
+          new THREE.Vector3(-257, 310, -28727)
+        ),
+        name: '해운대 엘시티 레지던스 타워 B (310m)'
+      },
+      {
+        box: new THREE.Box3(
           new THREE.Vector3(340, 0, -27415),
           new THREE.Vector3(360, 120, -27385)
         ),
@@ -237,6 +251,18 @@
         name: '광안대교 서측 주탑'
       }
     ];
+    const marineCityX = [120, 220, 340, 460, 600, 750, 900, -420, -560, -720, -900];
+    marineCityX.forEach((cx, i) => {
+      const h = 150 + (i % 5) * 45;
+      const cz = -28800 - (i % 3) * 70;
+      this.obstacles.push({
+        box: new THREE.Box3(
+          new THREE.Vector3(cx - 21, 0, cz - 21),
+          new THREE.Vector3(cx + 21, h, cz + 21)
+        ),
+        name: `해운대 마린시티 마천루 #${i + 1} (${h}m)`
+      });
+    });
   },
 
   initPAPILights() {

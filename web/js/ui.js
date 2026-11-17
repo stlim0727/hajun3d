@@ -540,7 +540,7 @@
     const speedPercent = Math.min(100, Math.round((kmh / 800) * 100));
     this.speedBar.style.width = `${speedPercent}%`;
 
-    const altitude = Math.max(0, Math.round((this.planeGroup.position.y - this.groundY) * 10));
+    const altitude = Math.max(0, Math.round(this.planeGroup.position.y - this.groundY));
     const altFt = Math.round(altitude * 3.28084);
     this.altVal.textContent = this.isOnGround ? `0 m (0 ft) [지상]` : `${altitude} m (${altFt} ft) [QNH]`;
     const altPercent = Math.min(100, Math.round((altitude / 2500) * 100));
@@ -548,12 +548,12 @@
 
     // 2. 수직 승강계 (VSI) 갱신
     if (this.vsiVal) {
-      const vsi = (this.verticalSpeed * 10).toFixed(1);
-      const vsiFpm = Math.round(this.verticalSpeed * 10 * 196.85);
+      const vsi = this.verticalSpeed.toFixed(1);
+      const vsiFpm = Math.round(this.verticalSpeed * 196.85);
       this.vsiVal.textContent = (this.verticalSpeed >= 0 ? '+' : '') + vsi + ' m/s (' + (vsiFpm >= 0 ? '+' : '') + vsiFpm + ' fpm)';
-      if (this.verticalSpeed < -0.8) {
+      if (this.verticalSpeed < -8) {
         this.vsiVal.style.color = '#ef4444'; // 위험 강하
-      } else if (this.verticalSpeed < -0.5) {
+      } else if (this.verticalSpeed < -5) {
         this.vsiVal.style.color = '#f59e0b'; // 주의 강하
       } else {
         this.vsiVal.style.color = '#38bdf8'; // 정상

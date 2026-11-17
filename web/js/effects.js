@@ -720,7 +720,7 @@
 
     // 충돌 직전 속도와 강하율로 정밀 사고 강도 및 피해자 분석
     const impactKmh = Math.max(35, Math.round(this.speed * 280));
-    const sinkRate = Math.abs(this.verticalSpeed * 10);
+    const sinkRate = Math.abs(this.verticalSpeed);
     const report = this.analyzeCrashSeverity(cause, impactKmh, sinkRate);
 
     this.hullIntegrity = 0;
@@ -773,7 +773,7 @@
 
     // 충돌 직전 속도와 강하율로 정밀 사고 강도 및 피해자 분석
     const impactKmh = Math.max(35, Math.round(this.speed * 280));
-    const sinkRate = Math.abs(this.verticalSpeed * 10);
+    const sinkRate = Math.abs(this.verticalSpeed);
     const report = this.analyzeCrashSeverity(cause, impactKmh, sinkRate);
 
     this.hullIntegrity = 0;
@@ -1021,9 +1021,9 @@
   checkObstacleCollisions() {
     if (this.isDestroyed || !this.planeGroup) return;
 
-    // 비행기 고도가 40m 이상이면 지상 건물 충돌 검사 스킵 (CPU 부하 0)
+    // 비행기 고도가 최고층 마천루(해운대 엘시티 411m) 이상이면 지상 건물 충돌 검사 스킵 (CPU 부하 0)
     const planePos = this.planeGroup.position;
-    if (planePos.y > 40) return;
+    if (planePos.y > 450) return;
 
     this.collisionFrameCount = (this.collisionFrameCount || 0) + 1;
     if (this.collisionFrameCount % 2 !== 0) return; // 2프레임에 1회 검사

@@ -441,7 +441,7 @@
 
     const simPos = new THREE.Vector3(
       pos.x,
-      groundOffset + (pos.y - (this.groundY || 6.84)) * 10.0,
+      groundOffset + (pos.y - (this.groundY || 6.84)),
       pos.z
     );
     const simVel = this.velocity ? this.velocity.clone() : new THREE.Vector3();
@@ -555,7 +555,7 @@
   },
 
   buildFlight3dEnvironment() {
-    const seaSimY = -((this.groundY || 6.84) - 0.8) * 10.0;
+    const seaSimY = -((this.groundY || 6.84) - 0.8);
     const isOverAirportFn = typeof this.isOverAirport === 'function'
       ? (sx, sz) => this.isOverAirport(sx, sz)
       : () => true;
@@ -694,7 +694,7 @@
     if (this.planeGroup) {
       this.planeGroup.position.set(
         result.position.x,
-        (this.groundY || 6.84) + (result.position.y - groundOffset) / 10.0,
+        (this.groundY || 6.84) + (result.position.y - groundOffset),
         result.position.z
       );
       this.planeGroup.quaternion.copy(result.quaternion);
@@ -708,7 +708,7 @@
     this.groundSpeed = Math.hypot(result.linearVelocity.x, result.linearVelocity.z);
     const iasMs = (tel.iasKnots || 0) / 1.94384;
     this.speed = iasMs / 77.777;
-    this.verticalSpeed = result.linearVelocity.y / 10.0;
+    this.verticalSpeed = result.linearVelocity.y;
     this.n1 = tel.engine1?.n1 ?? (20.0 + (this.throttle || 0) * 80.0);
     this.aoa = core.aero.alpha;
     this.alpha = core.aero.alpha;
@@ -818,7 +818,7 @@
     // Smooth Touchdown Jolt
     cs.touchJoltOffset *= Math.max(0.0, 1.0 - safeDt * 6.0);
     if (this.isOnGround && !cs.wasOnGround) {
-      const sinkRate = Math.abs((this.verticalSpeed || 0) * 10);
+      const sinkRate = Math.abs(this.verticalSpeed || 0);
       const severity = Math.min(1.2, Math.max(0.35, sinkRate / 3.5));
       cs.touchJoltOffset = -0.055 * severity;
     }
@@ -1092,8 +1092,8 @@
       return;
     }
 
-    const radioAlt = Math.max(0, (this.planeGroup.position.y - this.groundY) * 10); // 미터 단위 대지 고도
-    const sinkRate = -this.verticalSpeed * 10; // m/s 수직 하강 속도
+    const radioAlt = Math.max(0, this.planeGroup.position.y - this.groundY); // 미터 단위 대지 고도
+    const sinkRate = -(this.verticalSpeed || 0); // m/s 수직 하강 속도
 
     // 1. 실속 (STALL) 경보: 최우선 경보
     if (this.isStalling) {
@@ -1184,7 +1184,7 @@
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
     const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
     const bankTilt = THREE.MathUtils.clamp(localRight.y, -1, 1);
-    const radioAlt = Math.max(0, (this.planeGroup.position.y - this.groundY) * 10); // 미터 단위 고도
+    const radioAlt = Math.max(0, this.planeGroup.position.y - this.groundY); // 미터 단위 고도
 
     let motionType = null;
 
@@ -1216,10 +1216,10 @@
           motionType = 'STALL_PANIC';
         } else if (this.screenShake > 0.14) {
           motionType = 'TURBULENCE_SHAKE';
-        } else if (forward.y > 0.38 || this.verticalSpeed > 1.8) {
+        } else if (forward.y > 0.38 || this.verticalSpeed > 18) {
           // 급상승 (기수 각도 > +22도)
           motionType = 'STEEP_CLIMB';
-        } else if (forward.y < -0.32 || this.verticalSpeed < -1.8) {
+        } else if (forward.y < -0.32 || this.verticalSpeed < -18) {
           // 급강하 (기수 각도 < -18도)
           motionType = 'STEEP_DIVE';
         } else if (Math.abs(bankTilt) > 0.52) {
