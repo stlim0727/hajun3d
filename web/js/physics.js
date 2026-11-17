@@ -204,11 +204,21 @@
       }
     });
 
+    if (this.glbMixer && this.glbGearAction) {
+      const dur = this.glbGearDuration || 1.0;
+      this.glbGearAction.time = isExtending ? (1.0 - progress) * dur : progress * dur;
+      this.glbMixer.update(0);
+    }
+
     // 시퀀스 완료 처리
     if (progress >= 1.0) {
       if (isExtending) {
         this.gearPhase = 'DOWN';
         this.gearExtended = true;
+        if (this.glbMixer && this.glbGearAction) {
+          this.glbGearAction.time = 0;
+          this.glbMixer.update(0);
+        }
         this.landingGears.forEach(gear => {
           const u = gear.userData;
           if (u) {
@@ -227,6 +237,10 @@
       } else {
         this.gearPhase = 'UP';
         this.gearExtended = false;
+        if (this.glbMixer && this.glbGearAction) {
+          this.glbGearAction.time = this.glbGearDuration || 1.0;
+          this.glbMixer.update(0);
+        }
         this.landingGears.forEach(gear => {
           const u = gear.userData;
           if (u) {
@@ -340,6 +354,34 @@
         steerWheel,
         0.24
       );
+    }
+
+    // 4. GLB 가동 파츠 (러더, 플랩, 3발 터보팬 블레이드 회전)
+    if (this.glbMovingParts) {
+      if (this.glbMovingParts.rudder) {
+        const baseY = this.glbMovingParts.rudder.userData.baseRotY || 0;
+        this.glbMovingParts.rudder.rotation.y = THREE.MathUtils.lerp(
+          this.glbMovingParts.rudder.rotation.y,
+          baseY + targetRudder,
+          0.22
+        );
+      }
+      if (this.glbMovingParts.flaps && this.glbMovingParts.flaps.length > 0) {
+        const flapAngles = [0, 0.16, 0.34, 0.56];
+        const targetFlap = flapAngles[this.flapIndex || 0] || 0;
+        for (let i = 0; i < this.glbMovingParts.flaps.length; i++) {
+          const flap = this.glbMovingParts.flaps[i];
+          const baseX = flap.userData.baseRotX || 0;
+          flap.rotation.x = THREE.MathUtils.lerp(flap.rotation.x, baseX + targetFlap, 0.12);
+        }
+      }
+      if (this.glbMovingParts.fans && this.glbMovingParts.fans.length > 0) {
+        const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
+        const fanDelta = rpmRatio * 30.0 * (dt || 0.016);
+        for (let i = 0; i < this.glbMovingParts.fans.length; i++) {
+          this.glbMovingParts.fans[i].rotation.z += fanDelta;
+        }
+      }
     }
   },
 

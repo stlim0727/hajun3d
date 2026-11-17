@@ -100,7 +100,7 @@
       if (this.glbBuffers && this.glbBuffers[key]) {
         try {
           this.glbLoader.parse(this.glbBuffers[key], '', (gltf) => {
-            onMount(gltf.scene, this.glbBuffers[key]);
+            onMount(gltf.scene, this.glbBuffers[key], gltf.animations);
             this.updateGLBStatusUI();
           });
           return;
@@ -121,7 +121,7 @@
             this.glbBuffers = this.glbBuffers || {};
             this.glbBuffers[key] = buf;
             this.glbLoader.parse(buf, '', (gltf) => {
-              onMount(gltf.scene, buf);
+              onMount(gltf.scene, buf, gltf.animations);
               this.updateGLBStatusUI();
             });
           })
@@ -132,8 +132,8 @@
 
     // 1. 비행기 로드 (현재 기종 또는 기본 A320)
     const planeName = this.currentPlaneType || 'a320';
-    parseAndMountGLB(planeName, [`models/${planeName}.glb`, `assets/models/${planeName}.glb`, 'models/airplane.glb'], (scene, buf) => {
-      this.applyGLBScene(scene, `${planeName}.glb`);
+    parseAndMountGLB(planeName, [`models/${planeName}.glb`, `assets/models/${planeName}.glb`, 'models/airplane.glb'], (scene, buf, animations) => {
+      this.applyGLBScene(scene, `${planeName}.glb`, animations);
       this.glbPlaneBuffer = buf;
     });
 
@@ -237,7 +237,7 @@
           if (targetType === 'background') {
             this.applyGLBBackground(gltf.scene, fileName);
           } else {
-            this.applyGLBScene(gltf.scene, fileName);
+            this.applyGLBScene(gltf.scene, fileName, gltf.animations);
           }
         },
         (error) => {
@@ -257,12 +257,20 @@
     }
   },
 
-  applyGLBScene(scene, fileName) {
+  applyGLBScene(scene, fileName, animations) {
     if (!scene) return;
     if (!this.planeGroup) {
       this.planeGroup = new THREE.Group();
       this.scene.add(this.planeGroup);
     }
+
+    if (this.glbMixer) {
+      this.glbMixer.stopAllAction();
+      this.glbMixer = null;
+    }
+    this.glbGearAction = null;
+    this.glbGearDuration = 0;
+    this.glbMovingParts = { fans: [], rudder: null, flaps: [] };
 
     // 기존 비행기 자식 오브젝트 정리
     while (this.planeGroup.children.length > 0) {
@@ -285,6 +293,17 @@
     scene.rotation.set(0, 0, 0);
 
     scene.traverse((node) => {
+      if (node.name) {
+        if (/^Fan Blades/i.test(node.name)) {
+          this.glbMovingParts.fans.push(node);
+        } else if (/^Rudder/i.test(node.name)) {
+          node.userData.baseRotY = node.rotation.y;
+          this.glbMovingParts.rudder = node;
+        } else if (/^Flaps (Inner|Outer)/i.test(node.name)) {
+          node.userData.baseRotX = node.rotation.x;
+          this.glbMovingParts.flaps.push(node);
+        }
+      }
       if (node.isMesh) {
         node.castShadow = true;
         node.receiveShadow = true;
@@ -295,6 +314,16 @@
         }
       }
     });
+
+    if (animations && animations.length > 0 && typeof THREE.AnimationMixer !== 'undefined') {
+      this.glbMixer = new THREE.AnimationMixer(scene);
+      this.glbGearAction = this.glbMixer.clipAction(animations[0]);
+      this.glbGearDuration = animations[0].duration || 1.0;
+      this.glbGearAction.play();
+      this.glbGearAction.paused = true;
+      this.glbGearAction.time = (this.gearExtended === false) ? this.glbGearDuration : 0;
+      this.glbMixer.update(0);
+    }
 
     this.customGLBModel = scene;
     this.planeGroup.add(scene);
