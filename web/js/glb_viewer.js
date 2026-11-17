@@ -645,6 +645,7 @@
               m.wireframe = this.wireframe;
               if (m.transparent) {
                 m.depthWrite = true;
+                m.side = THREE.FrontSide;
               }
               if (m.transmission > 0) {
                 m.transmission = 0;
