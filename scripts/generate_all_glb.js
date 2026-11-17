@@ -1121,108 +1121,150 @@ function generateAmphibian() {
   const b = new GLBBuilder();
   const m = setupCommonMaterials(b);
 
-  // Boat-hull fuselage with V-shaped keel
+  // Canadair CL-215 authentic firefighting livery (Yellow / Red / Black)
+  const mYellow = b.addMaterial('CL215Yellow', { color: [0.98, 0.80, 0.08, 1.0], roughness: 0.28, metallic: 0.12 });
+  const mRed = b.addMaterial('CL215Red', { color: [0.88, 0.14, 0.12, 1.0], roughness: 0.28, metallic: 0.12 });
+  const mBlack = b.addMaterial('CL215Black', { color: [0.08, 0.09, 0.11, 1.0], roughness: 0.42, metallic: 0.35 });
+
+  // 1. Boat-hull fuselage with V-shaped keel (Nose = -Z, Tail = +Z, ~19.8m)
   const profiles = [
-    { z: -14.0, rx: 0.01, ry: 0.01, cy: 0.5 },
-    { z: -12.5, rx: 1.2, ry: 1.4, cy: 0.3 },
-    { z: -8.0,  rx: 1.8, ry: 1.9, cy: 0.0 }, // Stepped hydro hull
-    { z:  0.0,  rx: 1.8, ry: 1.9, cy: -0.1 },
-    { z:  6.0,  rx: 1.7, ry: 1.7, cy: 0.2 }, // Step break
-    { z: 12.0,  rx: 1.1, ry: 1.2, cy: 0.6 },
-    { z: 15.5,  rx: 0.01, ry: 0.01, cy: 0.9 }
+    { z: -9.9, rx: 0.01, ry: 0.01, cy: -0.25 },
+    { z: -9.4, rx: 0.65, ry: 0.62, cy: -0.15 },
+    { z: -8.2, rx: 1.15, ry: 1.05, cy: 0.05 },
+    { z: -6.5, rx: 1.32, ry: 1.38, cy: 0.28 },
+    { z: -3.5, rx: 1.38, ry: 1.45, cy: 0.30 },
+    { z:  0.5, rx: 1.38, ry: 1.45, cy: 0.25 },
+    { z:  4.5, rx: 1.10, ry: 1.18, cy: 0.48 },
+    { z:  8.5, rx: 0.48, ry: 0.72, cy: 0.82 },
+    { z:  9.9, rx: 0.08, ry: 0.25, cy: 0.95 }
   ];
-  const fuselageGeo = createLoftFuselage(profiles, 20);
-  const keelGeo = createBox(0.4, 0.6, 16.0, 0, -1.8, -1.0);
-  const boatBody = mergeGeometries([fuselageGeo, keelGeo]);
+  const fuselageGeo = createLoftFuselage(profiles, 22);
+  const keelGeo = createBox(0.32, 0.35, 11.5, 0, -1.15, -2.5);
+  const cockpitRoof = createBox(1.98, 0.45, 1.4, 0, 1.45, -5.65);
+  const boatBody = mergeGeometries([fuselageGeo, keelGeo, cockpitRoof]);
 
-  const fuselageMesh = b.addMesh('Amphibian_Fuselage_Mesh', [{
-    positions: boatBody.positions,
-    indices: boatBody.indices,
-    normals: boatBody.normals,
-    materialIndex: m.whiteFuselage
-  }]);
+  const sideStripeL = createBox(0.08, 0.24, 13.5, -1.36, 0.15, -0.8);
+  const sideStripeR = createBox(0.08, 0.24, 13.5, 1.36, 0.15, -0.8);
+  const noseStripe = createBox(1.9, 0.20, 2.2, 0, 0.12, -8.2);
+  const stripeGeo = mergeGeometries([sideStripeL, sideStripeR, noseStripe]);
 
-  // High mounted wing
-  const leftWing = createSweptWing({
-    rootX: -1.2, rootY: 1.7, rootZ: -1.0,
-    span: 14.5, rootChord: 4.8, tipChord: 2.2,
-    sweepBack: 1.8, dihedralY: 0.5, thickness: 0.45,
-    isLeft: true
-  });
-  const rightWing = createSweptWing({
-    rootX: 1.2, rootY: 1.7, rootZ: -1.0,
-    span: 14.5, rootChord: 4.8, tipChord: 2.2,
-    sweepBack: 1.8, dihedralY: 0.5, thickness: 0.45,
-    isLeft: false
-  });
-  const wingsGeo = mergeGeometries([leftWing, rightWing]);
+  const antiGlareTop = createBox(1.18, 0.32, 1.85, 0, 0.72, -7.75);
+  const antiGlareNose = createBox(0.76, 0.26, 1.15, 0, 0.38, -8.80);
+  const antiGlareGeo = mergeGeometries([antiGlareTop, antiGlareNose]);
 
-  // Dual Seaplane Pontoons / Outrigger Floats on wingtips
-  const floatL = createCylinder(0.55, 0.45, 4.6, 14, -12.5, -0.6, -0.5, 'z');
-  const strutL = createBox(0.15, 2.1, 0.25, -12.5, 0.5, -0.5);
-  const floatR = createCylinder(0.55, 0.45, 4.6, 14, 12.5, -0.6, -0.5, 'z');
-  const strutR = createBox(0.15, 2.1, 0.25, 12.5, 0.5, -0.5);
-  const floatsGeo = mergeGeometries([floatL, strutL, floatR, strutR]);
+  const windshieldGeo = createBox(1.92, 0.76, 1.50, 0, 1.24, -6.55);
 
-  const wingsMesh = b.addMesh('Amphibian_Wings_Mesh', [
-    {
-      positions: wingsGeo.positions,
-      indices: wingsGeo.indices,
-      normals: wingsGeo.normals,
-      materialIndex: m.airlineBlue
-    },
-    {
-      positions: floatsGeo.positions,
-      indices: floatsGeo.indices,
-      normals: floatsGeo.normals,
-      materialIndex: m.whiteFuselage
-    }
+  const fuselageMesh = b.addMesh('CL215_Fuselage_Mesh', [
+    { positions: boatBody.positions, indices: boatBody.indices, normals: boatBody.normals, materialIndex: mYellow },
+    { positions: stripeGeo.positions, indices: stripeGeo.indices, normals: stripeGeo.normals, materialIndex: mRed },
+    { positions: antiGlareGeo.positions, indices: antiGlareGeo.indices, normals: antiGlareGeo.normals, materialIndex: mBlack },
+    { positions: windshieldGeo.positions, indices: windshieldGeo.indices, normals: windshieldGeo.normals, materialIndex: m.cockpitGlass }
   ]);
 
-  // Twin Wing-Mounted Turboprops
-  const engL = createCylinder(0.75, 0.65, 3.2, 16, -4.8, 2.0, -1.8, 'z');
-  const engR = createCylinder(0.75, 0.65, 3.2, 16, 4.8, 2.0, -1.8, 'z');
-  const propL = createBox(0.15, 3.6, 0.15, -4.8, 2.0, -3.5);
-  const propR = createBox(0.15, 3.6, 0.15, 4.8, 2.0, -3.5);
+  // 2. High-mounted straight wings (28.6m span) with red wingtips & outrigger floats
+  const leftInner = createSweptWing({
+    rootX: -1.0, rootY: 1.65, rootZ: -1.4,
+    span: 10.7, rootChord: 3.6, tipChord: 3.3,
+    sweepBack: 0.2, dihedralY: 0.3, thickness: 0.42, isLeft: true
+  });
+  const rightInner = createSweptWing({
+    rootX: 1.0, rootY: 1.65, rootZ: -1.4,
+    span: 10.7, rootChord: 3.6, tipChord: 3.3,
+    sweepBack: 0.2, dihedralY: 0.3, thickness: 0.42, isLeft: false
+  });
+  const floatL = createCylinder(0.42, 0.32, 3.6, 14, -12.6, 0.05, -1.0, 'z');
+  const strutL = createBox(0.14, 1.85, 0.35, -12.6, 1.0, -1.0);
+  const floatR = createCylinder(0.42, 0.32, 3.6, 14, 12.6, 0.05, -1.0, 'z');
+  const strutR = createBox(0.14, 1.85, 0.35, 12.6, 1.0, -1.0);
+  const yellowWingsGeo = mergeGeometries([leftInner, rightInner, floatL, strutL, floatR, strutR]);
 
-  const enginesGeo = mergeGeometries([engL, engR]);
-  const propsGeo = mergeGeometries([propL, propR]);
+  const leftTip = createSweptWing({
+    rootX: -11.7, rootY: 1.95, rootZ: -1.2,
+    span: 2.6, rootChord: 3.3, tipChord: 2.7,
+    sweepBack: 0.15, dihedralY: 0.08, thickness: 0.34, isLeft: true
+  });
+  const rightTip = createSweptWing({
+    rootX: 11.7, rootY: 1.95, rootZ: -1.2,
+    span: 2.6, rootChord: 3.3, tipChord: 2.7,
+    sweepBack: 0.15, dihedralY: 0.08, thickness: 0.34, isLeft: false
+  });
+  const floatCapL = createCylinder(0.12, 0.42, 0.8, 14, -12.6, 0.05, -3.1, 'z');
+  const floatCapR = createCylinder(0.12, 0.42, 0.8, 14, 12.6, 0.05, -3.1, 'z');
+  const redWingsGeo = mergeGeometries([leftTip, rightTip, floatCapL, floatCapR]);
 
-  const enginesMesh = b.addMesh('Amphibian_Engines_Mesh', [
-    {
-      positions: enginesGeo.positions,
-      indices: enginesGeo.indices,
-      normals: enginesGeo.normals,
-      materialIndex: m.engineChrome
-    },
-    {
-      positions: propsGeo.positions,
-      indices: propsGeo.indices,
-      normals: propsGeo.normals,
-      materialIndex: m.goldTrim
-    }
+  const wingsMesh = b.addMesh('CL215_Wings_Mesh', [
+    { positions: yellowWingsGeo.positions, indices: yellowWingsGeo.indices, normals: yellowWingsGeo.normals, materialIndex: mYellow },
+    { positions: redWingsGeo.positions, indices: redWingsGeo.indices, normals: redWingsGeo.normals, materialIndex: mRed }
   ]);
 
-  // Tail Fin & High Stabilizers
-  const tailFin = createBox(0.35, 4.8, 4.2, 0, 3.6, 12.5);
-  const hStab = createBox(7.8, 0.25, 2.2, 0, 5.5, 13.0);
-  const tailGeo = mergeGeometries([tailFin, hStab]);
+  // 3. Twin R-2800 radial piston engines (black nacelles, red cowlings/spinners, 3-blade props)
+  const engL = createCylinder(0.68, 0.42, 4.6, 16, -3.65, 1.82, -1.7, 'z');
+  const engR = createCylinder(0.68, 0.42, 4.6, 16, 3.65, 1.82, -1.7, 'z');
+  const propL1 = createBox(0.14, 3.3, 0.06, -3.65, 1.82, -4.65);
+  const propL2 = createBox(2.9, 0.14, 0.06, -3.65, 1.82, -4.65);
+  const propR1 = createBox(0.14, 3.3, 0.06, 3.65, 1.82, -4.65);
+  const propR2 = createBox(2.9, 0.14, 0.06, 3.65, 1.82, -4.65);
+  const blackEngGeo = mergeGeometries([engL, engR, propL1, propL2, propR1, propR2]);
 
-  const tailMesh = b.addMesh('Amphibian_Tail_Mesh', [{
-    positions: tailGeo.positions,
-    indices: tailGeo.indices,
-    normals: tailGeo.normals,
-    materialIndex: m.airlineBlue
-  }]);
+  const cowlL = createCylinder(0.62, 0.70, 0.75, 16, -3.65, 1.82, -4.25, 'z');
+  const cowlR = createCylinder(0.62, 0.70, 0.75, 16, 3.65, 1.82, -4.25, 'z');
+  const spinL = createCylinder(0.08, 0.32, 0.55, 14, -3.65, 1.82, -4.85, 'z');
+  const spinR = createCylinder(0.08, 0.32, 0.55, 14, 3.65, 1.82, -4.85, 'z');
+  const redEngGeo = mergeGeometries([cowlL, cowlR, spinL, spinR]);
+
+  const enginesMesh = b.addMesh('CL215_Engines_Mesh', [
+    { positions: blackEngGeo.positions, indices: blackEngGeo.indices, normals: blackEngGeo.normals, materialIndex: mBlack },
+    { positions: redEngGeo.positions, indices: redEngGeo.indices, normals: redEngGeo.normals, materialIndex: mRed }
+  ]);
+
+  // 4. Cruciform tail (yellow vertical fin + red mid-fin horizontal stabilizers)
+  const tailFinLower = createBox(0.34, 2.8, 3.4, 0, 2.3, 8.2);
+  const tailFinUpper = createBox(0.28, 2.4, 2.4, 0, 4.4, 8.7);
+  const yellowTailGeo = mergeGeometries([tailFinLower, tailFinUpper]);
+
+  const tailTipCap = createBox(0.26, 0.45, 2.1, 0, 5.7, 8.8);
+  const hStabL = createSweptWing({
+    rootX: -0.15, rootY: 3.25, rootZ: 7.7,
+    span: 5.2, rootChord: 2.1, tipChord: 1.4,
+    sweepBack: 0.35, dihedralY: 0.0, thickness: 0.22, isLeft: true
+  });
+  const hStabR = createSweptWing({
+    rootX: 0.15, rootY: 3.25, rootZ: 7.7,
+    span: 5.2, rootChord: 2.1, tipChord: 1.4,
+    sweepBack: 0.35, dihedralY: 0.0, thickness: 0.22, isLeft: false
+  });
+  const redTailGeo = mergeGeometries([tailTipCap, hStabL, hStabR]);
+
+  const tailMesh = b.addMesh('CL215_Tail_Mesh', [
+    { positions: yellowTailGeo.positions, indices: yellowTailGeo.indices, normals: yellowTailGeo.normals, materialIndex: mYellow },
+    { positions: redTailGeo.positions, indices: redTailGeo.indices, normals: redTailGeo.normals, materialIndex: mRed }
+  ]);
+
+  // 5. Retractable tricycle landing gear
+  const noseStrut = createBox(0.14, 0.9, 0.14, 0, -1.25, -7.2);
+  const mainStrutL = createBox(0.16, 1.3, 0.18, -2.05, -0.75, -0.6);
+  const mainStrutR = createBox(0.16, 1.3, 0.18, 2.05, -0.75, -0.6);
+  const strutsGeo = mergeGeometries([noseStrut, mainStrutL, mainStrutR]);
+
+  const noseWheel = createCylinder(0.32, 0.32, 0.24, 14, 0, -1.65, -7.2, 'x');
+  const mainWheelL = createCylinder(0.52, 0.52, 0.36, 16, -2.25, -1.55, -0.6, 'x');
+  const mainWheelR = createCylinder(0.52, 0.52, 0.36, 16, 2.25, -1.55, -0.6, 'x');
+  const wheelsGeo = mergeGeometries([noseWheel, mainWheelL, mainWheelR]);
+
+  const gearMesh = b.addMesh('CL215_Gear_Mesh', [
+    { positions: strutsGeo.positions, indices: strutsGeo.indices, normals: strutsGeo.normals, materialIndex: m.engineChrome },
+    { positions: wheelsGeo.positions, indices: wheelsGeo.indices, normals: wheelsGeo.normals, materialIndex: mBlack }
+  ]);
 
   const nF = b.addNode({ name: 'BoatFuselage', meshIndex: fuselageMesh });
   const nW = b.addNode({ name: 'HighWings', meshIndex: wingsMesh });
-  const nE = b.addNode({ name: 'Turboprops', meshIndex: enginesMesh });
+  const nE = b.addNode({ name: 'RadialEngines', meshIndex: enginesMesh });
   const nT = b.addNode({ name: 'TailSection', meshIndex: tailMesh });
+  const nG = b.addNode({ name: 'LandingGear', meshIndex: gearMesh });
 
   const root = b.addNode({
-    name: 'Amphibian_Seaplane_Root',
-    children: [nF, nW, nE, nT]
+    name: 'Canadair_CL215_Root',
+    children: [nF, nW, nE, nT, nG]
   });
 
   return b.buildGLBBuffer([root]);
@@ -1928,7 +1970,11 @@ function run() {
     { name: 'world_environment.glb', gen: generateWorldEnvironment }       // All-in-one World Environment
   ];
 
+  const onlyArg = process.argv.find(a => a.startsWith('--only='));
+  const onlyTarget = onlyArg ? onlyArg.slice('--only='.length) : null;
+
   for (const m of models) {
+    if (onlyTarget && m.name !== onlyTarget) continue;
     console.log(`🔨 Compiling ${m.name}...`);
     const glbBuffer = m.gen();
 
