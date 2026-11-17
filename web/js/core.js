@@ -17,6 +17,34 @@ class AirplaneGame {
     this.startTime = 0;
     this.isPlaying = false;
     this.cameraMode = '3rd';
+    this.cameraState = {
+      chaseYaw: 0,
+      chasePitch: 0,
+      chasePos: new THREE.Vector3(),
+      chaseTarget: new THREE.Vector3(),
+      chaseTargetInitialized: false,
+      lookYaw: 0,
+      lookPitch: -0.06,
+      headGForceOffset: 0,
+      touchJoltOffset: 0,
+      wasOnGround: true,
+      wingLookYaw: 0,
+      wingLookPitch: 0,
+      gearLookYaw: 0,
+      gearLookPitch: 0,
+      droneOrbitAngle: 1.8,
+      droneOrbitSpeed: 0.28,
+      dronePitch: 0.28,
+      dronePos: new THREE.Vector3(),
+      droneInitialized: false,
+      flybyPos: new THREE.Vector3(),
+      flybySet: false,
+      flybyRegime: null,
+      isDraggingLook: false,
+      dragPointerId: null,
+      dragLastX: 0,
+      dragLastY: 0
+    };
     this.soundEnabled = true;
 
     // 기체 내구도 및 파손 상태 (Damage System)

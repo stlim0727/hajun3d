@@ -748,36 +748,320 @@
     }
   },
 
+  ensureCameraState() {
+    if (!this.cameraState) {
+      this.cameraState = {
+        chaseYaw: 0,
+        chasePitch: 0,
+        chasePos: new THREE.Vector3(),
+        chaseTarget: new THREE.Vector3(),
+        chaseTargetInitialized: false,
+        lookYaw: 0,
+        lookPitch: -0.06,
+        headGForceOffset: 0,
+        touchJoltOffset: 0,
+        wasOnGround: true,
+        wingLookYaw: 0,
+        wingLookPitch: 0,
+        gearLookYaw: 0,
+        gearLookPitch: 0,
+        droneOrbitAngle: 1.8,
+        droneOrbitSpeed: 0.28,
+        dronePitch: 0.28,
+        dronePos: new THREE.Vector3(),
+        droneInitialized: false,
+        flybyPos: new THREE.Vector3(),
+        flybySet: false,
+        flybyRegime: null,
+        isDraggingLook: false,
+        dragPointerId: null,
+        dragLastX: 0,
+        dragLastY: 0
+      };
+    }
+    return this.cameraState;
+  },
+
   updateCameraFromPhysics(currentKmh, dt) {
     if (!this.camera || !this.planeGroup) return;
-    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 120) / 720));
+    const cs = this.ensureCameraState();
+    const safeDt = Math.max(0, Math.min(0.1, dt || 0.016));
+    const planePos = this.planeGroup.position;
+    const planeQuat = this.planeGroup.quaternion;
+    this.planeGroup.updateMatrixWorld();
 
-    const baseFov = this.cameraMode === '3rd' ? 60 : 64;
-    const fovBoost = this.cameraMode === '3rd' ? 18 : 22;
-    const targetFov = baseFov + speedRatio * fovBoost;
+    // Carry translation immediately so damped exterior cameras don't lag behind
+    if (cs.chaseTargetInitialized) {
+      const delta = planePos.clone().sub(cs.chaseTarget);
+      if (cs.droneInitialized) cs.dronePos.add(delta);
+      if (cs.flybySet && cs.flybyRegime === 'parked') cs.flybyPos.add(delta);
+      cs.chasePos.add(delta);
+    }
+    cs.chaseTarget.copy(planePos);
+    cs.chaseTargetInitialized = true;
+
+    // Smooth Touchdown Jolt
+    cs.touchJoltOffset *= Math.max(0.0, 1.0 - safeDt * 6.0);
+    if (this.isOnGround && !cs.wasOnGround) {
+      const sinkRate = Math.abs((this.verticalSpeed || 0) * 10);
+      const severity = Math.min(1.2, Math.max(0.35, sinkRate / 3.5));
+      cs.touchJoltOffset = -0.055 * severity;
+    }
+    cs.wasOnGround = Boolean(this.isOnGround);
+
+    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 120) / 720));
+    let targetFov = 60 + speedRatio * 18;
+    if (this.cameraMode === '1st' || this.cameraMode === 'hud') {
+      targetFov = 64 + speedRatio * 20;
+    } else if (this.cameraMode === 'wing') {
+      targetFov = 58 + speedRatio * 10;
+    } else if (this.cameraMode === 'tower') {
+      const towerPos = planePos.z < -22500
+        ? new THREE.Vector3(-395, 110, -45850)
+        : new THREE.Vector3(-360, 144, -488);
+      const dist = towerPos.distanceTo(planePos);
+      // Telephoto zoom as aircraft moves away from tower
+      targetFov = THREE.MathUtils.clamp(60 - (dist - 300) * 0.025, 24, 60);
+    } else if (this.cameraMode === 'flyby') {
+      targetFov = 54 + speedRatio * 10;
+    }
+
     if (Math.abs(this.camera.fov - targetFov) > 0.06) {
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 0.08);
       this.camera.updateProjectionMatrix();
     }
 
-    if (this.cameraMode === '3rd') {
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      const camDistZ = 42.0 + speedRatio * 7.5;
-      const camHeight = 9.5 + speedRatio * 1.5;
-      const camOffset = new THREE.Vector3(0, camHeight, camDistZ).applyQuaternion(this.planeGroup.quaternion);
-      const targetCamPos = this.planeGroup.position.clone().add(camOffset);
-      this.camera.position.lerp(targetCamPos, 0.13);
-      const lookTarget = this.planeGroup.position.clone().add(forward.clone().multiplyScalar(40));
-      this.camera.lookAt(lookTarget);
-    } else {
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      const cockpitOffset = new THREE.Vector3(0, 2.05, -14.2).applyQuaternion(this.planeGroup.quaternion);
-      this.camera.position.copy(this.planeGroup.position).add(cockpitOffset);
-      const lookTarget = this.planeGroup.position.clone().add(forward.clone().multiplyScalar(100));
-      this.camera.lookAt(lookTarget);
+    const isAncestor = this.currentPlaneType === 'ancestor';
+    const groundFloor = 3.5;
+
+    switch (this.cameraMode) {
+      case '1st': {
+        // 1인칭 조종석 시점 (G-Force Head Dynamics + Stall Buffet + Look-Around)
+        const gForce = this.isOnGround ? 1.0 : (this.currentG || 1.0);
+        const targetGOffset = THREE.MathUtils.clamp(-(gForce - 1.0) * 0.015, -0.025, 0.025);
+        cs.headGForceOffset += (targetGOffset - cs.headGForceOffset) * Math.min(1.0, safeDt * 4.0);
+
+        let buffetX = 0;
+        let buffetY = 0;
+        if (this.isStalling && !this.isOnGround) {
+          const t = performance.now() * 0.03;
+          const severity = this.buffetVibration || 0.5;
+          buffetX = (Math.sin(t * 1.7) + Math.cos(t * 3.1)) * 0.015 * severity;
+          buffetY = (Math.cos(t * 2.3) + Math.sin(t * 4.2)) * 0.015 * severity;
+        }
+
+        const eyeLocal = isAncestor
+          ? new THREE.Vector3(0, 0.9, -2.8)
+          : new THREE.Vector3(0, 2.05, -14.2);
+        eyeLocal.y += cs.headGForceOffset + buffetY + cs.touchJoltOffset;
+        eyeLocal.x += buffetX;
+
+        const eyeWorld = eyeLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        this.camera.position.copy(eyeWorld);
+
+        const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
+        this.camera.up.copy(upWorld);
+
+        const forwardLocal = new THREE.Vector3(0, 0, -100);
+        forwardLocal.applyAxisAngle(new THREE.Vector3(1, 0, 0), cs.lookPitch);
+        forwardLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), cs.lookYaw);
+        const forwardWorld = forwardLocal.applyQuaternion(planeQuat);
+        this.camera.lookAt(eyeWorld.clone().add(forwardWorld));
+        break;
+      }
+
+      case 'wing': {
+        // 승객 창가 날개 시점 (Overlooking Left Wing & Engine)
+        const winLocal = isAncestor
+          ? new THREE.Vector3(-1.2, 0.7, 1.0)
+          : new THREE.Vector3(-2.1, 1.35, 3.5);
+        const eyeWorld = winLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        this.camera.position.copy(eyeWorld);
+
+        const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
+        this.camera.up.copy(upWorld);
+
+        const lookLocal = new THREE.Vector3(-16.0, -0.8, -3.5);
+        lookLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), cs.wingLookYaw);
+        lookLocal.applyAxisAngle(new THREE.Vector3(1, 0, 0), cs.wingLookPitch);
+        const lookWorld = eyeWorld.clone().add(lookLocal.applyQuaternion(planeQuat));
+        this.camera.lookAt(lookWorld);
+        break;
+      }
+
+      case 'drone': {
+        // 드론 360° 오빗 시점 (Continuous Circular Orbit)
+        if (!cs.isDraggingLook) {
+          cs.droneOrbitAngle += cs.droneOrbitSpeed * safeDt;
+        }
+        const droneDist = isAncestor ? 20.0 : 38.0;
+        const droneHeight = (isAncestor ? 6.0 : 12.0) * Math.sin(cs.dronePitch * 1.8 + 0.5);
+        const hoverBob = Math.sin(cs.droneOrbitAngle * 2.2) * 0.55;
+        const targetX = planePos.x + Math.sin(cs.droneOrbitAngle) * droneDist;
+        const targetZ = planePos.z + Math.cos(cs.droneOrbitAngle) * droneDist;
+        const targetY = Math.max(groundFloor, planePos.y + droneHeight + hoverBob);
+        const targetPos = new THREE.Vector3(targetX, targetY, targetZ);
+
+        if (!cs.droneInitialized) {
+          cs.dronePos.copy(targetPos);
+          cs.droneInitialized = true;
+        } else {
+          cs.dronePos.lerp(targetPos, 1 - Math.exp(-safeDt * 8.5));
+        }
+        this.camera.position.copy(cs.dronePos);
+        this.camera.up.set(0, 1, 0);
+        this.camera.lookAt(planePos.clone().add(new THREE.Vector3(0, 1.5, 0)));
+        break;
+      }
+
+      case 'flyby': {
+        // 시네마틱 플라이바이 시점 (Parked / Rollout / Airborne)
+        const onGround = Boolean(this.isOnGround);
+        const groundSpd = this.groundSpeed || 0;
+        let currentRegime = 'airborne';
+        if (onGround) {
+          if (cs.flybyRegime === 'rollout') {
+            currentRegime = groundSpd < 9.0 ? 'parked' : 'rollout';
+          } else {
+            currentRegime = groundSpd >= 12.0 ? 'rollout' : 'parked';
+          }
+        }
+        if (cs.flybyRegime !== currentRegime) {
+          cs.flybyRegime = currentRegime;
+          cs.flybySet = false;
+        }
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(planeQuat);
+        forward.y = 0;
+        if (forward.lengthSq() > 0.0001) forward.normalize();
+        else forward.set(0, 0, -1);
+        const right = new THREE.Vector3(-forward.z, 0, forward.x);
+
+        if (currentRegime === 'parked') {
+          const targetPos = new THREE.Vector3(
+            planePos.x + forward.x * 45.0 + right.x * 11.0,
+            Math.max(groundFloor + 1.5, planePos.y - 0.5),
+            planePos.z + forward.z * 45.0 + right.z * 11.0
+          );
+          if (!cs.flybySet || cs.flybyPos.distanceTo(targetPos) > 75.0) {
+            cs.flybyPos.copy(targetPos);
+            cs.flybySet = true;
+          } else {
+            cs.flybyPos.lerp(targetPos, 1 - Math.exp(-safeDt * 6.0));
+          }
+        } else if (currentRegime === 'rollout') {
+          if (!cs.flybySet) {
+            cs.flybyPos.set(
+              planePos.x + forward.x * 120.0 + right.x * 22.0,
+              groundFloor + 1.5,
+              planePos.z + forward.z * 120.0 + right.z * 22.0
+            );
+            cs.flybySet = true;
+          }
+          const toPlane = planePos.clone().sub(cs.flybyPos);
+          if (cs.flybyPos.distanceTo(planePos) > 180 && forward.dot(toPlane) > 0) {
+            cs.flybySet = false;
+          }
+        } else {
+          if (!cs.flybySet) {
+            cs.flybyPos.set(
+              planePos.x + forward.x * 220.0 + right.x * 28.0,
+              Math.max(groundFloor + 2.5, planePos.y - 8.0),
+              planePos.z + forward.z * 220.0 + right.z * 28.0
+            );
+            cs.flybySet = true;
+          }
+          if (cs.flybyPos.distanceTo(planePos) > 450) {
+            cs.flybySet = false;
+          }
+        }
+
+        cs.flybyPos.y = Math.max(groundFloor, cs.flybyPos.y);
+        this.camera.position.copy(cs.flybyPos);
+        this.camera.up.set(0, 1, 0);
+        this.camera.lookAt(planePos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+        break;
+      }
+
+      case 'tower': {
+        // 공항 관제탑 시점 (Departure ATC Tower vs Incheon ATC Tower)
+        const towerPos = planePos.z < -22500
+          ? new THREE.Vector3(-395, 110, -45850)
+          : new THREE.Vector3(-360, 144, -488);
+        this.camera.position.copy(towerPos);
+        this.camera.up.set(0, 1, 0);
+        this.camera.lookAt(planePos);
+        break;
+      }
+
+      case 'gear': {
+        // 동체 하부 랜딩기어 시점 (Belly Cam)
+        const eyeLocal = isAncestor
+          ? new THREE.Vector3(1.2, -0.9, 2.5)
+          : new THREE.Vector3(2.6, -2.5, 7.5);
+        const eyeWorld = eyeLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
+        if (Math.abs(cs.touchJoltOffset) > 0.0005) {
+          eyeWorld.addScaledVector(upWorld, cs.touchJoltOffset * 1.6);
+        }
+        eyeWorld.y = Math.max(2.6, eyeWorld.y);
+        this.camera.position.copy(eyeWorld);
+        this.camera.up.copy(upWorld);
+
+        const targetLocal = isAncestor
+          ? new THREE.Vector3(-0.2, -0.6, -1.0)
+          : new THREE.Vector3(-0.4, -2.0, -3.0);
+        targetLocal.x += cs.gearLookYaw * 3.0;
+        targetLocal.y += cs.gearLookPitch * 3.0;
+        const targetWorld = targetLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        this.camera.lookAt(targetWorld);
+        break;
+      }
+
+      case 'hud': {
+        // 순수 HUD 전방 시점 (Fixed Boresight)
+        const hudLocal = isAncestor
+          ? new THREE.Vector3(0, 0.9, -3.5)
+          : new THREE.Vector3(0, 2.15, -16.5);
+        this.camera.position.copy(hudLocal.applyMatrix4(this.planeGroup.matrixWorld));
+        this.camera.quaternion.copy(planeQuat);
+        this.camera.up.set(0, 1, 0).applyQuaternion(planeQuat);
+        break;
+      }
+
+      case '3rd':
+      default: {
+        // 3인칭 후방 추격 시점 (360° Orbit + Speed Lag + Ground Clamp)
+        const camDistZ = (isAncestor ? 18.0 : 42.0) + speedRatio * 7.5;
+        const camHeight = (isAncestor ? 4.5 : 9.5) + speedRatio * 1.5;
+        const clampedPitch = THREE.MathUtils.clamp(cs.chasePitch, -1.1, 1.0);
+
+        const behindLocal = new THREE.Vector3(0, camHeight, camDistZ);
+        behindLocal.applyAxisAngle(new THREE.Vector3(1, 0, 0), clampedPitch);
+        behindLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), cs.chaseYaw);
+
+        const targetCamPos = behindLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        targetCamPos.y = Math.max(groundFloor, targetCamPos.y);
+
+        if (cs.chasePos.lengthSq() < 0.001) {
+          cs.chasePos.copy(targetCamPos);
+        } else {
+          cs.chasePos.lerp(targetCamPos, 1 - Math.exp(-safeDt * 6.5));
+        }
+        cs.chasePos.y = Math.max(groundFloor, cs.chasePos.y);
+        this.camera.position.copy(cs.chasePos);
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(planeQuat);
+        const lookTarget = (Math.abs(cs.chaseYaw) > 0.05 || Math.abs(cs.chasePitch) > 0.05)
+          ? planePos.clone().add(new THREE.Vector3(0, 1.5, 0))
+          : planePos.clone().add(forward.multiplyScalar(40));
+        this.camera.up.set(0, 1, 0);
+        this.camera.lookAt(lookTarget);
+        break;
+      }
     }
 
-    if (currentKmh > 580) {
+    if (currentKmh > 580 && (this.cameraMode === '3rd' || this.cameraMode === '1st' || this.cameraMode === 'wing' || this.cameraMode === 'gear')) {
       const speedTurbulence = ((currentKmh - 580) / 320) * (this.cameraMode === '1st' ? 0.08 : 0.05);
       this.camera.position.x += (Math.random() - 0.5) * speedTurbulence;
       this.camera.position.y += (Math.random() - 0.5) * speedTurbulence;

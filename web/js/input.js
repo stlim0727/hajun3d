@@ -500,6 +500,9 @@
         case 'KeyC':
           this.toggleCamera();
           break;
+        case 'KeyV':
+          if (typeof this.resetCameraLook === 'function') this.resetCameraLook();
+          break;
         case 'KeyP':
           window.nextPlane();
           break;
@@ -577,6 +580,11 @@
         }
       }
     }, { passive: true });
+
+    // 마우스 / 터치 드래그 시점 회전 (3인칭 360° 오빗, 조종석/날개/기어 시선 이동, 더블클릭 시 중앙 복귀)
+    if (typeof this.setupCameraDragControls === 'function') {
+      this.setupCameraDragControls();
+    }
 
     // ----------------------------------------------------------------
     // 모바일 터치 비행 조종 시스템 (Virtual Stick, Throttle Quadrant, Rudder & Brakes)
@@ -1394,6 +1402,91 @@
         return `<span style="color:${color}; margin-right:8px;">축${i}${tag}: <strong>${valStr}</strong></span>`;
       });
       debugEl.innerHTML = axesStrs.join(' ');
+    }
+  },
+
+  setupCameraDragControls() {
+    const target = this.renderer?.domElement || this.container;
+    if (!target || target.__camDragBound) return;
+    target.__camDragBound = true;
+
+    const getState = () => (typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState);
+
+    target.addEventListener('pointerdown', (e) => {
+      if (!this.isPlaying || this.isDestroyed) return;
+      if (e.button !== 0 && e.button !== 2 && e.pointerType === 'mouse') return;
+      if (target !== this.container && e.target !== target) return;
+      const cs = getState();
+      if (!cs) return;
+      cs.isDraggingLook = true;
+      cs.dragPointerId = e.pointerId;
+      cs.dragLastX = e.clientX;
+      cs.dragLastY = e.clientY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      const cs = getState();
+      if (!cs || !cs.isDraggingLook || e.pointerId !== cs.dragPointerId) return;
+      const dx = e.clientX - cs.dragLastX;
+      const dy = e.clientY - cs.dragLastY;
+      cs.dragLastX = e.clientX;
+      cs.dragLastY = e.clientY;
+
+      const sens = 0.0055;
+      switch (this.cameraMode) {
+        case '3rd':
+          cs.chaseYaw -= dx * sens;
+          cs.chasePitch = Math.max(-1.1, Math.min(1.0, cs.chasePitch + dy * sens));
+          break;
+        case '1st':
+          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw - dx * sens * 0.8));
+          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch - dy * sens * 0.8));
+          break;
+        case 'wing':
+          cs.wingLookYaw = Math.max(-1.2, Math.min(1.2, cs.wingLookYaw - dx * sens * 0.75));
+          cs.wingLookPitch = Math.max(-0.7, Math.min(0.7, cs.wingLookPitch - dy * sens * 0.75));
+          break;
+        case 'drone':
+          cs.droneOrbitAngle -= dx * sens;
+          cs.dronePitch = Math.max(-0.2, Math.min(0.9, cs.dronePitch + dy * sens * 0.5));
+          break;
+        case 'gear':
+          cs.gearLookYaw = Math.max(-1.2, Math.min(1.2, cs.gearLookYaw + dx * sens * 0.75));
+          cs.gearLookPitch = Math.max(-0.8, Math.min(0.8, cs.gearLookPitch - dy * sens * 0.75));
+          break;
+      }
+    });
+
+    const endDrag = (e) => {
+      const cs = getState();
+      if (!cs || !cs.isDraggingLook || e.pointerId !== cs.dragPointerId) return;
+      cs.isDraggingLook = false;
+      cs.dragPointerId = null;
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+
+    target.addEventListener('dblclick', () => {
+      if (this.isPlaying && !this.isDestroyed) {
+        this.resetCameraLook();
+      }
+    });
+  },
+
+  resetCameraLook() {
+    const cs = typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState;
+    if (!cs) return;
+    cs.chaseYaw = 0;
+    cs.chasePitch = 0;
+    cs.lookYaw = 0;
+    cs.lookPitch = -0.06;
+    cs.wingLookYaw = 0;
+    cs.wingLookPitch = 0;
+    cs.gearLookYaw = 0;
+    cs.gearLookPitch = 0;
+    cs.dronePitch = 0.28;
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('🎯 카메라 시선 중앙 초기화 [단축키 V]');
     }
   }
 

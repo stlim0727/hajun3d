@@ -3630,3 +3630,85 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 .audio-start-hint[hidden] {
   display: none !important;
 }
+
+/* Camera Mode Selector Dropdown & Menu */
+.cam-control-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cam-menu-btn {
+  padding: 8px 8px !important;
+  min-width: 28px;
+  justify-content: center;
+  font-size: 12px !important;
+}
+
+.cam-mode-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 250px;
+  padding: 8px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 250;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.cam-mode-menu.hidden {
+  display: none;
+}
+
+.cam-mode-menu-header {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  margin-bottom: 2px;
+}
+
+.cam-mode-item {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cam-mode-item:hover {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #ffffff;
+}
+
+.cam-mode-item.active {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.cam-reset-item {
+  margin-top: 2px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0 0 8px 8px;
+  color: #bae6fd;
+  font-size: 12px;
+}
+
+.mobile-menu-item-btn.active {
+  border-color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.22) !important;
+}

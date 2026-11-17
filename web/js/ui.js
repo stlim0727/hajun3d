@@ -363,10 +363,63 @@
     this.startJetSound();
   },
 
+  getCameraModeDefs() {
+    return [
+      { id: '3rd', icon: '🎥', short: '3인칭', label: '3인칭 후방 시점 (Chase)' },
+      { id: '1st', icon: '🧑‍✈️', short: '1인칭', label: '1인칭 조종석 시점 (Cockpit)' },
+      { id: 'wing', icon: '🪽', short: '날개', label: '승객 창가 날개 시점 (Wing)' },
+      { id: 'drone', icon: '🛸', short: '드론', label: '드론 360° 오빗 시점 (Drone)' },
+      { id: 'flyby', icon: '🎬', short: '플라이바이', label: '시네마틱 플라이바이 (Flyby)' },
+      { id: 'tower', icon: '🗼', short: '관제탑', label: '공항 관제탑 시점 (Tower)' },
+      { id: 'gear', icon: '🛞', short: '랜딩기어', label: '동체 하부 랜딩기어 시점 (Gear)' },
+      { id: 'hud', icon: '🎯', short: 'HUD', label: '순수 HUD 전방 시점 (HUD)' }
+    ];
+  },
+
+  setCameraMode(mode) {
+    const defs = this.getCameraModeDefs();
+    const def = defs.find((d) => d.id === mode) || defs[0];
+    this.cameraMode = def.id;
+
+    const cs = typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState;
+    if (cs) {
+      cs.flybySet = false;
+      cs.flybyRegime = null;
+      cs.droneInitialized = false;
+      cs.chaseTargetInitialized = false;
+      if (def.id === '3rd') cs.chasePos.set(0, 0, 0);
+    }
+
+    if (this.camModeText) {
+      this.camModeText.textContent = def.short;
+    }
+    this.updateCameraModeUI();
+    this.showPopup(`${def.icon} ${def.label}`);
+  },
+
+  updateCameraModeUI() {
+    document.querySelectorAll('[data-cam-mode]').forEach((btn) => {
+      if (btn.dataset.camMode === this.cameraMode) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  },
+
+  toggleCameraMenu(forceClose = false) {
+    const menu = document.getElementById('cam-mode-menu');
+    if (!menu) return;
+    if (forceClose) {
+      menu.classList.add('hidden');
+      return;
+    }
+    menu.classList.toggle('hidden');
+    this.updateCameraModeUI();
+  },
+
   toggleCamera() {
-    this.cameraMode = this.cameraMode === '3rd' ? '1st' : '3rd';
-    this.camModeText.textContent = this.cameraMode === '3rd' ? '3인칭' : '1인칭';
-    this.showPopup(this.cameraMode === '3rd' ? '3인칭 후방 시점' : '1인칭 조종석 시점');
+    const defs = this.getCameraModeDefs();
+    const curIdx = defs.findIndex((d) => d.id === this.cameraMode);
+    const nextDef = defs[(curIdx + 1) % defs.length];
+    this.setCameraMode(nextDef.id);
   },
 
   showPopup(text) {

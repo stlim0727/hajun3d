@@ -179,6 +179,29 @@ window.toggleCamera = function() {
   }
 };
 
+window.setCameraMode = function(mode) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame) {
+    window.airplaneGame.setCameraMode(mode);
+    window.airplaneGame.toggleCameraMenu(true);
+  }
+};
+
+window.toggleCameraMenu = function() {
+  if (!debounceAction('toggleCameraMenu', 140)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame) {
+    window.airplaneGame.toggleCameraMenu();
+  }
+};
+
+window.resetCameraLook = function() {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.resetCameraLook === 'function') {
+    window.airplaneGame.resetCameraLook();
+  }
+};
+
 window.toggleGyroTilt = function() {
   if (!debounceAction('toggleGyroTilt', 200)) return;
   if (!window.airplaneGame) initGame();
