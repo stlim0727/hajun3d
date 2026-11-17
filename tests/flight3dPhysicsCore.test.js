@@ -349,3 +349,79 @@ test('survivable water ditching floats and decelerates at sea surface without pl
   assert.ok(game.planeGroup.position.y > -5.0, `Aircraft must remain near sea surface (got y=${game.planeGroup.position.y.toFixed(2)})`);
   assert.ok(game.groundSpeed < 75, `Hydrodynamic drag must decelerate aircraft (got ${game.groundSpeed.toFixed(2)} m/s)`);
 });
+
+test('amphibian floats without sinking on gentle water landing and crashes on excessive impact', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { THREE, AirplaneGame } = sandbox;
+
+  // 1. Gentle water landing: floats with zero flooding and can taxi/accelerate on water
+  let crashCalled = false;
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentPlaneType = 'amphibian';
+  game.groundY = 6.84;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 1.0, -10000),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.velocity = new THREE.Vector3(0, -2.0, -38);
+  game.throttle = 0.0;
+  game.n1 = 25;
+  game.flapIndex = 2;
+  game.gearExtended = true;
+  game.isOnGround = false;
+  game.score = 0;
+  game.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  game.isOverAirport = () => false;
+  game.showPopup = () => {};
+  game.checkFlightMovementReactions = () => {};
+  game.checkGPWS = () => {};
+  game.clearGPWS = () => {};
+  game.triggerWaterCrash = () => { crashCalled = true; };
+
+  for (let i = 0; i < 300; i++) {
+    game.updateFlightPhysics(1 / 60);
+  }
+
+  assert.equal(crashCalled, false, 'Normal amphibian water touchdown must not crash');
+  assert.equal(game._flight3dCore.waterDitching.flooding, 0, 'Amphibian hull must stay watertight (no flooding)');
+  assert.equal(game._flight3dCore.waterDitching.submerged, false, 'Amphibian must not sink');
+  assert.equal(game._flight3dCore.landingIncident, false, 'Amphibian water landing is not an emergency incident');
+
+  // Verify amphibian can accelerate on water with full throttle (accounting for 3.2s engine spool-up)
+  game.throttle = 1.0;
+  const speedBefore = game.groundSpeed;
+  for (let i = 0; i < 240; i++) {
+    game.updateFlightPhysics(1 / 60);
+  }
+  assert.ok(game.groundSpeed > speedBefore + 3, `Amphibian must accelerate on water under TOGA (before=${speedBefore.toFixed(1)}, after=${game.groundSpeed.toFixed(1)})`);
+
+  // 2. Catastrophic water impact for amphibian (e.g. high sink rate > 5.5 m/s)
+  let crashCause = null;
+  const crashGame = Object.create(AirplaneGame.prototype);
+  crashGame.currentPlaneType = 'amphibian';
+  crashGame.groundY = 6.84;
+  crashGame.planeGroup = {
+    position: new THREE.Vector3(0, 1.0, -10000),
+    quaternion: new THREE.Quaternion(),
+  };
+  crashGame.velocity = new THREE.Vector3(0, -10.0, -50);
+  crashGame.throttle = 0.3;
+  crashGame.n1 = 40;
+  crashGame.flapIndex = 0;
+  crashGame.gearExtended = true;
+  crashGame.isOnGround = false;
+  crashGame.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  crashGame.isOverAirport = () => false;
+  crashGame.showPopup = () => {};
+  crashGame.checkFlightMovementReactions = () => {};
+  crashGame.checkGPWS = () => {};
+  crashGame.clearGPWS = () => {};
+  crashGame.triggerWaterCrash = (cause) => { crashCause = cause; };
+
+  for (let i = 0; i < 60 && !crashCause; i++) {
+    crashGame.updateFlightPhysics(1 / 60);
+  }
+
+  assert.ok(crashCause, 'Steep/hard amphibian water impact must trigger waterCrash');
+  assert.equal(crashGame._flight3dCore.isCrashed, true, 'Amphibian core must enter isCrashed on fatal impact');
+});

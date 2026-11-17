@@ -405,6 +405,7 @@
       const stepPitchDeg = THREE.MathUtils.radToDeg(stepEuler.x);
       const stepRollDeg = THREE.MathUtils.radToDeg(-stepEuler.z);
   
+      const isAmphibious = Boolean(this.config?.isAmphibious);
       this._waterTerrainProxy.getHeight = getGroundHeight;
       this._waterTerrainProxy.getWaterLevel = getWaterLevel;
       const waterResult = this.waterDitching.update(
@@ -418,7 +419,8 @@
         gearResult.gearState,
         stepPitchDeg,
         stepRollDeg,
-        dynamics
+        dynamics,
+        isAmphibious
       );
       gearResult.waterDitching = this.waterDitching;
       gearResult.waterResult = waterResult;
@@ -433,24 +435,31 @@
           speedMs: this.linearVelocity.length(),
           pitchDeg: stepPitchDeg,
           rollDeg: stepRollDeg,
+          isAmphibious,
         });
       }
 
       if (waterResult.onWater && waterResult.ditchingContact) {
         if (!this.waterDitchingNoticed) {
           this.waterDitchingNoticed = true;
-          this.landingIncident = true;
-          this.engines.setThrottle(0.0);
-          events.push({ type: 'waterDitching' });
+          if (isAmphibious) {
+            events.push({ type: 'amphibianWaterTouchdown', sinkRate: waterResult.touchdownVsi });
+          } else {
+            this.landingIncident = true;
+            this.engines.setThrottle(0.0);
+            events.push({ type: 'waterDitching' });
+          }
         }
-        if (waterResult.ditchingPhase === 'sinking' && !this.waterSinkingNoticed) {
+        if (!isAmphibious && waterResult.ditchingPhase === 'sinking' && !this.waterSinkingNoticed) {
           this.waterSinkingNoticed = true;
           events.push({ type: 'waterSinking' });
         }
-        if (waterResult.submerged && !this.waterSubmergedNoticed) {
+        if (!isAmphibious && waterResult.submerged && !this.waterSubmergedNoticed) {
           this.waterSubmergedNoticed = true;
           events.push({ type: 'waterSubmerged' });
         }
+      } else if (isAmphibious && !waterResult.onWater && !waterResult.ditchingContact) {
+        this.waterDitchingNoticed = false;
       }
   
       if (gearResult.damageEvents.length || (gearResult.bodyContacts.length && !this.bodyContactStarted)) {

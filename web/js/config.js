@@ -335,6 +335,7 @@
     return {
       id: (type || 'a320').toUpperCase(),
       name: s.name,
+      isAmphibious: type === 'amphibian',
       massProperties: {
         emptyWeightKg: emptyWeight,
         maxTakeoffWeightKg: maxTakeoffWeight,
@@ -402,6 +403,17 @@
         isFixed: type === 'ancestor' || type === 'amphibian',
         cgGroundHeightM: type === 'ancestor' ? 1.65 : 3.5,
         gearTransitTimeSec: baseGear?.gearTransitTimeSec ?? 8.0,
+        bodySupportPoints: type === 'amphibian'
+          ? [
+              ['belly', [0, -1.8, -4.8], 1 / 3],
+              ['belly', [0, -1.8, 0.0], 1 / 3],
+              ['belly', [0, -1.6, 4.8], 1 / 3],
+              ['nose', [0, -1.5, -8.8], 1],
+              ['tail', [0, -0.8, 10.5], 1],
+              ['wingL', [-13.5, -1.0, 0.5], 1],
+              ['wingR', [13.5, -1.0, 0.5], 1],
+            ].map(([id, position, weight], index) => ({ id, key: `${id}:${index}`, position, weight }))
+          : undefined,
         contacts: [
           {
             id: 'nose',

@@ -24,6 +24,15 @@
     maxRollDeg: 16.0,     // deg - wingtip strike at speed cartwheels the airframe
     maxSpeedMs: 115.0,    // m/s (~225 kt) - excessive kinetic energy destroys hull on contact
   });
+
+  // Amphibious flying-boat hull survivability gates (e.g., Canadair CL-215)
+  const AMPHIBIAN_WATER_LIMITS = Object.freeze({
+    maxSinkRate: 5.5,     // m/s (~1,080 fpm) - V-bottom boat hull absorbs firmer wave contact
+    minPitchDeg: -5.0,    // deg - nose-down dive still plows bow and flips hull
+    maxPitchDeg: 22.0,    // deg - extreme tail-strike / stall attitude
+    maxRollDeg: 18.0,     // deg - wingtip float clears moderate bank; steep roll cartwheels
+    maxSpeedMs: 85.0,     // m/s (~165 kt) - excessive impact speed breaks hull
+  });
   
   /**
    * Continuous Hydrodynamic Water Ditching and Sinking System.
@@ -80,9 +89,10 @@
      * @param {number} pitchDeg Pitch angle in degrees
      * @param {number} rollDeg Roll angle in degrees
      * @param {Object} dynamics Optional mass and inertia overrides
+     * @param {boolean} isAmphibious True for watertight flying-boat / amphibious hulls
      * @returns {{ forces: THREE.Vector3, moments: THREE.Vector3, onWater: boolean, ditchingContact: boolean, flooding: number, ditchingPhase: string, sprayIntensity: number, submerged: boolean, catastrophic: boolean, contactPoints: Array<THREE.Vector3> }}
      */
-    update(dt, aircraftMesh, linearVelocity, angularVelocity, terrain, aero, bodySupportPoints, gearState = 0, pitchDeg = 0, rollDeg = 0, dynamics = null) {
+    update(dt, aircraftMesh, linearVelocity, angularVelocity, terrain, aero, bodySupportPoints, gearState = 0, pitchDeg = 0, rollDeg = 0, dynamics = null, isAmphibious = false) {
       scratchNetForce.set(0, 0, 0);
       scratchNetMoment.set(0, 0, 0);
       this.contactPoints = [];
@@ -129,6 +139,7 @@
       const points = bodySupportPoints || [];
       let submergedCount = 0;
       let maxDepth = 0;
+      let maxDepthAll = -Infinity;
       const submergedPoints = [];
   
       // CG world position
@@ -143,6 +154,7 @@
         const patchWaterLevel = terrain?.getWaterLevel?.(probeWorld.x, probeWorld.z) ?? waterLevel;
   
         const depth = patchWaterLevel - probeWorld.y;
+        maxDepthAll = Math.max(maxDepthAll, depth);
         if (depth > -0.05) {
           submergedCount++;
           maxDepth = Math.max(maxDepth, depth);
@@ -162,18 +174,26 @@
   
       this.submersion = maxDepth;
       this.onWater = submergedCount > 0;
+
+      // Re-arm water impact evaluation once clearly airborne again (e.g., amphibious water takeoff)
+      if (!this.onWater && this.ditchingContact && !this.catastrophic && maxDepthAll < -0.6) {
+        this.ditchingContact = false;
+        this.timeOnWater = 0.0;
+        this.sprayIntensity = 0.0;
+      }
   
       // Check ditching initiation
       const speedMs = linearVelocity.length();
       const sinkRate = -linearVelocity.y;
   
       if (this.onWater && !this.ditchingContact && !this.catastrophic) {
+        const limits = isAmphibious ? AMPHIBIAN_WATER_LIMITS : WATER_DITCHING_LIMITS;
         // Evaluate survivability upon initial water impact
-        const isFatal = sinkRate > WATER_DITCHING_LIMITS.maxSinkRate ||
-          pitchDeg < WATER_DITCHING_LIMITS.minPitchDeg ||
-          pitchDeg > WATER_DITCHING_LIMITS.maxPitchDeg ||
-          Math.abs(rollDeg) > WATER_DITCHING_LIMITS.maxRollDeg ||
-          speedMs > WATER_DITCHING_LIMITS.maxSpeedMs;
+        const isFatal = sinkRate > limits.maxSinkRate ||
+          pitchDeg < limits.minPitchDeg ||
+          pitchDeg > limits.maxPitchDeg ||
+          Math.abs(rollDeg) > limits.maxRollDeg ||
+          speedMs > limits.maxSpeedMs;
   
         if (isFatal) {
           this.catastrophic = true;
@@ -215,10 +235,9 @@
       this.timeOnWater += dt;
   
       // Progressive flooding evolution:
-      // Once planing speed drops below 25 m/s (~50 kt), hull begins continuously taking on water.
-      // Flooding takes ~20 to 25 seconds to reach 1.0.
+      // Watertight amphibious flying-boat hulls float indefinitely; landplanes take on water below 25 m/s.
       const horizSpeed = Math.hypot(linearVelocity.x, linearVelocity.z);
-      if (horizSpeed < 25.0) {
+      if (!isAmphibious && horizSpeed < 25.0) {
         const floodingRate = 0.045; // ~22.2s for complete flooding
         this.flooding = Math.min(1.0, this.flooding + dt * floodingRate);
       }
@@ -288,10 +307,14 @@
         let dragMag = 0;
         if (patchSpeed > 0.05 && depth > 0) {
           // Planing wave drag: scales with dynamic pressure (0.5 * rho * Cd * A * v^2)
-          // Plus friction drag proportional to buoyant load
+          // Plus friction drag proportional to buoyant load (stepped boat hull has low drag)
           const immersionRatio = THREE.MathUtils.clamp(depth / 1.5, 0.1, 1.0);
-          const dynamicPlaning = Math.min(mass * 9.80665 * 1.5 * weight, 0.5 * 1000.0 * 0.08 * immersionRatio * (patchSpeed * patchSpeed) * weight);
-          const frictionDrag = normalLoad * (0.35 + (gearState > 0.5 ? 0.25 : 0.0));
+          const waveCd = isAmphibious ? 0.005 : 0.08;
+          const dynamicPlaning = Math.min(mass * 9.80665 * 1.5 * weight, 0.5 * 1000.0 * waveCd * immersionRatio * (patchSpeed * patchSpeed) * weight);
+          const frictionCoeff = isAmphibious
+            ? (patchSpeed > 15.0 ? 0.025 : 0.06)
+            : (0.35 + (gearState > 0.5 ? 0.25 : 0.0));
+          const frictionDrag = normalLoad * frictionCoeff;
           dragMag = dynamicPlaning + frictionDrag;
   
           // Cap drag so individual timestep doesn't reverse velocity
@@ -348,5 +371,6 @@
   
 
   ns.WATER_DITCHING_LIMITS = WATER_DITCHING_LIMITS;
+  ns.AMPHIBIAN_WATER_LIMITS = AMPHIBIAN_WATER_LIMITS;
   ns.WaterDitching = WaterDitching;
 })(globalThis.Flight3dPhysics = globalThis.Flight3dPhysics || {});

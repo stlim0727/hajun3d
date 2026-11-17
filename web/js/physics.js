@@ -640,15 +640,27 @@
         }
       } else if (ev.type === 'waterCrash') {
         if (typeof this.clearGPWS === 'function') this.clearGPWS();
-        const cause = (ev.sinkRate || 0) > 4.5
+        const maxSink = ev.isAmphibious ? 5.5 : 4.5;
+        const maxSpeed = ev.isAmphibious ? 85 : 115;
+        const maxRoll = ev.isAmphibious ? 18 : 16;
+        const cause = (ev.sinkRate || 0) > maxSink
           ? '해상 과속 강하 격돌 추락'
-          : (ev.speedMs || 0) > 115
+          : (ev.speedMs || 0) > maxSpeed
             ? '해상 고속 격돌 추락'
-            : Math.abs(ev.rollDeg || 0) > 16
+            : Math.abs(ev.rollDeg || 0) > maxRoll
               ? '해상 주익 접촉 전복 추락'
               : '해상 기수 급강하 격돌 추락';
         if (typeof this.triggerWaterCrash === 'function') {
           this.triggerWaterCrash(cause);
+        }
+      } else if (ev.type === 'amphibianWaterTouchdown') {
+        if (typeof this.clearGPWS === 'function') this.clearGPWS();
+        this.flightPhase = 'TOUCHDOWN';
+        if (this.phaseDisplay) this.phaseDisplay.textContent = '수상 착수 완료 (수상 활주 / 이수 가능)';
+        this.showPopup('🌊 [수륙양용기 착수] 안정적인 수상 착수! 스로틀을 올리면 수면에서 다시 이륙할 수 있습니다.');
+        this.score += 1500;
+        if (typeof this.checkEmergencyLandingSuccess === 'function') {
+          this.checkEmergencyLandingSuccess('amphibian_water');
         }
       } else if (ev.type === 'waterDitching') {
         this.isWaterLanding = true;
