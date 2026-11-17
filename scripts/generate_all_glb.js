@@ -463,46 +463,219 @@ function generateB747() {
 }
 
 // -------------------------------------------------------------
-// 3. MCDONNELL DOUGLAS DC-10 GENERATOR (TRIJET)
+// 3. MCDONNELL DOUGLAS DC-10-30 GENERATOR (HIGH-DETAIL TRIJET)
 // -------------------------------------------------------------
 function generateDC10() {
   const b = new GLBBuilder();
   const m = setupCommonMaterials(b);
 
-  // Widebody fuselage
-  const profiles = [
-    { z: -27.0, rx: 0.01, ry: 0.01, cy: 0.0 },
-    { z: -25.0, rx: 1.6, ry: 1.6, cy: 0.1 },
-    { z: -21.0, rx: 2.8, ry: 2.9, cy: 0.15 },
-    { z: -10.0, rx: 3.0, ry: 3.0, cy: 0.15 },
-    { z:   0.0, rx: 3.0, ry: 3.0, cy: 0.15 },
-    { z:  12.0, rx: 3.0, ry: 3.0, cy: 0.15 },
-    { z:  20.0, rx: 2.4, ry: 2.4, cy: 0.35 },
-    { z:  26.0, rx: 1.2, ry: 1.4, cy: 0.65 },
-    { z:  28.5, rx: 0.01, ry: 0.01, cy: 0.85 }
-  ];
-  const fuselageGeo = createLoftFuselage(profiles, 24);
-  const fuselageMesh = b.addMesh('DC10_Fuselage_Mesh', [{
-    positions: fuselageGeo.positions,
-    indices: fuselageGeo.indices,
-    normals: fuselageGeo.normals,
-    materialIndex: m.whiteFuselage
-  }]);
+  function transformGeo(geo, { rx = 0, ry = 0, rz = 0, tx = 0, ty = 0, tz = 0 } = {}) {
+    const cx = Math.cos(rx), sx = Math.sin(rx);
+    const cy = Math.cos(ry), sy = Math.sin(ry);
+    const cz = Math.cos(rz), sz = Math.sin(rz);
+    const positions = [];
+    for (let i = 0; i < geo.positions.length; i += 3) {
+      let x = geo.positions[i];
+      let y = geo.positions[i + 1];
+      let z = geo.positions[i + 2];
 
-  // Swept wings
-  const leftWing = createSweptWing({
-    rootX: -2.8, rootY: -0.4, rootZ: -1.0,
-    span: 23.0, rootChord: 9.5, tipChord: 2.8,
-    sweepBack: 8.8, dihedralY: 2.2, thickness: 0.65,
+      if (rx !== 0) {
+        const y1 = y * cx - z * sx;
+        const z1 = y * sx + z * cx;
+        y = y1; z = z1;
+      }
+      if (ry !== 0) {
+        const x1 = x * cy + z * sy;
+        const z1 = -x * sy + z * cy;
+        x = x1; z = z1;
+      }
+      if (rz !== 0) {
+        const x1 = x * cz - y * sz;
+        const y1 = x * sz + y * cz;
+        x = x1; y = y1;
+      }
+      positions.push(x + tx, y + ty, z + tz);
+    }
+    return {
+      positions,
+      indices: geo.indices.slice(),
+      normals: computeNormals(positions, geo.indices)
+    };
+  }
+
+  // A. Widebody Fuselage (36 radial segments x 18 longitudinal stations)
+  const profiles = [
+    { z: -27.2, rx: 0.01, ry: 0.01, cy: -0.15 },
+    { z: -26.8, rx: 0.42, ry: 0.40, cy: -0.12 },
+    { z: -26.0, rx: 0.95, ry: 0.92, cy: -0.05 },
+    { z: -24.8, rx: 1.58, ry: 1.56, cy: 0.02 },
+    { z: -23.2, rx: 2.22, ry: 2.26, cy: 0.10 },
+    { z: -21.2, rx: 2.75, ry: 2.86, cy: 0.15 },
+    { z: -18.5, rx: 2.98, ry: 3.02, cy: 0.15 },
+    { z: -12.0, rx: 3.02, ry: 3.04, cy: 0.15 },
+    { z:  -4.0, rx: 3.02, ry: 3.04, cy: 0.15 },
+    { z:   4.0, rx: 3.02, ry: 3.04, cy: 0.15 },
+    { z:  12.0, rx: 3.00, ry: 3.02, cy: 0.16 },
+    { z:  16.5, rx: 2.76, ry: 2.80, cy: 0.24 },
+    { z:  20.5, rx: 2.28, ry: 2.38, cy: 0.38 },
+    { z:  24.0, rx: 1.55, ry: 1.72, cy: 0.56 },
+    { z:  26.5, rx: 0.92, ry: 1.10, cy: 0.72 },
+    { z:  28.2, rx: 0.42, ry: 0.52, cy: 0.84 },
+    { z:  29.0, rx: 0.18, ry: 0.22, cy: 0.88 },
+    { z:  29.2, rx: 0.01, ry: 0.01, cy: 0.90 }
+  ];
+  const fuselageGeo = createLoftFuselage(profiles, 36);
+
+  // Wing-to-body belly fairing + dorsal antennas
+  const bellyFairing = createLoftFuselage([
+    { z: -7.5, rx: 0.2, ry: 0.1, cy: -2.4 },
+    { z: -4.0, rx: 2.45, ry: 0.85, cy: -2.35 },
+    { z:  2.0, rx: 2.65, ry: 0.95, cy: -2.38 },
+    { z:  7.5, rx: 2.20, ry: 0.75, cy: -2.32 },
+    { z: 10.5, rx: 0.2, ry: 0.1, cy: -2.3 }
+  ], 20);
+  const vhfAnt1 = transformGeo(createBox(0.08, 0.55, 0.45), { rx: 0.22, tx: 0, ty: 3.35, tz: -14.5 });
+  const vhfAnt2 = transformGeo(createBox(0.08, 0.48, 0.40), { rx: 0.20, tx: 0, ty: 3.32, tz: 3.5 });
+  const satcomDome = createLoftFuselage([
+    { z: -3.2, rx: 0.05, ry: 0.05, cy: 3.16 },
+    { z: -2.0, rx: 0.42, ry: 0.28, cy: 3.16 },
+    { z: -0.5, rx: 0.42, ry: 0.28, cy: 3.16 },
+    { z:  0.8, rx: 0.05, ry: 0.05, cy: 3.16 }
+  ], 14);
+
+  const mainFuselage = mergeGeometries([fuselageGeo, bellyFairing, vhfAnt1, vhfAnt2, satcomDome]);
+
+  // Nose radome tip + lower fuselage cheatline livery
+  const noseRadome = createLoftFuselage([
+    { z: -27.25, rx: 0.01, ry: 0.01, cy: -0.15 },
+    { z: -26.8, rx: 0.43, ry: 0.41, cy: -0.12 },
+    { z: -25.95, rx: 0.96, ry: 0.93, cy: -0.05 }
+  ], 28);
+
+  const stripeParts = [];
+  for (const side of [-1, 1]) {
+    stripeParts.push(createBox(0.08, 0.34, 34.0, side * 3.01, 0.35, -2.5));
+    stripeParts.push(transformGeo(createBox(0.08, 0.30, 6.2), { ry: side * -0.26, tx: side * 2.18, ty: 0.32, tz: -21.8 }));
+    stripeParts.push(transformGeo(createBox(0.08, 0.28, 7.0), { ry: side * 0.22, tx: side * 2.25, ty: 0.48, tz: 17.5 }));
+  }
+  const redLiveryGeo = mergeGeometries(stripeParts);
+
+  const goldParts = [];
+  for (const side of [-1, 1]) {
+    goldParts.push(createBox(0.07, 0.12, 34.0, side * 3.02, 0.10, -2.5));
+  }
+  const goldLiveryGeo = mergeGeometries(goldParts);
+
+  // Wrap-around 6-pane cockpit windshield
+  const cockpitPanes = [
+    transformGeo(createBox(1.15, 0.56, 0.14), { rx: -0.58, ry: 0.24, tx: -0.62, ty: 1.52, tz: -22.75 }),
+    transformGeo(createBox(1.15, 0.56, 0.14), { rx: -0.58, ry: -0.24, tx: 0.62, ty: 1.52, tz: -22.75 }),
+    transformGeo(createBox(1.05, 0.52, 0.14), { rx: -0.42, ry: 0.72, tx: -1.55, ty: 1.46, tz: -22.15 }),
+    transformGeo(createBox(1.05, 0.52, 0.14), { rx: -0.42, ry: -0.72, tx: 1.55, ty: 1.46, tz: -22.15 }),
+    transformGeo(createBox(0.95, 0.48, 0.14), { rx: -0.25, ry: 1.18, tx: -2.18, ty: 1.42, tz: -21.35 }),
+    transformGeo(createBox(0.95, 0.48, 0.14), { rx: -0.25, ry: -1.18, tx: 2.18, ty: 1.42, tz: -21.35 })
+  ];
+  const cockpitGeo = mergeGeometries(cockpitPanes);
+
+  // Cabin passenger windows (port & starboard)
+  const windowParts = [];
+  for (let z = -18.5; z <= 13.5; z += 1.05) {
+    // Skip door gaps
+    if (Math.abs(z + 15.3) < 0.7 || Math.abs(z + 4.8) < 0.7 || Math.abs(z - 5.7) < 0.7 || Math.abs(z - 12.0) < 0.7) {
+      continue;
+    }
+    windowParts.push(createBox(0.10, 0.34, 0.26, -3.00, 0.85, z));
+    windowParts.push(createBox(0.10, 0.34, 0.26, 3.00, 0.85, z));
+  }
+  const windowsGeo = mergeGeometries(windowParts);
+
+  const fuselageMesh = b.addMesh('DC10_Fuselage_Mesh', [
+    {
+      positions: mainFuselage.positions,
+      indices: mainFuselage.indices,
+      normals: mainFuselage.normals,
+      materialIndex: m.whiteFuselage
+    },
+    {
+      positions: noseRadome.positions,
+      indices: noseRadome.indices,
+      normals: noseRadome.normals,
+      materialIndex: m.engineIntakeDark
+    },
+    {
+      positions: redLiveryGeo.positions,
+      indices: redLiveryGeo.indices,
+      normals: redLiveryGeo.normals,
+      materialIndex: m.airlineRed
+    },
+    {
+      positions: goldLiveryGeo.positions,
+      indices: goldLiveryGeo.indices,
+      normals: goldLiveryGeo.normals,
+      materialIndex: m.goldTrim
+    },
+    {
+      positions: cockpitGeo.positions,
+      indices: cockpitGeo.indices,
+      normals: cockpitGeo.normals,
+      materialIndex: m.cockpitGlass
+    },
+    {
+      positions: windowsGeo.positions,
+      indices: windowsGeo.indices,
+      normals: windowsGeo.normals,
+      materialIndex: m.cabinWindows
+    }
+  ]);
+
+  // B. Two-Section Swept Wings + 8 Flap Track Fairings + Wingtip Pods
+  const leftInboard = createSweptWing({
+    rootX: -2.6, rootY: -0.55, rootZ: -2.2,
+    span: 8.4, rootChord: 10.8, tipChord: 6.4,
+    sweepBack: 3.1, dihedralY: 0.75, thickness: 0.78,
     isLeft: true
   });
-  const rightWing = createSweptWing({
-    rootX: 2.8, rootY: -0.4, rootZ: -1.0,
-    span: 23.0, rootChord: 9.5, tipChord: 2.8,
-    sweepBack: 8.8, dihedralY: 2.2, thickness: 0.65,
+  const leftOutboard = createSweptWing({
+    rootX: -11.0, rootY: 0.20, rootZ: 0.9,
+    span: 14.8, rootChord: 6.4, tipChord: 2.3,
+    sweepBack: 6.1, dihedralY: 1.55, thickness: 0.48,
+    isLeft: true
+  });
+  const rightInboard = createSweptWing({
+    rootX: 2.6, rootY: -0.55, rootZ: -2.2,
+    span: 8.4, rootChord: 10.8, tipChord: 6.4,
+    sweepBack: 3.1, dihedralY: 0.75, thickness: 0.78,
     isLeft: false
   });
-  const wingsGeo = mergeGeometries([leftWing, rightWing]);
+  const rightOutboard = createSweptWing({
+    rootX: 11.0, rootY: 0.20, rootZ: 0.9,
+    span: 14.8, rootChord: 6.4, tipChord: 2.3,
+    sweepBack: 6.1, dihedralY: 1.55, thickness: 0.48,
+    isLeft: false
+  });
+
+  // Flap track canoe fairings under each wing
+  const flapFairings = [];
+  const fairingSpecs = [
+    { x: 5.5, y: -0.62, z: 6.4, len: 2.6 },
+    { x: 9.8, y: -0.25, z: 6.6, len: 2.3 },
+    { x: 14.8, y: 0.25, z: 7.4, len: 1.9 },
+    { x: 19.8, y: 0.80, z: 8.5, len: 1.5 }
+  ];
+  for (const f of fairingSpecs) {
+    for (const side of [-1, 1]) {
+      flapFairings.push(createCylinder(0.16, 0.04, f.len, 10, side * f.x, f.y, f.z, 'z'));
+    }
+  }
+
+  // Wingtip nav light pods
+  const leftTipPod = createCylinder(0.16, 0.14, 1.8, 12, -25.8, 1.75, 8.2, 'z');
+  const rightTipPod = createCylinder(0.16, 0.14, 1.8, 12, 25.8, 1.75, 8.2, 'z');
+
+  const wingsGeo = mergeGeometries([
+    leftInboard, leftOutboard, rightInboard, rightOutboard,
+    ...flapFairings, leftTipPod, rightTipPod
+  ]);
   const wingsMesh = b.addMesh('DC10_Wings_Mesh', [{
     positions: wingsGeo.positions,
     indices: wingsGeo.indices,
@@ -510,58 +683,125 @@ function generateDC10() {
     materialIndex: m.wingGray
   }]);
 
-  // Engines: 2 on wings + 1 SIGNATURE ENGINE #2 THROUGH VERTICAL FIN!
-  const engL = createCylinder(1.35, 1.25, 3.8, 18, -8.5, -2.1, 0.0, 'z');
-  const engR = createCylinder(1.35, 1.25, 3.8, 18, 8.5, -2.1, 0.0, 'z');
-  // Engine #2 mounted directly inside tail fin!
-  const engTail = createCylinder(1.40, 1.30, 6.2, 22, 0, 4.2, 17.5, 'z');
-  const engTailIntake = createCylinder(1.25, 1.25, 0.4, 20, 0, 4.2, 14.3, 'z');
+  // C. Trijet CF6-50 Engines (2 Underwing + 1 Straight-Through Tail #2)
+  function buildCF6Engine(cx, cy, cz, scale = 1.0, includePylon = true) {
+    const cowlParts = [];
+    const chromeParts = [];
+    const darkParts = [];
+    const coreParts = [];
 
-  const wingEngines = mergeGeometries([engL, engR]);
+    // Outer fan cowl
+    cowlParts.push(createCylinder(1.36 * scale, 1.46 * scale, 1.35 * scale, 28, cx, cy, cz - 1.35 * scale, 'z'));
+    cowlParts.push(createCylinder(1.46 * scale, 1.38 * scale, 2.35 * scale, 28, cx, cy, cz + 0.50 * scale, 'z'));
+    // Core cowling
+    coreParts.push(createCylinder(1.22 * scale, 0.96 * scale, 1.45 * scale, 24, cx, cy, cz + 2.25 * scale, 'z'));
+
+    // Chrome intake lip + exhaust plug
+    chromeParts.push(createCylinder(1.28 * scale, 1.38 * scale, 0.38 * scale, 28, cx, cy, cz - 2.12 * scale, 'z'));
+    chromeParts.push(createCylinder(0.02, 0.38 * scale, 0.78 * scale, 16, cx, cy, cz - 1.55 * scale, 'z')); // Spinner
+    chromeParts.push(createCylinder(0.45 * scale, 0.04, 1.05 * scale, 16, cx, cy, cz + 3.15 * scale, 'z')); // Exhaust cone
+
+    // Dark intake throat + exhaust nozzle + 12 fan blades
+    darkParts.push(createCylinder(1.22 * scale, 1.22 * scale, 0.30 * scale, 24, cx, cy, cz - 1.30 * scale, 'z'));
+    darkParts.push(createCylinder(0.92 * scale, 0.72 * scale, 0.75 * scale, 22, cx, cy, cz + 2.85 * scale, 'z'));
+    for (let bIdx = 0; bIdx < 12; bIdx++) {
+      const ang = (bIdx / 12) * Math.PI * 2;
+      const bx = cx + Math.cos(ang) * 0.76 * scale;
+      const by = cy + Math.sin(ang) * 0.76 * scale;
+      darkParts.push(transformGeo(createBox(0.06 * scale, 0.74 * scale, 0.22 * scale), {
+        rz: ang - Math.PI / 2,
+        ry: 0.35,
+        tx: bx,
+        ty: by,
+        tz: cz - 1.42 * scale
+      }));
+    }
+
+    if (includePylon) {
+      coreParts.push(transformGeo(createBox(0.42 * scale, 1.45 * scale, 3.8 * scale), {
+        rx: 0.14,
+        tx: cx,
+        ty: cy + 1.25 * scale,
+        tz: cz + 0.55 * scale
+      }));
+    }
+
+    return { cowlParts, chromeParts, darkParts, coreParts };
+  }
+
+  const eng1 = buildCF6Engine(-8.5, -2.05, -0.4, 1.0, true);
+  const eng3 = buildCF6Engine(8.5, -2.05, -0.4, 1.0, true);
+  const eng2 = buildCF6Engine(0, 4.65, 17.8, 1.06, false);
+
+  // Extended straight-through tail nacelle fairing for Engine #2
+  const tailNacelleBody = createCylinder(1.48, 1.42, 4.4, 28, 0, 4.65, 18.0, 'z');
+  const tailNacelleFairing = transformGeo(createBox(0.85, 2.35, 6.2), { rx: -0.08, tx: 0, ty: 2.95, tz: 18.2 });
+  const tailStripeRing = createCylinder(1.50, 1.49, 0.65, 28, 0, 4.65, 16.5, 'z');
+
+  const allCowl = mergeGeometries([...eng1.cowlParts, ...eng3.cowlParts, ...eng2.cowlParts, tailNacelleBody, tailNacelleFairing]);
+  const allCore = mergeGeometries([...eng1.coreParts, ...eng3.coreParts, ...eng2.coreParts]);
+  const allChrome = mergeGeometries([...eng1.chromeParts, ...eng3.chromeParts, ...eng2.chromeParts]);
+  const allDark = mergeGeometries([...eng1.darkParts, ...eng3.darkParts, ...eng2.darkParts]);
+
   const enginesMesh = b.addMesh('DC10_Engines_Mesh', [
     {
-      positions: wingEngines.positions,
-      indices: wingEngines.indices,
-      normals: wingEngines.normals,
+      positions: allCowl.positions,
+      indices: allCowl.indices,
+      normals: allCowl.normals,
       materialIndex: m.whiteFuselage
     },
     {
-      positions: engTail.positions,
-      indices: engTail.indices,
-      normals: engTail.normals,
-      materialIndex: m.whiteFuselage
+      positions: allCore.positions,
+      indices: allCore.indices,
+      normals: allCore.normals,
+      materialIndex: m.wingGray
     },
     {
-      positions: engTailIntake.positions,
-      indices: engTailIntake.indices,
-      normals: engTailIntake.normals,
+      positions: allChrome.positions,
+      indices: allChrome.indices,
+      normals: allChrome.normals,
+      materialIndex: m.engineChrome
+    },
+    {
+      positions: allDark.positions,
+      indices: allDark.indices,
+      normals: allDark.normals,
       materialIndex: m.engineIntakeDark
+    },
+    {
+      positions: tailStripeRing.positions,
+      indices: tailStripeRing.indices,
+      normals: tailStripeRing.normals,
+      materialIndex: m.airlineRed
     }
   ]);
 
-  // Tail fin wrapping over Engine #2
-  const tailFinGeo = createSweptWing({
-    rootX: 0, rootY: 4.8, rootZ: 15.5,
-    span: 6.8, rootChord: 6.2, tipChord: 2.4,
-    sweepBack: 4.5, dihedralY: 0.0, thickness: 0.45,
+  // D. Vertical Stabilizer (rising above Engine #2) & Horizontal Stabilizers
+  const upperFinGeo = createSweptWing({
+    rootX: 0, rootY: 5.5, rootZ: 15.8,
+    span: 6.9, rootChord: 6.1, tipChord: 2.5,
+    sweepBack: 4.3, dihedralY: 0.0, thickness: 0.44,
     isLeft: false
   });
   const finPositions = [];
-  for (let i = 0; i < tailFinGeo.positions.length; i += 3) {
-    finPositions.push(-tailFinGeo.positions[i + 1] + 4.8, tailFinGeo.positions[i] + 4.8, tailFinGeo.positions[i + 2]);
+  for (let i = 0; i < upperFinGeo.positions.length; i += 3) {
+    finPositions.push(-upperFinGeo.positions[i + 1] + 5.5, upperFinGeo.positions[i] + 5.5, upperFinGeo.positions[i + 2]);
   }
-  const finNormals = computeNormals(finPositions, tailFinGeo.indices);
+  const finNormals = computeNormals(finPositions, upperFinGeo.indices);
+
+  // Rudder accent / tail tip cap
+  const finTipAccent = createBox(0.24, 0.45, 2.3, 0, 12.25, 21.35);
 
   const leftHStab = createSweptWing({
-    rootX: -1.0, rootY: 1.6, rootZ: 23.5,
-    span: 9.0, rootChord: 4.5, tipChord: 1.8,
-    sweepBack: 4.2, dihedralY: 0.5, thickness: 0.35,
+    rootX: -0.9, rootY: 1.45, rootZ: 22.8,
+    span: 9.6, rootChord: 4.8, tipChord: 1.8,
+    sweepBack: 4.2, dihedralY: 0.65, thickness: 0.34,
     isLeft: true
   });
   const rightHStab = createSweptWing({
-    rootX: 1.0, rootY: 1.6, rootZ: 23.5,
-    span: 9.0, rootChord: 4.5, tipChord: 1.8,
-    sweepBack: 4.2, dihedralY: 0.5, thickness: 0.35,
+    rootX: 0.9, rootY: 1.45, rootZ: 22.8,
+    span: 9.6, rootChord: 4.8, tipChord: 1.8,
+    sweepBack: 4.2, dihedralY: 0.65, thickness: 0.34,
     isLeft: false
   });
   const hStabs = mergeGeometries([leftHStab, rightHStab]);
@@ -569,9 +809,15 @@ function generateDC10() {
   const tailMesh = b.addMesh('DC10_Tail_Mesh', [
     {
       positions: finPositions,
-      indices: tailFinGeo.indices,
+      indices: upperFinGeo.indices,
       normals: finNormals,
       materialIndex: m.airlineRed
+    },
+    {
+      positions: finTipAccent.positions,
+      indices: finTipAccent.indices,
+      normals: finTipAccent.normals,
+      materialIndex: m.goldTrim
     },
     {
       positions: hStabs.positions,
@@ -581,14 +827,61 @@ function generateDC10() {
     }
   ]);
 
+  // E. Signature DC-10-30 4-Point Landing Gear (Nose + Left/Right 4-wheel Bogies + Centerline 2-wheel Bogie)
+  const tireParts = [];
+  const strutParts = [];
+
+  // Nose Gear (twin wheels)
+  tireParts.push(createCylinder(0.56, 0.56, 0.36, 18, -0.42, -3.55, -20.5, 'x'));
+  tireParts.push(createCylinder(0.56, 0.56, 0.36, 18, 0.42, -3.55, -20.5, 'x'));
+  strutParts.push(createCylinder(0.16, 0.16, 2.1, 12, 0, -2.55, -20.5, 'y'));
+  strutParts.push(createCylinder(0.24, 0.24, 0.85, 12, 0, -3.55, -20.5, 'x'));
+
+  // Main Wing Bogies (4 wheels each)
+  for (const side of [-1, 1]) {
+    const gx = side * 5.3;
+    const gz = 1.8;
+    for (const dz of [-0.75, 0.75]) {
+      for (const dx of [-0.48, 0.48]) {
+        tireParts.push(createCylinder(0.68, 0.68, 0.42, 18, gx + dx, -3.55, gz + dz, 'x'));
+      }
+    }
+    strutParts.push(createCylinder(0.22, 0.22, 2.9, 12, gx, -2.15, gz, 'y'));
+    strutParts.push(createBox(0.32, 0.24, 1.85, gx, -3.55, gz));
+  }
+
+  // DC-10-30 Centerline Main Gear (twin wheels under belly)
+  tireParts.push(createCylinder(0.64, 0.64, 0.40, 18, -0.45, -3.55, 2.2, 'x'));
+  tireParts.push(createCylinder(0.64, 0.64, 0.40, 18, 0.45, -3.55, 2.2, 'x'));
+  strutParts.push(createCylinder(0.18, 0.18, 1.8, 12, 0, -2.65, 2.2, 'y'));
+  strutParts.push(createCylinder(0.26, 0.26, 0.95, 12, 0, -3.55, 2.2, 'x'));
+
+  const allTires = mergeGeometries(tireParts);
+  const allStruts = mergeGeometries(strutParts);
+  const gearMesh = b.addMesh('DC10_Gear_Mesh', [
+    {
+      positions: allTires.positions,
+      indices: allTires.indices,
+      normals: allTires.normals,
+      materialIndex: m.tireRubber
+    },
+    {
+      positions: allStruts.positions,
+      indices: allStruts.indices,
+      normals: allStruts.normals,
+      materialIndex: m.engineChrome
+    }
+  ]);
+
   const nF = b.addNode({ name: 'Fuselage', meshIndex: fuselageMesh });
   const nW = b.addNode({ name: 'Wings', meshIndex: wingsMesh });
   const nE = b.addNode({ name: 'TrijetEngines', meshIndex: enginesMesh });
   const nT = b.addNode({ name: 'TailSection', meshIndex: tailMesh });
+  const nG = b.addNode({ name: 'LandingGear', meshIndex: gearMesh });
 
   const root = b.addNode({
     name: 'McDonnell_Douglas_DC10_Root',
-    children: [nF, nW, nE, nT]
+    children: [nF, nW, nE, nT, nG]
   });
 
   return b.buildGLBBuffer([root]);
