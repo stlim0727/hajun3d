@@ -321,7 +321,8 @@
       this.glbGearDuration = animations[0].duration || 1.0;
       this.glbGearAction.play();
       this.glbGearAction.paused = true;
-      this.glbGearAction.time = (this.gearExtended === false) ? this.glbGearDuration : 0;
+      // dc10.glb 애니메이션: t=0 수납(UP), t=duration 전개(DOWN)
+      this.glbGearAction.time = (this.gearExtended === false) ? 0 : this.glbGearDuration;
       this.glbMixer.update(0);
     }
 

@@ -206,7 +206,8 @@
 
     if (this.glbMixer && this.glbGearAction) {
       const dur = this.glbGearDuration || 1.0;
-      this.glbGearAction.time = isExtending ? (1.0 - progress) * dur : progress * dur;
+      // dc10.glb 애니메이션: t=0 수납(UP), t=dur 전개(DOWN)
+      this.glbGearAction.time = isExtending ? progress * dur : (1.0 - progress) * dur;
       this.glbMixer.update(0);
     }
 
@@ -216,7 +217,7 @@
         this.gearPhase = 'DOWN';
         this.gearExtended = true;
         if (this.glbMixer && this.glbGearAction) {
-          this.glbGearAction.time = 0;
+          this.glbGearAction.time = this.glbGearDuration || 1.0;
           this.glbMixer.update(0);
         }
         this.landingGears.forEach(gear => {
@@ -238,7 +239,7 @@
         this.gearPhase = 'UP';
         this.gearExtended = false;
         if (this.glbMixer && this.glbGearAction) {
-          this.glbGearAction.time = this.glbGearDuration || 1.0;
+          this.glbGearAction.time = 0;
           this.glbMixer.update(0);
         }
         this.landingGears.forEach(gear => {
