@@ -7,10 +7,12 @@
   'use strict';
 
   // ----------------------------------------------------------------
-  // International Standard Atmosphere (ISA) Model (Flight3d 표준)
+  // International Standard Atmosphere (ISA) Model (offloaded to flightsim-core)
   // - 고도별 온도, 기압, 공기 밀도(rho), 음속(speedOfSound), 밀도비 계산
   // ----------------------------------------------------------------
-  const Atmosphere = {
+  const f3dCore = (typeof globalThis !== 'undefined' ? (globalThis.FlightSimCore || globalThis.Flight3dPhysics) : null) ||
+                  (typeof window !== 'undefined' ? (window.FlightSimCore || window.Flight3dPhysics) : null);
+  const Atmosphere = f3dCore?.Atmosphere || {
     R: 287.05,          // J/(kg·K)
     GAMMA: 1.4,
     G0: 9.80665,        // m/s^2
@@ -25,11 +27,9 @@
       let temperature, pressure;
 
       if (h <= this.TROPOPAUSE_ALT) {
-        // 대류권 (Troposphere)
         temperature = this.T0 - this.LAPSE_RATE * h;
         pressure = this.P0 * Math.pow(temperature / this.T0, this.G0 / (this.LAPSE_RATE * this.R));
       } else {
-        // 성층권 하부 (Lower Stratosphere)
         const tTropo = this.T0 - this.LAPSE_RATE * this.TROPOPAUSE_ALT;
         const pTropo = this.P0 * Math.pow(tTropo / this.T0, this.G0 / (this.LAPSE_RATE * this.R));
         temperature = tTropo;
@@ -58,6 +58,14 @@
 
     knotsToMs(knots) {
       return knots / 1.94384;
+    },
+
+    metersToFeet(m) {
+      return m * 3.28084;
+    },
+
+    feetToMeters(ft) {
+      return ft / 3.28084;
     }
   };
 
@@ -491,11 +499,18 @@
     this._flight3dPlaneType = this.currentPlaneType;
     this._flight3dGroundOffset = groundOffset;
     this._flight3dLastGearState = core.gear.gearState;
+
+    const WarningsClass = f3d.FlightWarningsCore || globalThis.FlightSimCore?.FlightWarningsCore;
+    if (WarningsClass) {
+      this._flightWarningsCore = new WarningsClass(config);
+    }
+
     return core;
   },
 
   resetFlight3dPhysics() {
     this._flight3dCore = null;
+    this._flightWarningsCore?.reset();
     return this.initFlight3dPhysics();
   },
 
@@ -1150,11 +1165,62 @@
   checkGPWS(dt) {
     if (!this.isPlaying || this.isDestroyed || this.isOnGround) {
       this.clearGPWS();
+      this._flightWarningsCore?.reset();
       return;
     }
 
-    const radioAlt = Math.max(0, this.planeGroup.position.y - this.groundY); // 미터 단위 대지 고도
-    const sinkRate = -(this.verticalSpeed || 0); // m/s 수직 하강 속도
+    const radioAltM = Math.max(0, this.planeGroup.position.y - this.groundY); // 미터 단위 대지 고도
+    const sinkRateMs = -(this.verticalSpeed || 0); // m/s 수직 하강 속도
+
+    // 1순위: FlightSimCore.FlightWarningsCore 연속 항공역학 경보 평가
+    if (this._flightWarningsCore) {
+      const telemetry = {
+        onGround: Boolean(this.isOnGround),
+        radioAltFt: radioAltM * 3.28084,
+        vsiFpm: (this.verticalSpeed || 0) * 196.85,
+        altitudeFt: this.planeGroup.position.y * 3.28084,
+        gearState: this.gearExtended ? 1.0 : 0.0,
+        flapDegree: this._flight3dCore?.aero?.currentFlapAngle ?? 0,
+        isStallWarning: Boolean(this.isStalling || this._flight3dCore?.aero?.isStallWarning),
+        isStalled: Boolean(this.isStalling || this._flight3dCore?.aero?.isStalled),
+        rollDeg: (this.planeGroup.rotation.z * 180) / Math.PI,
+        throttle: this.throttle || 0,
+        iasKnots: ((this.speed || 0) * 280) / 1.852,
+      };
+      const result = this._flightWarningsCore.update(dt, telemetry);
+      const topWarning = result?.activeWarnings?.[0];
+
+      if (topWarning) {
+        if (topWarning.id === 'stall') {
+          this.triggerGPWS('STALL', 'STALL! STALL!', 'AIRSPEED CRITICAL - PUSH NOSE DOWN & MAX POWER', 'stall-warn');
+          this.speakGPWS('STALL, STALL');
+          return;
+        }
+        if (topWarning.id === 'pull-up' || topWarning.id === 'terrain') {
+          const sec = sinkRateMs > 0.8 ? Math.max(0.1, radioAltM / sinkRateMs).toFixed(1) : '10.0';
+          this.triggerGPWS('PULL_UP', 'PULL UP! PULL UP!', `지면 충돌 ${sec}초 전 - 즉시 기수 상승! (TERRAIN PULL UP)`, 'danger');
+          this.playGPWSWhoopSiren();
+          this.speakGPWS('PULL UP');
+          return;
+        }
+        if (topWarning.id === 'gear') {
+          this.triggerGPWS('GEAR', 'TOO LOW, GEAR!', 'LOWER LANDING GEAR [단축키 G]', 'gear-warn');
+          this.speakGPWS('TOO LOW, GEAR');
+          this.playCautionChime();
+          return;
+        }
+        if (topWarning.id === 'sink-rate') {
+          const sec = sinkRateMs > 0.8 ? Math.max(0.1, radioAltM / sinkRateMs).toFixed(1) : '18.0';
+          this.triggerGPWS('SINK_RATE', 'SINK RATE!', `강하율 과다 (지면 충돌 ${sec}초 전)`, 'caution');
+          this.speakGPWS('SINK RATE');
+          this.playCautionChime();
+          return;
+        }
+      }
+
+      this.clearGPWS();
+      return;
+    }
 
     // 1. 실속 (STALL) 경보: 최우선 경보
     if (this.isStalling) {
@@ -1164,9 +1230,9 @@
     }
 
     // 2. 지면 충돌 예상 시간 (Time to Impact) 계산 (10초 전 정밀 PULL UP 경보)
-    if (sinkRate > 0.8) {
-      const timeToImpact = radioAlt / sinkRate; // 초(s) 단위 충돌까지 남은 시간
-      const isNormalTouchdown = this.gearExtended && radioAlt < 22 && sinkRate < 3.8;
+    if (sinkRateMs > 0.8) {
+      const timeToImpact = radioAltM / sinkRateMs; // 초(s) 단위 충돌까지 남은 시간
+      const isNormalTouchdown = this.gearExtended && radioAltM < 22 && sinkRateMs < 3.8;
 
       // ★ 충돌 10초 전 긴급 기수 인양 경보 (PULL UP!)
       if (timeToImpact <= 10.0 && !isNormalTouchdown) {
@@ -1179,7 +1245,7 @@
     }
 
     // 3. 바퀴 미전개 착륙 경보 (TOO LOW, GEAR!): 고도 140m 이하에서 하강 중인데 랜딩 기어가 접혀있음
-    if (radioAlt < 140 && sinkRate > 0.5 && !this.gearExtended) {
+    if (radioAltM < 140 && sinkRateMs > 0.5 && !this.gearExtended) {
       this.triggerGPWS('GEAR', 'TOO LOW, GEAR!', 'LOWER LANDING GEAR [단축키 G]', 'gear-warn');
       this.speakGPWS('TOO LOW, GEAR');
       this.playCautionChime();
@@ -1187,9 +1253,9 @@
     }
 
     // 4. 주의 단계 강하율 경보 (SINK RATE!): 충돌 18초 전 또는 급격한 강하율
-    if (sinkRate > 5.5) {
-      const timeToImpact = radioAlt / sinkRate;
-      const isNormalTouchdown = this.gearExtended && radioAlt < 22 && sinkRate < 3.8;
+    if (sinkRateMs > 5.5) {
+      const timeToImpact = radioAltM / sinkRateMs;
+      const isNormalTouchdown = this.gearExtended && radioAltM < 22 && sinkRateMs < 3.8;
       if (timeToImpact <= 18.0 && !isNormalTouchdown) {
         const sec = Math.max(0.1, timeToImpact).toFixed(1);
         this.triggerGPWS('SINK_RATE', 'SINK RATE!', `강하율 과다 (지면 충돌 ${sec}초 전)`, 'caution');

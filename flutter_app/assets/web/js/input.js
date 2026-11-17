@@ -6,19 +6,63 @@
 (function() {
   'use strict';
 
+  const f3dCore = (typeof globalThis !== 'undefined' ? (globalThis.FlightSimCore || globalThis.Flight3dPhysics) : null) ||
+                  (typeof window !== 'undefined' ? (window.FlightSimCore || window.Flight3dPhysics) : null);
+
+  const degrees = f3dCore?.degrees || ((radians) => (radians * 180) / Math.PI);
+  const angleDelta = f3dCore?.angleDelta || ((angle, zero) => ((angle - zero + 540) % 360) - 180);
+
+  /**
+   * Gravity projected into screen axes avoids beta/gamma jumps near landscape (offloaded to flightsim-core).
+   */
+  const screenTilt = f3dCore?.screenTilt || function(beta, gamma, angle) {
+    const b = (beta * Math.PI) / 180;
+    const g = (gamma * Math.PI) / 180;
+    const a = (angle * Math.PI) / 180;
+    const x = Math.cos(b) * Math.sin(g);
+    const y = Math.sin(b);
+    const z = Math.cos(b) * Math.cos(g);
+    const right = x * Math.cos(a) + y * Math.sin(a);
+    const up = y * Math.cos(a) - x * Math.sin(a);
+    return {
+      pitch: degrees(Math.atan2(up, z)),
+      roll: degrees(Math.atan2(right, Math.hypot(up, z))),
+    };
+  };
+
+  const readGyroScreen = f3dCore?.readGyroScreen || function(win = (typeof window !== 'undefined' ? window : globalThis)) {
+    const orientation = win?.screen?.orientation;
+    const rawAngle = orientation?.angle ?? win?.orientation;
+    const angle = Number.isFinite(rawAngle) ? ((rawAngle % 360) + 360) % 360 : 0;
+    const type = orientation?.type?.startsWith('landscape')
+      ? 'landscape'
+      : orientation?.type?.startsWith('portrait')
+      ? 'portrait'
+      : ((win?.innerWidth || 0) > (win?.innerHeight || 0) ? 'landscape' : 'portrait');
+    return { angle, type };
+  };
+
+  const isGyroSupportedDevice = f3dCore?.isGyroSupportedDevice || function(win = (typeof window !== 'undefined' ? window : globalThis), nav = (typeof navigator !== 'undefined' ? navigator : globalThis.navigator)) {
+    if (typeof win === 'undefined' || !win || !win.DeviceOrientationEvent) return false;
+    if (win.isSecureContext === false) return false;
+    const ua = nav?.userAgent || '';
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (/Macintosh/i.test(ua) && (nav?.maxTouchPoints || 0) > 1);
+    const isMobileClient = Boolean(nav?.userAgentData?.mobile);
+    const hasTouch = Boolean(('ontouchstart' in win) || ((nav?.maxTouchPoints ?? 0) > 0));
+    return (isMobileUA || isMobileClient) && hasTouch;
+  };
+
   // ----------------------------------------------------------------
-  // 3rd-order non-linear response curve with 6% radial deadzone
-  // shapeTouchStick(pitch, roll): 0.35 * travel + 0.65 * travel^3
-  // Eliminates twitchiness while preserving full authority.
+  // 3rd-order non-linear response curve with 6% radial deadzone (offloaded to flightsim-core)
   // ----------------------------------------------------------------
-  function shapeTouchStick(pitch, roll) {
+  const shapeTouchStick = f3dCore?.shapeTouchStick || function(pitch, roll) {
     const magnitude = Math.hypot(pitch, roll);
     const deadzone = 0.06;
     if (magnitude <= deadzone) return [0, 0];
     const travel = (Math.min(1, magnitude) - deadzone) / (1 - deadzone);
     const response = 0.35 * travel + 0.65 * Math.pow(travel, 3);
     return [(pitch / magnitude) * response, (roll / magnitude) * response];
-  }
+  };
 
   function triggerTouchHaptic(duration = 10) {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -29,27 +73,302 @@
   }
 
   if (typeof globalThis !== 'undefined') {
+    globalThis.degrees = degrees;
+    globalThis.angleDelta = angleDelta;
+    globalThis.screenTilt = screenTilt;
+    globalThis.readGyroScreen = readGyroScreen;
+    globalThis.isGyroSupportedDevice = isGyroSupportedDevice;
     globalThis.shapeTouchStick = shapeTouchStick;
     globalThis.triggerTouchHaptic = triggerTouchHaptic;
   }
   if (typeof window !== 'undefined') {
+    window.degrees = degrees;
+    window.angleDelta = angleDelta;
+    window.screenTilt = screenTilt;
+    window.readGyroScreen = readGyroScreen;
+    window.isGyroSupportedDevice = isGyroSupportedDevice;
     window.shapeTouchStick = shapeTouchStick;
     window.triggerTouchHaptic = triggerTouchHaptic;
   }
 
   Object.assign(AirplaneGame.prototype, {
+  degrees,
+  angleDelta,
+  screenTilt,
+  readGyroScreen,
+  isGyroSupportedDevice,
   shapeTouchStick,
   triggerTouchHaptic,
 
   setTouchStick(pitch, roll) {
-    const [shapedPitch, shapedRoll] = shapeTouchStick(pitch, roll);
-    this.joystickData.active = Math.hypot(pitch, roll) > 0.02;
+    this.stickNormPitch = Math.max(-1.0, Math.min(1.0, pitch));
+    this.stickNormRoll = Math.max(-1.0, Math.min(1.0, roll));
+    this.isStickActive = Math.hypot(pitch, roll) > 0.02;
+    this.updateTouchAndTiltOutput();
+  },
+
+  updateTouchAndTiltOutput() {
+    let rawPitch = 0.0;
+    let rawRoll = 0.0;
+
+    // 자이로 틸트 성분 (737 감도: 피치 ±25°, 롤 ±30°)
+    if (this.gyroActive && this.gyroCalibration) {
+      rawPitch += this.gyroNormPitch || 0.0;
+      rawRoll += this.gyroNormRoll || 0.0;
+    }
+
+    // 터치 가상 스틱 성분
+    if (this.isStickActive) {
+      rawPitch += this.stickNormPitch || 0.0;
+      rawRoll += this.stickNormRoll || 0.0;
+    }
+
+    // 합성 벡터의 절대 크기가 1.0을 초과하지 않도록 정규화
+    const magnitude = Math.hypot(rawPitch, rawRoll);
+    if (magnitude > 1.0) {
+      rawPitch /= magnitude;
+      rawRoll /= magnitude;
+    }
+
+    // 737 수준의 3차 비선형 감도 곡선 및 6% 데드존 적용
+    const [shapedPitch, shapedRoll] = shapeTouchStick(rawPitch, rawRoll);
+    if (!this.joystickData) {
+      this.joystickData = { x: 0, y: 0, active: false, rawX: 0, rawY: 0 };
+    }
+    this.joystickData.active = Math.hypot(rawPitch, rawRoll) > 0.02;
     this.joystickData.x = shapedRoll;
     this.joystickData.y = shapedPitch;
-    this.joystickData.rawX = roll;
-    this.joystickData.rawY = pitch;
+    this.joystickData.rawX = rawRoll;
+    this.joystickData.rawY = rawPitch;
     if (this.joystickData.active) {
       this.isTouchStickReleasing = false;
+    }
+
+    this.syncStickVisuals(shapedPitch, shapedRoll);
+  },
+
+  syncStickVisuals(pitch, roll) {
+    const telemEl = document.getElementById('touch-stick-telemetry');
+    if (telemEl) {
+      const pDeg = Math.round(pitch * 25);
+      const rDeg = Math.round(roll * 30);
+      telemEl.textContent = `P: ${pDeg > 0 ? '+' : ''}${pDeg}° | R: ${rDeg > 0 ? '+' : ''}${rDeg}°`;
+    }
+
+    const joystickStick = document.getElementById('joystick-stick');
+    if (!joystickStick) return;
+
+    if (this.isStickActive) {
+      joystickStick.style.transition = 'none';
+      joystickStick.style.transform = `translate(${this.stickCurrentX || 0}px, ${this.stickCurrentY || 0}px)`;
+    } else if (this.gyroActive && this.gyroCalibration) {
+      joystickStick.style.transition = 'transform 0.08s ease-out';
+      const mag = Math.max(1.0, Math.hypot(this.gyroNormRoll, this.gyroNormPitch));
+      const radius = this.stickRadius || 50;
+      const gx = ((this.gyroNormRoll || 0) / mag) * radius;
+      const gy = ((this.gyroNormPitch || 0) / mag) * radius;
+      joystickStick.style.transform = `translate(${gx}px, ${gy}px)`;
+    } else if (this.isTouchStickReleasing) {
+      // 스프링 복귀 애니메이션 유지
+    } else {
+      joystickStick.style.transform = 'translate(0px, 0px)';
+    }
+  },
+
+  initGyroControls() {
+    this._boundHandleOrientation = this.handleDeviceOrientation.bind(this);
+    this._boundScreenOrientationChange = () => this.recenterGyro();
+
+    // Flight3d 표준: 모바일/터치/태블릿 환경에서 틸트 기본 활성화
+    let storedPref = null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        storedPref = localStorage.getItem('hajun3d_gyro_enabled');
+      }
+    } catch (_) {}
+
+    const isSupported = isGyroSupportedDevice();
+    const shouldEnable = (storedPref !== null) ? (storedPref === 'true') : isSupported;
+
+    this.gyroEnabled = shouldEnable;
+    this.gyroActive = false;
+    this.gyroCalibration = null;
+    this.gyroNormPitch = 0.0;
+    this.gyroNormRoll = 0.0;
+    this.gyroScreen = readGyroScreen(typeof window !== 'undefined' ? window : globalThis);
+
+    if (this.gyroEnabled) {
+      this.enableGyro(false);
+    }
+
+    // iOS 13+ 제스처 잠금 해제: 첫 터치 시 requestPermission 호출
+    if (typeof window !== 'undefined') {
+      const requestOnGesture = async () => {
+        if (this.gyroEnabled && !this.gyroActive && typeof window.DeviceOrientationEvent?.requestPermission === 'function') {
+          await this.enableGyro(true);
+        }
+      };
+      window.addEventListener('pointerdown', requestOnGesture, { once: true, passive: true });
+      window.addEventListener('touchstart', requestOnGesture, { once: true, passive: true });
+    }
+
+    this.syncGyroUI();
+  },
+
+  handleDeviceOrientation(e) {
+    if (!this.gyroActive || !this.gyroEnabled) return;
+    if (!Number.isFinite(e.beta) || !Number.isFinite(e.gamma)) return;
+
+    const win = typeof window !== 'undefined' ? window : globalThis;
+    const screen = readGyroScreen(win);
+    if (screen.angle !== this.gyroScreen.angle || screen.type !== this.gyroScreen.type) {
+      this.gyroScreen = screen;
+      this.recenterGyro();
+    }
+
+    const tilt = screenTilt(e.beta, e.gamma, screen.angle);
+    if (!this.gyroCalibration) {
+      this.gyroCalibration = tilt;
+    }
+
+    // Flight3d 보잉 737 표준 틸트 감도:
+    // - 피치: ±25° 기울임 -> ±1.0 (737 조종간 엘리베이터 풀 트래블)
+    // - 롤: ±30° 기울임 -> ±1.0 (737 조종간 에일러론 뱅크 풀 트래블)
+    const dPitch = angleDelta(tilt.pitch, this.gyroCalibration.pitch);
+    const dRoll = angleDelta(tilt.roll, this.gyroCalibration.roll);
+
+    this.gyroNormPitch = Math.max(-1.0, Math.min(1.0, dPitch / 25.0));
+    this.gyroNormRoll = Math.max(-1.0, Math.min(1.0, dRoll / 30.0));
+
+    this.updateTouchAndTiltOutput();
+  },
+
+  async enableGyro(userGesture = false) {
+    if (typeof window === 'undefined') return false;
+    const orientation = window.DeviceOrientationEvent;
+    if (!orientation || window.isSecureContext === false) {
+      return false;
+    }
+    if (typeof orientation.requestPermission === 'function') {
+      if (!userGesture) return false;
+      try {
+        const response = await orientation.requestPermission();
+        if (response !== 'granted') return false;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    this.gyroEnabled = true;
+    this.gyroActive = true;
+    this.gyroCalibration = null;
+    this.gyroScreen = readGyroScreen(window);
+
+    window.addEventListener('deviceorientation', this._boundHandleOrientation, { passive: true });
+    window.screen?.orientation?.addEventListener?.('change', this._boundScreenOrientationChange);
+    window.addEventListener('orientationchange', this._boundScreenOrientationChange);
+
+    this.syncGyroUI();
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('hajun3d_gyro_enabled', 'true');
+      }
+    } catch (_) {}
+    return true;
+  },
+
+  disableGyro() {
+    this.gyroEnabled = false;
+    this.gyroActive = false;
+    this.gyroCalibration = null;
+    this.gyroNormPitch = 0.0;
+    this.gyroNormRoll = 0.0;
+
+    if (typeof window !== 'undefined') {
+      if (this._boundHandleOrientation) {
+        window.removeEventListener('deviceorientation', this._boundHandleOrientation);
+      }
+      if (this._boundScreenOrientationChange) {
+        window.screen?.orientation?.removeEventListener?.('change', this._boundScreenOrientationChange);
+        window.removeEventListener('orientationchange', this._boundScreenOrientationChange);
+      }
+    }
+
+    this.syncGyroUI();
+    this.updateTouchAndTiltOutput();
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('hajun3d_gyro_enabled', 'false');
+      }
+    } catch (_) {}
+  },
+
+  recenterGyro() {
+    if (!this.gyroActive && typeof this.enableGyro === 'function') {
+      this.enableGyro(true).then((success) => {
+        if (success) {
+          this.recenterGyro();
+        }
+      });
+      return;
+    }
+    this.gyroCalibration = null;
+    this.gyroNormPitch = 0.0;
+    this.gyroNormRoll = 0.0;
+    this.gyroScreen = readGyroScreen(typeof window !== 'undefined' ? window : globalThis);
+    this.updateTouchAndTiltOutput();
+
+    const recenterBtn = (typeof document !== 'undefined') ? document.getElementById('btn-touch-gyro-recenter') : null;
+    if (recenterBtn) {
+      recenterBtn.classList.add('recenter-flash');
+      setTimeout(() => recenterBtn.classList.remove('recenter-flash'), 250);
+    }
+
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('🎯 기기 기울기(틸트) 영점 보정 완료');
+    }
+  },
+
+  async toggleGyroTilt(userGesture = true) {
+    if (this.gyroActive) {
+      this.disableGyro();
+      if (typeof this.showPopup === 'function') {
+        this.showPopup('기기 기울기(틸트) 조종 비활성화');
+      }
+    } else {
+      const success = await this.enableGyro(userGesture);
+      if (success) {
+        this.recenterGyro();
+        if (typeof this.showPopup === 'function') {
+          this.showPopup('📱 기기 기울기(틸트) 조종 활성화 (737 감도 / 영점 보정 완료)');
+        }
+      } else {
+        if (typeof this.showPopup === 'function') {
+          this.showPopup('이 기기에서는 자이로/기울기 센서를 지원하지 않습니다');
+        }
+      }
+    }
+  },
+
+  syncGyroUI() {
+    const gyroBtn = document.getElementById('btn-touch-gyro');
+    const gyroLabel = document.getElementById('touch-gyro-label');
+    if (gyroBtn) {
+      gyroBtn.classList.toggle('active', this.gyroActive);
+      gyroBtn.classList.toggle('gyro-active', this.gyroActive);
+      gyroBtn.setAttribute('aria-pressed', String(this.gyroActive));
+    }
+    if (gyroLabel) {
+      gyroLabel.textContent = this.gyroActive ? '틸트 ON' : '틸트 OFF';
+    }
+    const mobileGyroStatus = document.getElementById('mobile-gyro-status');
+    if (mobileGyroStatus) {
+      mobileGyroStatus.textContent = this.gyroActive ? 'ON (737 감도)' : 'OFF';
+    }
+    const recenterBtn = document.getElementById('btn-touch-gyro-recenter');
+    if (recenterBtn) {
+      recenterBtn.classList.toggle('active', this.gyroActive);
+      recenterBtn.style.opacity = this.gyroActive ? '1.0' : '0.55';
     }
   },
 
@@ -171,11 +490,17 @@
         case 'KeyR':
           this.toggleReverseThrust();
           break;
+        case 'KeyT':
+          this.recenterGyro();
+          break;
         case 'KeyX':
           this.toggleCruiseSpeed();
           break;
         case 'KeyC':
           this.toggleCamera();
+          break;
+        case 'KeyV':
+          if (typeof this.resetCameraLook === 'function') this.resetCameraLook();
           break;
         case 'KeyP':
           window.nextPlane();
@@ -255,6 +580,11 @@
       }
     }, { passive: true });
 
+    // 마우스 / 터치 드래그 시점 회전 (3인칭 360° 오빗, 조종석/날개/기어 시선 이동, 더블클릭 시 중앙 복귀)
+    if (typeof this.setupCameraDragControls === 'function') {
+      this.setupCameraDragControls();
+    }
+
     // ----------------------------------------------------------------
     // 모바일 터치 비행 조종 시스템 (Virtual Stick, Throttle Quadrant, Rudder & Brakes)
     // - 3차 비선형 응답 곡선(3rd-order non-linear response) 및 6% 레이디얼 데드존
@@ -288,10 +618,9 @@
         dy = (dy / dist) * stickRadius;
       }
 
-      if (joystickStick) {
-        joystickStick.style.transition = 'none';
-        joystickStick.style.transform = `translate(${dx}px, ${dy}px)`;
-      }
+      this.stickCurrentX = dx;
+      this.stickCurrentY = dy;
+      this.stickRadius = stickRadius;
 
       // 항공 조종간 표준:
       // 아래로 당김 (dy > 0) -> 기수 상승 (Pitch Up > 0)
@@ -301,13 +630,10 @@
       const rawPitch = dy / stickRadius;
       const rawRoll = dx / stickRadius;
 
-      this.setTouchStick(rawPitch, rawRoll);
-
-      if (telemEl) {
-        const pDeg = Math.round(this.joystickData.y * 25);
-        const rDeg = Math.round(this.joystickData.x * 30);
-        telemEl.textContent = `P: ${pDeg > 0 ? '+' : ''}${pDeg}° | R: ${rDeg > 0 ? '+' : ''}${rDeg}°`;
-      }
+      this.stickNormPitch = rawPitch;
+      this.stickNormRoll = rawRoll;
+      this.isStickActive = true;
+      this.updateTouchAndTiltOutput();
     };
 
     if (joystickZone) {
@@ -339,12 +665,20 @@
           }
         } catch (_) {}
         stickPointerId = null;
-        this.isTouchStickReleasing = true;
-        if (joystickStick) {
-          joystickStick.style.transition = 'transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
-          joystickStick.style.transform = 'translate(0px, 0px)';
+        this.isStickActive = false;
+        this.stickNormPitch = 0.0;
+        this.stickNormRoll = 0.0;
+        this.stickCurrentX = 0;
+        this.stickCurrentY = 0;
+
+        if (!this.gyroActive) {
+          this.isTouchStickReleasing = true;
+          if (joystickStick) {
+            joystickStick.style.transition = 'transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
+            joystickStick.style.transform = 'translate(0px, 0px)';
+          }
         }
-        if (telemEl) telemEl.textContent = 'P: 0° | R: 0°';
+        this.updateTouchAndTiltOutput();
         triggerTouchHaptic(8);
       };
 
@@ -566,6 +900,42 @@
         this.keys.brake = false;
       });
     }
+
+    // ----------------------------------------------------------------
+    // 기기 기울기(틸트 / 자이로 센서) 모드 초기화 (Flight3d 737 표준)
+    // ----------------------------------------------------------------
+    const gyroBtn = document.getElementById('btn-touch-gyro');
+    if (gyroBtn) {
+      gyroBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleGyroTilt(true);
+      });
+    }
+
+    const gyroRecenterBtn = document.getElementById('btn-touch-gyro-recenter');
+    if (gyroRecenterBtn) {
+      gyroRecenterBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.recenterGyro();
+      });
+    }
+
+    const stickHeader = document.getElementById('touch-stick-header');
+    if (stickHeader) {
+      stickHeader.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.recenterGyro();
+      });
+    }
+
+    try {
+      this.initGyroControls();
+    } catch (err) {
+      console.warn('initGyroControls error:', err);
+    }
   },
 
   updateJoystick(touchX, touchY, rect, stickEl) {
@@ -582,16 +952,19 @@
       dy = (dy / dist) * maxRadius;
     }
 
+    this.stickCurrentX = dx;
+    this.stickCurrentY = dy;
+    this.stickRadius = maxRadius;
+
     if (stickEl) {
       stickEl.style.transform = `translate(${dx}px, ${dy}px)`;
     }
     const rawPitch = dy / maxRadius;
     const rawRoll = dx / maxRadius;
-    const [shapedPitch, shapedRoll] = shapeTouchStick(rawPitch, rawRoll);
-    this.joystickData.x = shapedRoll;
-    this.joystickData.y = shapedPitch;
-    this.joystickData.rawX = rawRoll;
-    this.joystickData.rawY = rawPitch;
+    this.stickNormPitch = rawPitch;
+    this.stickNormRoll = rawRoll;
+    this.isStickActive = Math.hypot(rawPitch, rawRoll) > 0.02;
+    this.updateTouchAndTiltOutput();
   },
 
   // ----------------------------------------------------------------
@@ -1028,6 +1401,91 @@
         return `<span style="color:${color}; margin-right:8px;">축${i}${tag}: <strong>${valStr}</strong></span>`;
       });
       debugEl.innerHTML = axesStrs.join(' ');
+    }
+  },
+
+  setupCameraDragControls() {
+    const target = this.renderer?.domElement || this.container;
+    if (!target || target.__camDragBound) return;
+    target.__camDragBound = true;
+
+    const getState = () => (typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState);
+
+    target.addEventListener('pointerdown', (e) => {
+      if (!this.isPlaying || this.isDestroyed) return;
+      if (e.button !== 0 && e.button !== 2 && e.pointerType === 'mouse') return;
+      if (target !== this.container && e.target !== target) return;
+      const cs = getState();
+      if (!cs) return;
+      cs.isDraggingLook = true;
+      cs.dragPointerId = e.pointerId;
+      cs.dragLastX = e.clientX;
+      cs.dragLastY = e.clientY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      const cs = getState();
+      if (!cs || !cs.isDraggingLook || e.pointerId !== cs.dragPointerId) return;
+      const dx = e.clientX - cs.dragLastX;
+      const dy = e.clientY - cs.dragLastY;
+      cs.dragLastX = e.clientX;
+      cs.dragLastY = e.clientY;
+
+      const sens = 0.0055;
+      switch (this.cameraMode) {
+        case '3rd':
+          cs.chaseYaw -= dx * sens;
+          cs.chasePitch = Math.max(-1.1, Math.min(1.0, cs.chasePitch + dy * sens));
+          break;
+        case '1st':
+          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw - dx * sens * 0.8));
+          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch - dy * sens * 0.8));
+          break;
+        case 'wing':
+          cs.wingLookYaw = Math.max(-1.2, Math.min(1.2, cs.wingLookYaw - dx * sens * 0.75));
+          cs.wingLookPitch = Math.max(-0.7, Math.min(0.7, cs.wingLookPitch - dy * sens * 0.75));
+          break;
+        case 'drone':
+          cs.droneOrbitAngle -= dx * sens;
+          cs.dronePitch = Math.max(-0.2, Math.min(0.9, cs.dronePitch + dy * sens * 0.5));
+          break;
+        case 'gear':
+          cs.gearLookYaw = Math.max(-1.2, Math.min(1.2, cs.gearLookYaw + dx * sens * 0.75));
+          cs.gearLookPitch = Math.max(-0.8, Math.min(0.8, cs.gearLookPitch - dy * sens * 0.75));
+          break;
+      }
+    });
+
+    const endDrag = (e) => {
+      const cs = getState();
+      if (!cs || !cs.isDraggingLook || e.pointerId !== cs.dragPointerId) return;
+      cs.isDraggingLook = false;
+      cs.dragPointerId = null;
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+
+    target.addEventListener('dblclick', () => {
+      if (this.isPlaying && !this.isDestroyed) {
+        this.resetCameraLook();
+      }
+    });
+  },
+
+  resetCameraLook() {
+    const cs = typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState;
+    if (!cs) return;
+    cs.chaseYaw = 0;
+    cs.chasePitch = 0;
+    cs.lookYaw = 0;
+    cs.lookPitch = -0.06;
+    cs.wingLookYaw = 0;
+    cs.wingLookPitch = 0;
+    cs.gearLookYaw = 0;
+    cs.gearLookPitch = 0;
+    cs.dronePitch = 0.28;
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('🎯 카메라 시선 중앙 초기화 [단축키 V]');
     }
   }
 

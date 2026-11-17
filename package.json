@@ -22,7 +22,7 @@
     "yaml": "2.8.1"
   },
   "dependencies": {
-    "@stlim0727/flightsim-core": "git+https://github.com/stlim0727/flightsim-core.git#5df620f4435d586653a94b8e1378f04856073775",
+    "@stlim0727/flightsim-core": "git+https://github.com/stlim0727/flightsim-core.git#c18946166e131109480f6eee560e580a6516187a",
     "three": "^0.186.1"
   }
 }

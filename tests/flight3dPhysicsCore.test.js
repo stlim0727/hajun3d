@@ -190,6 +190,7 @@ function loadPhysicsSandbox() {
 
   vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/config.js', 'utf8'), sandbox);
+  vm.runInContext(readFileSync('web/js/input.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/physics.js', 'utf8'), sandbox);
   return sandbox;
 }
@@ -432,3 +433,89 @@ test('DC-10 and B738 rotate nose-up and lift off cleanly near Vr', () => {
     assert.equal(res.telemetry.wow, false, `${type} must lift off within 3s of rotation at ${speedKt} kt`);
   }
 });
+
+test('Atmosphere, input gyro math, and stick shaping are offloaded to flightsim-core', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { FlightSimCore, AirplaneGame } = sandbox;
+
+  assert.ok(FlightSimCore, 'FlightSimCore bundle must be exposed in sandbox');
+  assert.equal(AirplaneGame.prototype.Atmosphere, FlightSimCore.Atmosphere, 'Atmosphere must delegate directly to FlightSimCore.Atmosphere');
+
+  // Atmosphere calculations
+  const cond = AirplaneGame.prototype.Atmosphere.getConditions(1000);
+  assert.ok(cond.density > 1.0 && cond.density < 1.25, 'Troposphere air density');
+  assert.equal(AirplaneGame.prototype.Atmosphere.msToKnots(100), FlightSimCore.Atmosphere.msToKnots(100));
+
+  // Touch stick shaping
+  const [pitch, roll] = AirplaneGame.prototype.shapeTouchStick(0.02, 0.02);
+  assert.equal(pitch, 0, 'Stick shaping must apply 6% deadzone');
+  assert.equal(roll, 0);
+
+  const [fullPitch] = AirplaneGame.prototype.shapeTouchStick(1.0, 0);
+  assert.ok(Math.abs(fullPitch - 1.0) < 1e-4, 'Stick shaping reaches full deflection');
+
+  // Gyro screen orientation math
+  const tilt = AirplaneGame.prototype.screenTilt(10, 15, 90);
+  assert.ok(Number.isFinite(tilt.pitch) && Number.isFinite(tilt.roll));
+  assert.equal(AirplaneGame.prototype.angleDelta(350, 10), -20);
+});
+
+test('Expanded aircraft configs are sourced from FlightSimCore registry with proper characteristics', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { FlightSimCore, AirplaneGame } = sandbox;
+
+  const fleet = ['a320', 'b747', 'dc10', 'md80', 'concorde', 'amphibian'];
+  for (const planeType of fleet) {
+    const cfg = AirplaneGame.prototype.getFlight3dConfig(planeType);
+    assert.ok(cfg, `Config for ${planeType} must be returned`);
+    assert.ok(cfg.aerodynamics, `${planeType} must have aerodynamics`);
+    assert.ok(cfg.massProperties, `${planeType} must have massProperties`);
+    assert.ok(cfg.landingGear, `${planeType} must have landingGear`);
+    if (planeType === 'amphibian') {
+      assert.equal(cfg.isAmphibious, true, 'CL-215 must have isAmphibious flag');
+      assert.ok(Array.isArray(cfg.landingGear.bodySupportPoints), 'CL-215 must have body support points for water hull interaction');
+    }
+  }
+});
+
+test('FlightWarningsCore is wired into physics and triggers GPWS alerts', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.isPlaying = true;
+  game.isDestroyed = false;
+  game.currentPlaneType = 'b738';
+  game.groundY = 0;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 100, 0),
+    rotation: new THREE.Euler(),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.velocity = new THREE.Vector3(0, 0, 0);
+  game.throttle = 0.5;
+  game.speed = 0.6;
+  game.keys = {};
+  game.gearExtended = false;
+  game.isOnGround = false;
+
+  let triggered = null;
+  game.triggerGPWS = (type, text, subtext) => {
+    triggered = { type, text, subtext };
+  };
+  game.speakGPWS = () => {};
+  game.playGPWSWhoopSiren = () => {};
+  game.playCautionChime = () => {};
+  game.clearGPWS = () => { triggered = null; };
+
+  game.initFlight3dPhysics();
+  assert.ok(game._flightWarningsCore, 'FlightWarningsCore must be instantiated on physics init');
+
+  // Simulate severe descent near ground without gear -> triggers PULL UP / TOO LOW GEAR
+  game.verticalSpeed = -25; // -25 m/s sink rate
+  game.planeGroup.position.y = 80;
+  game.checkGPWS(0.1);
+  assert.ok(triggered, 'GPWS must trigger on high sink rate near ground');
+  assert.ok(triggered.type === 'PULL_UP' || triggered.type === 'GEAR' || triggered.type === 'SINK_RATE');
+});
+

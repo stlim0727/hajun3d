@@ -43,6 +43,7 @@
   // node_modules/@stlim0727/flightsim-core/src/index.js
   var src_exports = {};
   __export(src_exports, {
+    AIRBUS_A320: () => AIRBUS_A320,
     AIRCRAFT_REGISTRY: () => AIRCRAFT_REGISTRY,
     AIRCRAFT_SPECS: () => AIRCRAFT_SPECS,
     AMPHIBIAN_WATER_LIMITS: () => AMPHIBIAN_WATER_LIMITS,
@@ -51,7 +52,11 @@
     Atmosphere: () => Atmosphere,
     AutopilotController: () => AutopilotController,
     BOEING_737_800: () => BOEING_737_800,
+    BOEING_747_400: () => BOEING_747_400,
+    CANADAIR_CL215: () => CANADAIR_CL215,
     CESSNA_172: () => CESSNA_172,
+    CONCORDE: () => CONCORDE,
+    DC10_30: () => DC10_30,
     DEFAULT_AIRCRAFT_ID: () => DEFAULT_AIRCRAFT_ID,
     EngineModel: () => EngineModel,
     F16_FALCON: () => F16_FALCON,
@@ -59,6 +64,7 @@
     FlightPhysicsCore: () => FlightPhysicsCore,
     FlightWarningsCore: () => FlightWarningsCore,
     LandingGear: () => LandingGear,
+    MD82: () => MD82,
     MassProperties: () => MassProperties,
     PROFILES: () => PROFILES,
     WATER_DITCHING_LIMITS: () => WATER_DITCHING_LIMITS,
@@ -70,10 +76,13 @@
     autopilotState: () => autopilotState,
     classifyLanding: () => classifyLanding,
     createAeroResult: () => createAeroResult,
+    degrees: () => degrees,
     getAircraftSpecs: () => getAircraftSpecs,
+    isGyroSupportedDevice: () => isGyroSupportedDevice,
     nextGpwsCallout: () => nextGpwsCallout,
     readGyroScreen: () => readGyroScreen,
     screenTilt: () => screenTilt,
+    shapeTouchStick: () => shapeTouchStick,
     solveTrim: () => solveTrim,
     terrainConflictSeconds: () => terrainConflictSeconds,
     thrustFactorToN1: () => thrustFactorToN1,
@@ -679,10 +688,771 @@
       gearLookTarget: { x: 0, y: -0.8, z: -0.2 }
     }
   };
+  var AIRBUS_A320 = {
+    id: "A320",
+    name: "Airbus A320-200",
+    description: "Twin-engine narrow-body jet airliner with CFM56-5B high-bypass turbofans",
+    massProperties: {
+      emptyWeightKg: 42600,
+      maxTakeoffWeightKg: 77e3,
+      currentMassKg: 68e3,
+      Ixx: 17e5,
+      Iyy: 366e4,
+      Izz: 507e4
+    },
+    massDistribution: {
+      referenceMassKg: 68e3,
+      initialFuelKg: 13970,
+      initialPayloadKg: 11430,
+      tanks: [
+        { id: "main", capacityKg: 19e3, priority: 0, position: { x: 0, y: 0, z: 0 } }
+      ],
+      stations: [
+        { id: "payload", capacityKg: 77e3, position: { x: 0, y: 0, z: 0 } }
+      ]
+    },
+    aerodynamics: {
+      wingspanM: 35.8,
+      wingAreaM2: 122.6,
+      meanChordM: 4.19,
+      tailArmM: 12.18,
+      tailAreaM2: 31.48,
+      tailInducedFactor: 0.1,
+      oswaldEfficiency: 0.83,
+      cl0Clean: 0.24,
+      claPerRad: 5.45,
+      alphaStallDeg: 14.6,
+      clFlapBoostMax: 0.95,
+      spoilerLiftDump: 0.38,
+      cd0Clean: 0.0195,
+      gearDrag: 0.024,
+      spoilerDrag: 0.075,
+      transonicMachBuffet: 0.78,
+      cm0: -0.02,
+      cma: -0.9,
+      cmDe: -1.45,
+      cmQ: -26,
+      clBeta: -0.14,
+      clDa: 0.18,
+      clP: -0.65,
+      cnBeta: -0.22,
+      cnDr: -0.12,
+      cnR: -0.32,
+      adverseYaw: -0.025,
+      flapAngles: [0, 10, 25, 40]
+    },
+    stallWarning: { type: "stickShaker", marginDeg: 2 },
+    propulsion: {
+      numEngines: 2,
+      engineName: "CFM56-5B4 Turbofans",
+      maxStaticThrustPerEngineN: 12e4,
+      idleN1Percent: 22,
+      togaN1Percent: 100,
+      spoolUpTimeSec: 3.2,
+      spoolDownTimeSec: 2.4,
+      reverseThrustEfficiency: 0.45,
+      baseFuelFlowKgPerHour: 360,
+      maxFuelFlowKgPerHour: 2575,
+      fuelCapacityKg: 19e3
+    },
+    landingGear: {
+      isFixed: false,
+      cgGroundHeightM: 3.5,
+      gearTransitTimeSec: 8,
+      contacts: [
+        {
+          id: "nose",
+          name: "Nose Gear",
+          localPos: { x: 0, y: -3.27, z: -12.5 },
+          wheelRadius: 0.38,
+          restLength: 0.9,
+          kSpring: 432700,
+          cDamper: 48700,
+          isSteerable: true,
+          maxSteeringDeg: 55
+        },
+        {
+          id: "mainLeft",
+          name: "Left Main Gear",
+          localPos: { x: -3.2, y: -3.3, z: 0.9 },
+          wheelRadius: 0.48,
+          restLength: 0.9,
+          kSpring: 875700,
+          cDamper: 73100,
+          isSteerable: false
+        },
+        {
+          id: "mainRight",
+          name: "Right Main Gear",
+          localPos: { x: 3.2, y: -3.3, z: 0.9 },
+          wheelRadius: 0.48,
+          restLength: 0.9,
+          kSpring: 875700,
+          cDamper: 73100,
+          isSteerable: false
+        }
+      ],
+      rollingFriction: 0.02,
+      maxBrakingFriction: 0.45,
+      tireLateralFriction: 0.75
+    },
+    cockpit: {
+      hasPhotoCockpit: true,
+      captainEyePos: { x: -0.303, y: 0.88, z: -12.35 },
+      portraitEyeX: -0.303,
+      portraitEyeY: 0.88,
+      defaultLookPitchRad: -0.08,
+      defaultFov: 68,
+      exteriorFov: 55,
+      chaseDistance: 55,
+      chaseHeight: 10.5,
+      droneDistance: 38,
+      droneHeight: 11.5,
+      gearCamOffset: { x: 2.2, y: -2.4, z: 6.2 },
+      gearLookTarget: { x: -0.5, y: -1.9, z: -2.5 }
+    }
+  };
+  var BOEING_747_400 = {
+    id: "B747",
+    name: "Boeing 747-400",
+    description: "Four-engine wide-body commercial airliner with GE CF6-80C2 high-bypass turbofans",
+    massProperties: {
+      emptyWeightKg: 179014,
+      maxTakeoffWeightKg: 396893,
+      currentMassKg: 32e4,
+      Ixx: 2592e4,
+      Iyy: 8106e4,
+      Izz: 9508e4
+    },
+    massDistribution: {
+      referenceMassKg: 396893,
+      initialFuelKg: 77542,
+      initialPayloadKg: 63444,
+      tanks: [
+        { id: "main", capacityKg: 173480, priority: 0, position: { x: 0, y: 0, z: 0 } }
+      ],
+      stations: [
+        { id: "payload", capacityKg: 396893, position: { x: 0, y: 0, z: 0 } }
+      ]
+    },
+    aerodynamics: {
+      wingspanM: 64.44,
+      wingAreaM2: 525,
+      meanChordM: 8.32,
+      tailArmM: 26.4,
+      tailAreaM2: 134.8,
+      tailInducedFactor: 0.1,
+      oswaldEfficiency: 0.8,
+      cl0Clean: 0.26,
+      claPerRad: 5.05,
+      alphaStallDeg: 14.9,
+      clFlapBoostMax: 0.95,
+      spoilerLiftDump: 0.38,
+      cd0Clean: 0.0215,
+      gearDrag: 0.024,
+      spoilerDrag: 0.075,
+      transonicMachBuffet: 0.82,
+      cm0: -0.02,
+      cma: -0.9,
+      cmDe: -1.45,
+      cmQ: -36.1,
+      clBeta: -0.14,
+      clDa: 0.116,
+      clP: -0.827,
+      cnBeta: -0.22,
+      cnDr: -0.107,
+      cnR: -0.368,
+      adverseYaw: -0.025,
+      flapAngles: [0, 10, 25, 40]
+    },
+    stallWarning: { type: "stickShaker", marginDeg: 2 },
+    propulsion: {
+      numEngines: 4,
+      engineName: "GE CF6-80C2B5F Turbofans",
+      maxStaticThrustPerEngineN: 276e3,
+      idleN1Percent: 22,
+      togaN1Percent: 100,
+      spoolUpTimeSec: 3.5,
+      spoolDownTimeSec: 2.6,
+      reverseThrustEfficiency: 0.45,
+      baseFuelFlowKgPerHour: 1696,
+      maxFuelFlowKgPerHour: 12120,
+      fuelCapacityKg: 173480
+    },
+    landingGear: {
+      isFixed: false,
+      cgGroundHeightM: 4.8,
+      gearTransitTimeSec: 10,
+      contacts: [
+        {
+          id: "nose",
+          name: "Nose Gear",
+          localPos: { x: 0, y: -4.5, z: -20 },
+          wheelRadius: 0.61,
+          restLength: 1.44,
+          kSpring: 2036e3,
+          cDamper: 105600,
+          isSteerable: true,
+          maxSteeringDeg: 55
+        },
+        {
+          id: "mainLeft",
+          name: "Left Main Gear",
+          localPos: { x: -5.12, y: -4.55, z: 1.44 },
+          wheelRadius: 0.77,
+          restLength: 1.44,
+          kSpring: 412e4,
+          cDamper: 158400,
+          isSteerable: false
+        },
+        {
+          id: "mainRight",
+          name: "Right Main Gear",
+          localPos: { x: 5.12, y: -4.55, z: 1.44 },
+          wheelRadius: 0.77,
+          restLength: 1.44,
+          kSpring: 412e4,
+          cDamper: 158400,
+          isSteerable: false
+        }
+      ],
+      rollingFriction: 0.02,
+      maxBrakingFriction: 0.45,
+      tireLateralFriction: 0.75
+    },
+    cockpit: {
+      hasPhotoCockpit: true,
+      captainEyePos: { x: -0.42, y: 2.8, z: -24.5 },
+      portraitEyeX: -0.42,
+      portraitEyeY: 2.8,
+      defaultLookPitchRad: -0.08,
+      defaultFov: 68,
+      exteriorFov: 55,
+      chaseDistance: 85,
+      chaseHeight: 16,
+      droneDistance: 60,
+      droneHeight: 18,
+      gearCamOffset: { x: 3.5, y: -3.5, z: 10 },
+      gearLookTarget: { x: -0.5, y: -2.5, z: -4 }
+    }
+  };
+  var DC10_30 = {
+    id: "DC10",
+    name: "McDonnell Douglas DC-10-30",
+    description: "Three-engine wide-body jet airliner with two underwing turbofans and one tail-mounted engine",
+    massProperties: {
+      emptyWeightKg: 121563,
+      maxTakeoffWeightKg: 259460,
+      currentMassKg: 215e3,
+      Ixx: 1065e4,
+      Iyy: 366e5,
+      Izz: 414e5
+    },
+    massDistribution: {
+      referenceMassKg: 259460,
+      initialFuelKg: 51390,
+      initialPayloadKg: 42047,
+      tanks: [
+        { id: "main", capacityKg: 111100, priority: 0, position: { x: 0, y: 0, z: 0 } }
+      ],
+      stations: [
+        { id: "payload", capacityKg: 259460, position: { x: 0, y: 0, z: 0 } }
+      ]
+    },
+    aerodynamics: {
+      wingspanM: 50.4,
+      wingAreaM2: 367.7,
+      meanChordM: 7.5,
+      tailArmM: 21.6,
+      tailAreaM2: 94.4,
+      tailInducedFactor: 0.1,
+      oswaldEfficiency: 0.78,
+      cl0Clean: 0.25,
+      claPerRad: 4.95,
+      alphaStallDeg: 14.6,
+      clFlapBoostMax: 0.9,
+      spoilerLiftDump: 0.38,
+      cd0Clean: 0.0225,
+      gearDrag: 0.024,
+      spoilerDrag: 0.075,
+      transonicMachBuffet: 0.8,
+      cm0: -0.02,
+      cma: -0.9,
+      cmDe: -1.45,
+      cmQ: -30.3,
+      clBeta: -0.14,
+      clDa: 0.134,
+      clP: -0.709,
+      cnBeta: -0.22,
+      cnDr: -0.112,
+      cnR: -0.336,
+      adverseYaw: -0.025,
+      flapAngles: [0, 10, 25, 40]
+    },
+    stallWarning: { type: "stickShaker", marginDeg: 2 },
+    propulsion: {
+      numEngines: 3,
+      engineName: "GE CF6-50C2 Turbofans",
+      maxStaticThrustPerEngineN: 233500,
+      idleN1Percent: 22,
+      togaN1Percent: 100,
+      spoolUpTimeSec: 3.4,
+      spoolDownTimeSec: 2.5,
+      reverseThrustEfficiency: 0.45,
+      baseFuelFlowKgPerHour: 1140,
+      maxFuelFlowKgPerHour: 8145,
+      fuelCapacityKg: 111100
+    },
+    landingGear: {
+      isFixed: false,
+      cgGroundHeightM: 4.2,
+      gearTransitTimeSec: 9,
+      contacts: [
+        {
+          id: "nose",
+          name: "Nose Gear",
+          localPos: { x: 0, y: -3.8, z: -17.6 },
+          wheelRadius: 0.53,
+          restLength: 1.27,
+          kSpring: 1368e3,
+          cDamper: 86600,
+          isSteerable: true,
+          maxSteeringDeg: 55
+        },
+        {
+          id: "mainLeft",
+          name: "Left Main Gear",
+          localPos: { x: -4.5, y: -3.85, z: 1.27 },
+          wheelRadius: 0.67,
+          restLength: 1.27,
+          kSpring: 277e4,
+          cDamper: 13e4,
+          isSteerable: false
+        },
+        {
+          id: "mainRight",
+          name: "Right Main Gear",
+          localPos: { x: 4.5, y: -3.85, z: 1.27 },
+          wheelRadius: 0.67,
+          restLength: 1.27,
+          kSpring: 277e4,
+          cDamper: 13e4,
+          isSteerable: false
+        }
+      ],
+      rollingFriction: 0.02,
+      maxBrakingFriction: 0.45,
+      tireLateralFriction: 0.75
+    },
+    cockpit: {
+      hasPhotoCockpit: true,
+      captainEyePos: { x: -0.38, y: 1.9, z: -19.2 },
+      portraitEyeX: -0.38,
+      portraitEyeY: 1.9,
+      defaultLookPitchRad: -0.08,
+      defaultFov: 68,
+      exteriorFov: 55,
+      chaseDistance: 70,
+      chaseHeight: 13,
+      droneDistance: 48,
+      droneHeight: 14.5,
+      gearCamOffset: { x: 2.8, y: -3, z: 8 },
+      gearLookTarget: { x: -0.5, y: -2, z: -3 }
+    }
+  };
+  var MD82 = {
+    id: "MD80",
+    name: "McDonnell Douglas MD-82",
+    description: "Twin-engine narrow-body airliner with aft fuselage-mounted JT8D turbofans and T-tail",
+    massProperties: {
+      emptyWeightKg: 37300,
+      maxTakeoffWeightKg: 67812,
+      currentMassKg: 58e3,
+      Ixx: 122e4,
+      Iyy: 266e4,
+      Izz: 366e4
+    },
+    massDistribution: {
+      referenceMassKg: 58e3,
+      initialFuelKg: 11385,
+      initialPayloadKg: 9315,
+      tanks: [
+        { id: "main", capacityKg: 18944, priority: 0, position: { x: 0, y: 0, z: 0 } }
+      ],
+      stations: [
+        { id: "payload", capacityKg: 67812, position: { x: 0, y: 0, z: 0 } }
+      ]
+    },
+    aerodynamics: {
+      wingspanM: 32.82,
+      wingAreaM2: 112.3,
+      meanChordM: 3.62,
+      tailArmM: 11.25,
+      tailAreaM2: 28.84,
+      tailInducedFactor: 0.1,
+      oswaldEfficiency: 0.81,
+      cl0Clean: 0.23,
+      claPerRad: 5.15,
+      alphaStallDeg: 14,
+      clFlapBoostMax: 0.92,
+      spoilerLiftDump: 0.38,
+      cd0Clean: 0.0205,
+      gearDrag: 0.024,
+      spoilerDrag: 0.075,
+      transonicMachBuffet: 0.78,
+      cm0: -0.02,
+      cma: -0.9,
+      cmDe: -1.53,
+      cmQ: -27.4,
+      clBeta: -0.14,
+      clDa: 0.167,
+      clP: -0.62,
+      cnBeta: -0.22,
+      cnDr: -0.123,
+      cnR: -0.32,
+      adverseYaw: -0.025,
+      flapAngles: [0, 10, 25, 40]
+    },
+    stallWarning: { type: "stickShaker", marginDeg: 2 },
+    propulsion: {
+      numEngines: 2,
+      engineName: "P&W JT8D-217C Turbofans",
+      maxStaticThrustPerEngineN: 93e3,
+      idleN1Percent: 22,
+      togaN1Percent: 100,
+      spoolUpTimeSec: 3.1,
+      spoolDownTimeSec: 2.3,
+      reverseThrustEfficiency: 0.45,
+      baseFuelFlowKgPerHour: 307,
+      maxFuelFlowKgPerHour: 2195,
+      fuelCapacityKg: 18944
+    },
+    landingGear: {
+      isFixed: false,
+      cgGroundHeightM: 3.2,
+      gearTransitTimeSec: 7.5,
+      contacts: [
+        {
+          id: "nose",
+          name: "Nose Gear",
+          localPos: { x: 0, y: -3, z: -11.5 },
+          wheelRadius: 0.35,
+          restLength: 0.82,
+          kSpring: 369e3,
+          cDamper: 45e3,
+          isSteerable: true,
+          maxSteeringDeg: 55
+        },
+        {
+          id: "mainLeft",
+          name: "Left Main Gear",
+          localPos: { x: -2.93, y: -3.05, z: 0.82 },
+          wheelRadius: 0.44,
+          restLength: 0.82,
+          kSpring: 747e3,
+          cDamper: 67500,
+          isSteerable: false
+        },
+        {
+          id: "mainRight",
+          name: "Right Main Gear",
+          localPos: { x: 2.93, y: -3.05, z: 0.82 },
+          wheelRadius: 0.44,
+          restLength: 0.82,
+          kSpring: 747e3,
+          cDamper: 67500,
+          isSteerable: false
+        }
+      ],
+      rollingFriction: 0.02,
+      maxBrakingFriction: 0.45,
+      tireLateralFriction: 0.75
+    },
+    cockpit: {
+      hasPhotoCockpit: true,
+      captainEyePos: { x: -0.29, y: 0.82, z: -11.8 },
+      portraitEyeX: -0.29,
+      portraitEyeY: 0.82,
+      defaultLookPitchRad: -0.08,
+      defaultFov: 68,
+      exteriorFov: 55,
+      chaseDistance: 50,
+      chaseHeight: 9.8,
+      droneDistance: 36,
+      droneHeight: 10.8,
+      gearCamOffset: { x: 2, y: -2.2, z: 5.8 },
+      gearLookTarget: { x: -0.5, y: -1.8, z: -2.2 }
+    }
+  };
+  var CONCORDE = {
+    id: "CONCORDE",
+    name: "A\xE9rospatiale/BAC Concorde",
+    description: "Supersonic passenger airliner featuring ogival delta wing and four Rolls-Royce/Snecma Olympus 593 turbojets with reheat",
+    massProperties: {
+      emptyWeightKg: 78700,
+      maxTakeoffWeightKg: 185070,
+      currentMassKg: 15e4,
+      Ixx: 1916e3,
+      Iyy: 1783e4,
+      Izz: 1535e4
+    },
+    massDistribution: {
+      referenceMassKg: 185070,
+      initialFuelKg: 39215,
+      initialPayloadKg: 32085,
+      tanks: [
+        { id: "main", capacityKg: 95680, priority: 0, position: { x: 0, y: 0, z: 0 } }
+      ],
+      stations: [
+        { id: "payload", capacityKg: 185070, position: { x: 0, y: 0, z: 0 } }
+      ]
+    },
+    aerodynamics: {
+      wingspanM: 25.6,
+      wingAreaM2: 358.25,
+      meanChordM: 15.5,
+      tailArmM: 18.1,
+      tailAreaM2: 92,
+      tailInducedFactor: 0.1,
+      oswaldEfficiency: 0.65,
+      cl0Clean: 0.12,
+      claPerRad: 3.2,
+      alphaStallDeg: 20.6,
+      clFlapBoostMax: 0,
+      spoilerLiftDump: 0.25,
+      cd0Clean: 0.0175,
+      gearDrag: 0.024,
+      spoilerDrag: 0.075,
+      transonicMachBuffet: 1.15,
+      cm0: -0.02,
+      cma: -0.9,
+      cmDe: -1.63,
+      cmQ: -24.5,
+      clBeta: -0.14,
+      clDa: 0.193,
+      clP: -0.53,
+      cnBeta: -0.22,
+      cnDr: -0.128,
+      cnR: -0.304,
+      adverseYaw: -0.025,
+      flapAngles: [0, 0, 0, 0]
+    },
+    stallWarning: { type: "stickShaker", marginDeg: 3 },
+    propulsion: {
+      numEngines: 4,
+      engineName: "Olympus 593 Mk 610 Turbojets",
+      maxStaticThrustPerEngineN: 169300,
+      idleN1Percent: 22,
+      togaN1Percent: 100,
+      spoolUpTimeSec: 3,
+      spoolDownTimeSec: 2.2,
+      reverseThrustEfficiency: 0.25,
+      baseFuelFlowKgPerHour: 795,
+      maxFuelFlowKgPerHour: 5680,
+      fuelCapacityKg: 95680
+    },
+    landingGear: {
+      isFixed: false,
+      cgGroundHeightM: 3.8,
+      gearTransitTimeSec: 8.5,
+      contacts: [
+        {
+          id: "nose",
+          name: "Nose Gear",
+          localPos: { x: 0, y: -3.5, z: -15.5 },
+          wheelRadius: 0.45,
+          restLength: 1,
+          kSpring: 954e3,
+          cDamper: 72400,
+          isSteerable: true,
+          maxSteeringDeg: 55
+        },
+        {
+          id: "mainLeft",
+          name: "Left Main Gear",
+          localPos: { x: -3.8, y: -3.55, z: 1.1 },
+          wheelRadius: 0.58,
+          restLength: 1,
+          kSpring: 193e4,
+          cDamper: 108600,
+          isSteerable: false
+        },
+        {
+          id: "mainRight",
+          name: "Right Main Gear",
+          localPos: { x: 3.8, y: -3.55, z: 1.1 },
+          wheelRadius: 0.58,
+          restLength: 1,
+          kSpring: 193e4,
+          cDamper: 108600,
+          isSteerable: false
+        }
+      ],
+      rollingFriction: 0.02,
+      maxBrakingFriction: 0.45,
+      tireLateralFriction: 0.75
+    },
+    cockpit: {
+      hasPhotoCockpit: true,
+      captainEyePos: { x: -0.32, y: 1.2, z: -20.5 },
+      portraitEyeX: -0.32,
+      portraitEyeY: 1.2,
+      defaultLookPitchRad: -0.08,
+      defaultFov: 68,
+      exteriorFov: 55,
+      chaseDistance: 65,
+      chaseHeight: 11.5,
+      droneDistance: 45,
+      droneHeight: 12.5,
+      gearCamOffset: { x: 2.5, y: -2.6, z: 7.2 },
+      gearLookTarget: { x: -0.5, y: -1.9, z: -2.8 }
+    }
+  };
+  var CANADAIR_CL215 = {
+    id: "CL215",
+    name: "Canadair CL-215 Amphibian",
+    description: "Twin-engine amphibious flying boat designed for aerial firefighting and water landings",
+    isAmphibious: true,
+    massProperties: {
+      emptyWeightKg: 12220,
+      maxTakeoffWeightKg: 19731,
+      currentMassKg: 17100,
+      Ixx: 273e3,
+      Iyy: 231e3,
+      Izz: 565e3
+    },
+    massDistribution: {
+      referenceMassKg: 17100,
+      initialFuelKg: 2684,
+      initialPayloadKg: 2196,
+      tanks: [
+        { id: "main", capacityKg: 4250, priority: 0, position: { x: 0, y: 0, z: 0 } }
+      ],
+      stations: [
+        { id: "payload", capacityKg: 19731, position: { x: 0, y: 0, z: 0 } }
+      ]
+    },
+    aerodynamics: {
+      wingspanM: 28.6,
+      wingAreaM2: 100.33,
+      meanChordM: 3.54,
+      tailArmM: 6.1,
+      tailAreaM2: 25.8,
+      tailInducedFactor: 0.1,
+      oswaldEfficiency: 0.75,
+      cl0Clean: 0.32,
+      claPerRad: 5,
+      alphaStallDeg: 14.9,
+      clFlapBoostMax: 0.85,
+      spoilerLiftDump: 0.3,
+      cd0Clean: 0.034,
+      gearDrag: 0.024,
+      spoilerDrag: 0.075,
+      transonicMachBuffet: 0.5,
+      cm0: -0.02,
+      cma: -0.9,
+      cmDe: -1.71,
+      cmQ: -23.1,
+      clBeta: -0.14,
+      clDa: 0.175,
+      clP: -0.53,
+      cnBeta: -0.22,
+      cnDr: -0.133,
+      cnR: -0.272,
+      adverseYaw: -0.025,
+      flapAngles: [0, 10, 25, 40]
+    },
+    stallWarning: { type: "stickShaker", marginDeg: 2 },
+    propulsion: {
+      numEngines: 2,
+      engineName: "Pratt & Whitney R-2800-83AM Radials",
+      maxStaticThrustPerEngineN: 31e3,
+      idleN1Percent: 18,
+      togaN1Percent: 100,
+      spoolUpTimeSec: 2,
+      spoolDownTimeSec: 1.6,
+      reverseThrustEfficiency: 0.35,
+      baseFuelFlowKgPerHour: 90,
+      maxFuelFlowKgPerHour: 647,
+      fuelCapacityKg: 4250
+    },
+    landingGear: {
+      isFixed: true,
+      cgGroundHeightM: 2.8,
+      gearTransitTimeSec: 0.1,
+      bodySupportPoints: [
+        { id: "belly", key: "belly:0", position: [0, -1.8, -4.8], weight: 1 / 3 },
+        { id: "belly", key: "belly:1", position: [0, -1.8, 0], weight: 1 / 3 },
+        { id: "belly", key: "belly:2", position: [0, -1.6, 4.8], weight: 1 / 3 },
+        { id: "nose", key: "nose:3", position: [0, -1.5, -8.8], weight: 1 },
+        { id: "tail", key: "tail:4", position: [0, -0.8, 10.5], weight: 1 },
+        { id: "wingL", key: "wingL:5", position: [-13.5, -1, 0.5], weight: 1 },
+        { id: "wingR", key: "wingR:6", position: [13.5, -1, 0.5], weight: 1 }
+      ],
+      contacts: [
+        {
+          id: "nose",
+          name: "Nose Gear",
+          localPos: { x: 0, y: -2.6, z: -10 },
+          wheelRadius: 0.3,
+          restLength: 0.72,
+          kSpring: 108800,
+          cDamper: 24400,
+          isSteerable: true,
+          maxSteeringDeg: 55
+        },
+        {
+          id: "mainLeft",
+          name: "Left Main Gear",
+          localPos: { x: -2.56, y: -2.65, z: 0.72 },
+          wheelRadius: 0.38,
+          restLength: 0.72,
+          kSpring: 22e4,
+          cDamper: 36600,
+          isSteerable: false
+        },
+        {
+          id: "mainRight",
+          name: "Right Main Gear",
+          localPos: { x: 2.56, y: -2.65, z: 0.72 },
+          wheelRadius: 0.38,
+          restLength: 0.72,
+          kSpring: 22e4,
+          cDamper: 36600,
+          isSteerable: false
+        }
+      ],
+      rollingFriction: 0.02,
+      maxBrakingFriction: 0.45,
+      tireLateralFriction: 0.75
+    },
+    cockpit: {
+      hasPhotoCockpit: true,
+      captainEyePos: { x: -0.32, y: 0.9, z: -6.5 },
+      portraitEyeX: -0.32,
+      portraitEyeY: 0.9,
+      defaultLookPitchRad: -0.08,
+      defaultFov: 68,
+      exteriorFov: 55,
+      chaseDistance: 45,
+      chaseHeight: 8.5,
+      droneDistance: 32,
+      droneHeight: 9.5,
+      gearCamOffset: { x: 1.8, y: -1.8, z: 4.8 },
+      gearLookTarget: { x: -0.5, y: -1.5, z: -1.8 }
+    }
+  };
   var AIRCRAFT_REGISTRY = {
     B738: BOEING_737_800,
     F16: F16_FALCON,
-    C172: CESSNA_172
+    C172: CESSNA_172,
+    A320: AIRBUS_A320,
+    B747: BOEING_747_400,
+    DC10: DC10_30,
+    MD80: MD82,
+    CONCORDE,
+    CL215: CANADAIR_CL215,
+    AMPHIBIAN: CANADAIR_CL215
   };
   var DEFAULT_AIRCRAFT_ID = "B738";
   var AIRCRAFT_SPECS = Object.freeze({
@@ -744,6 +1514,108 @@
         { id: "severeHard", maxG: 2.5, maxSinkFpm: 800, labelKey: "debrief.rating.severeHard" },
         { id: "crash", minG: 2.5, minSinkFpm: 800, labelKey: "debrief.rating.damage" }
       ])
+    }),
+    A320: Object.freeze({
+      id: "A320",
+      name: "Airbus A320-200",
+      type: "airliner",
+      limitLoad: Object.freeze({ min: -1, max: 2.5, flapsDownMin: 0, flapsDownMax: 2 }),
+      ultimateLoad: Object.freeze({ min: -1.5, max: 3.75, flapsDownMin: 0, flapsDownMax: 3 }),
+      oleoStrokeM: 0.4,
+      hardLandingGThreshold: 1.55,
+      crashGThreshold: 2.1,
+      landingRatings: Object.freeze([
+        { id: "butter", maxG: 1.25, maxSinkFpm: 150, labelKey: "debrief.rating.butter" },
+        { id: "normal", maxG: 1.55, maxSinkFpm: 300, labelKey: "debrief.rating.normal" },
+        { id: "firm", maxG: 1.8, maxSinkFpm: 500, labelKey: "debrief.rating.firm" },
+        { id: "severeHard", maxG: 2.1, maxSinkFpm: 600, labelKey: "debrief.rating.severeHard" },
+        { id: "crash", minG: 2.1, minSinkFpm: 600, labelKey: "debrief.rating.damage" }
+      ])
+    }),
+    B747: Object.freeze({
+      id: "B747",
+      name: "Boeing 747-400",
+      type: "airliner",
+      limitLoad: Object.freeze({ min: -1, max: 2.5, flapsDownMin: 0, flapsDownMax: 2 }),
+      ultimateLoad: Object.freeze({ min: -1.5, max: 3.75, flapsDownMin: 0, flapsDownMax: 3 }),
+      oleoStrokeM: 0.5,
+      hardLandingGThreshold: 1.55,
+      crashGThreshold: 2.1,
+      landingRatings: Object.freeze([
+        { id: "butter", maxG: 1.25, maxSinkFpm: 150, labelKey: "debrief.rating.butter" },
+        { id: "normal", maxG: 1.55, maxSinkFpm: 300, labelKey: "debrief.rating.normal" },
+        { id: "firm", maxG: 1.8, maxSinkFpm: 500, labelKey: "debrief.rating.firm" },
+        { id: "severeHard", maxG: 2.1, maxSinkFpm: 600, labelKey: "debrief.rating.severeHard" },
+        { id: "crash", minG: 2.1, minSinkFpm: 600, labelKey: "debrief.rating.damage" }
+      ])
+    }),
+    DC10: Object.freeze({
+      id: "DC10",
+      name: "McDonnell Douglas DC-10-30",
+      type: "airliner",
+      limitLoad: Object.freeze({ min: -1, max: 2.5, flapsDownMin: 0, flapsDownMax: 2 }),
+      ultimateLoad: Object.freeze({ min: -1.5, max: 3.75, flapsDownMin: 0, flapsDownMax: 3 }),
+      oleoStrokeM: 0.45,
+      hardLandingGThreshold: 1.55,
+      crashGThreshold: 2.1,
+      landingRatings: Object.freeze([
+        { id: "butter", maxG: 1.25, maxSinkFpm: 150, labelKey: "debrief.rating.butter" },
+        { id: "normal", maxG: 1.55, maxSinkFpm: 300, labelKey: "debrief.rating.normal" },
+        { id: "firm", maxG: 1.8, maxSinkFpm: 500, labelKey: "debrief.rating.firm" },
+        { id: "severeHard", maxG: 2.1, maxSinkFpm: 600, labelKey: "debrief.rating.severeHard" },
+        { id: "crash", minG: 2.1, minSinkFpm: 600, labelKey: "debrief.rating.damage" }
+      ])
+    }),
+    MD80: Object.freeze({
+      id: "MD80",
+      name: "McDonnell Douglas MD-82",
+      type: "airliner",
+      limitLoad: Object.freeze({ min: -1, max: 2.5, flapsDownMin: 0, flapsDownMax: 2 }),
+      ultimateLoad: Object.freeze({ min: -1.5, max: 3.75, flapsDownMin: 0, flapsDownMax: 3 }),
+      oleoStrokeM: 0.38,
+      hardLandingGThreshold: 1.55,
+      crashGThreshold: 2.1,
+      landingRatings: Object.freeze([
+        { id: "butter", maxG: 1.25, maxSinkFpm: 150, labelKey: "debrief.rating.butter" },
+        { id: "normal", maxG: 1.55, maxSinkFpm: 300, labelKey: "debrief.rating.normal" },
+        { id: "firm", maxG: 1.8, maxSinkFpm: 500, labelKey: "debrief.rating.firm" },
+        { id: "severeHard", maxG: 2.1, maxSinkFpm: 600, labelKey: "debrief.rating.severeHard" },
+        { id: "crash", minG: 2.1, minSinkFpm: 600, labelKey: "debrief.rating.damage" }
+      ])
+    }),
+    CONCORDE: Object.freeze({
+      id: "CONCORDE",
+      name: "A\xE9rospatiale/BAC Concorde",
+      type: "supersonicAirliner",
+      limitLoad: Object.freeze({ min: -1, max: 2.5, flapsDownMin: -1, flapsDownMax: 2.5 }),
+      ultimateLoad: Object.freeze({ min: -1.5, max: 3.75, flapsDownMin: -1.5, flapsDownMax: 3.75 }),
+      oleoStrokeM: 0.42,
+      hardLandingGThreshold: 1.65,
+      crashGThreshold: 2.25,
+      landingRatings: Object.freeze([
+        { id: "butter", maxG: 1.25, maxSinkFpm: 150, labelKey: "debrief.rating.butter" },
+        { id: "normal", maxG: 1.65, maxSinkFpm: 350, labelKey: "debrief.rating.normal" },
+        { id: "firm", maxG: 1.95, maxSinkFpm: 550, labelKey: "debrief.rating.firm" },
+        { id: "severeHard", maxG: 2.25, maxSinkFpm: 700, labelKey: "debrief.rating.severeHard" },
+        { id: "crash", minG: 2.25, minSinkFpm: 700, labelKey: "debrief.rating.damage" }
+      ])
+    }),
+    CL215: Object.freeze({
+      id: "CL215",
+      name: "Canadair CL-215 Amphibian",
+      type: "amphibian",
+      limitLoad: Object.freeze({ min: -1, max: 3.25, flapsDownMin: 0, flapsDownMax: 2.2 }),
+      ultimateLoad: Object.freeze({ min: -1.5, max: 4.87, flapsDownMin: 0, flapsDownMax: 3.3 }),
+      oleoStrokeM: 0.35,
+      hardLandingGThreshold: 1.7,
+      crashGThreshold: 2.4,
+      landingRatings: Object.freeze([
+        { id: "smooth", maxG: 1.3, maxSinkFpm: 180, labelKey: "debrief.rating.smooth" },
+        { id: "normal", maxG: 1.7, maxSinkFpm: 380, labelKey: "debrief.rating.normal" },
+        { id: "firm", maxG: 2.1, maxSinkFpm: 580, labelKey: "debrief.rating.firm" },
+        { id: "severeHard", maxG: 2.4, maxSinkFpm: 750, labelKey: "debrief.rating.severeHard" },
+        { id: "crash", minG: 2.4, minSinkFpm: 750, labelKey: "debrief.rating.damage" }
+      ])
     })
   });
   var AircraftSpecs = AIRCRAFT_SPECS;
@@ -756,6 +1628,24 @@
   CESSNA_172.specs = AIRCRAFT_SPECS.C172;
   CESSNA_172.hardLandingGThreshold = AIRCRAFT_SPECS.C172.hardLandingGThreshold;
   CESSNA_172.crashGThreshold = AIRCRAFT_SPECS.C172.crashGThreshold;
+  AIRBUS_A320.specs = AIRCRAFT_SPECS.A320;
+  AIRBUS_A320.hardLandingGThreshold = AIRCRAFT_SPECS.A320.hardLandingGThreshold;
+  AIRBUS_A320.crashGThreshold = AIRCRAFT_SPECS.A320.crashGThreshold;
+  BOEING_747_400.specs = AIRCRAFT_SPECS.B747;
+  BOEING_747_400.hardLandingGThreshold = AIRCRAFT_SPECS.B747.hardLandingGThreshold;
+  BOEING_747_400.crashGThreshold = AIRCRAFT_SPECS.B747.crashGThreshold;
+  DC10_30.specs = AIRCRAFT_SPECS.DC10;
+  DC10_30.hardLandingGThreshold = AIRCRAFT_SPECS.DC10.hardLandingGThreshold;
+  DC10_30.crashGThreshold = AIRCRAFT_SPECS.DC10.crashGThreshold;
+  MD82.specs = AIRCRAFT_SPECS.MD80;
+  MD82.hardLandingGThreshold = AIRCRAFT_SPECS.MD80.hardLandingGThreshold;
+  MD82.crashGThreshold = AIRCRAFT_SPECS.MD80.crashGThreshold;
+  CONCORDE.specs = AIRCRAFT_SPECS.CONCORDE;
+  CONCORDE.hardLandingGThreshold = AIRCRAFT_SPECS.CONCORDE.hardLandingGThreshold;
+  CONCORDE.crashGThreshold = AIRCRAFT_SPECS.CONCORDE.crashGThreshold;
+  CANADAIR_CL215.specs = AIRCRAFT_SPECS.CL215;
+  CANADAIR_CL215.hardLandingGThreshold = AIRCRAFT_SPECS.CL215.hardLandingGThreshold;
+  CANADAIR_CL215.crashGThreshold = AIRCRAFT_SPECS.CL215.crashGThreshold;
   function getAircraftSpecs(aircraftId) {
     return AIRCRAFT_SPECS[aircraftId] || AIRCRAFT_SPECS.B738;
   }
@@ -763,7 +1653,7 @@
     const specs = getAircraftSpecs(aircraftId);
     const gVal = Number.isFinite(contactG) ? contactG : 1;
     const fpm = Number.isFinite(sinkRateFpm) ? sinkRateFpm : 0;
-    if (aircraftId === "B738") {
+    if (aircraftId === "B738" || aircraftId === "A320" || aircraftId === "B747" || aircraftId === "DC10" || aircraftId === "MD80" || aircraftId === "CONCORDE") {
       if (gVal > specs.crashGThreshold || fpm > 600) {
         return { rating: "crash", labelKey: "debrief.rating.damage", isHard: true, isCrash: true };
       }
@@ -777,6 +1667,21 @@
         return { rating: "normal", labelKey: "debrief.rating.normal", isHard: false, isCrash: false };
       }
       return { rating: "butter", labelKey: "debrief.rating.butter", isHard: false, isCrash: false };
+    }
+    if (aircraftId === "CL215" || aircraftId === "AMPHIBIAN") {
+      if (gVal > specs.crashGThreshold || fpm > 700) {
+        return { rating: "crash", labelKey: "debrief.rating.damage", isHard: true, isCrash: true };
+      }
+      if (gVal > 2 || fpm > 550) {
+        return { rating: "severeHard", labelKey: "debrief.rating.severeHard", isHard: true, isCrash: false };
+      }
+      if (gVal > specs.hardLandingGThreshold || fpm > 350) {
+        return { rating: "firm", labelKey: "debrief.rating.firm", isHard: true, isCrash: false };
+      }
+      if (gVal > 1.3 || fpm >= 180) {
+        return { rating: "normal", labelKey: "debrief.rating.normal", isHard: false, isCrash: false };
+      }
+      return { rating: "smooth", labelKey: "debrief.rating.smooth", isHard: false, isCrash: false };
     }
     if (aircraftId === "F16") {
       if (gVal > specs.crashGThreshold) {
@@ -3762,12 +4667,28 @@
       roll: degrees(Math.atan2(right, Math.hypot(up, z)))
     };
   }
-  function readGyroScreen(win) {
-    const orientation = win.screen?.orientation;
-    const rawAngle = orientation?.angle ?? win.orientation;
+  function readGyroScreen(win = typeof window !== "undefined" ? window : globalThis) {
+    const orientation = win?.screen?.orientation;
+    const rawAngle = orientation?.angle ?? win?.orientation;
     const angle = Number.isFinite(rawAngle) ? (rawAngle % 360 + 360) % 360 : 0;
-    const type = orientation?.type?.startsWith("landscape") ? "landscape" : orientation?.type?.startsWith("portrait") ? "portrait" : win.innerWidth > win.innerHeight ? "landscape" : "portrait";
+    const type = orientation?.type?.startsWith("landscape") ? "landscape" : orientation?.type?.startsWith("portrait") ? "portrait" : (win?.innerWidth || 0) > (win?.innerHeight || 0) ? "landscape" : "portrait";
     return { angle, type };
+  }
+  function isGyroSupportedDevice(win = typeof window !== "undefined" ? window : globalThis, nav = typeof navigator !== "undefined" ? navigator : globalThis?.navigator) {
+    if (typeof win === "undefined" || !win || !win.DeviceOrientationEvent) return false;
+    if (win.isSecureContext === false) return false;
+    const ua = nav?.userAgent || "";
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || /Macintosh/i.test(ua) && (nav?.maxTouchPoints || 0) > 1;
+    const isMobileClient = Boolean(nav?.userAgentData?.mobile);
+    const hasTouch = Boolean("ontouchstart" in win || (nav?.maxTouchPoints ?? 0) > 0);
+    return (isMobileUA || isMobileClient) && hasTouch;
+  }
+  function shapeTouchStick(pitch, roll, { deadzone = 0.06, linearWeight = 0.35, cubicWeight = 0.65 } = {}) {
+    const magnitude = Math.hypot(pitch, roll);
+    if (magnitude <= deadzone) return [0, 0];
+    const travel = (Math.min(1, magnitude) - deadzone) / (1 - deadzone);
+    const response = linearWeight * travel + cubicWeight * Math.pow(travel, 3);
+    return [pitch / magnitude * response, roll / magnitude * response];
   }
 
   // node_modules/@stlim0727/flightsim-core/src/physics/Autopilot.js

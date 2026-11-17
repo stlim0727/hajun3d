@@ -292,6 +292,37 @@
    */
   getFlight3dConfig(type) {
     const f3d = globalThis.FlightSimCore || globalThis.Flight3dPhysics;
+    const key = (type || 'b738').toLowerCase();
+    const typeMap = {
+      b737: 'B738',
+      b738: 'B738',
+      a320: 'A320',
+      b747: 'B747',
+      dc10: 'DC10',
+      md80: 'MD80',
+      concorde: 'CONCORDE',
+      amphibian: 'CL215',
+      cl215: 'CL215',
+    };
+    const mappedId = typeMap[key] || (type || 'b738').toUpperCase();
+
+    // 1순위: FlightSimCore.AIRCRAFT_REGISTRY에 사전 등록된 6-DOF 기체 모델 반환
+    if (f3d?.AIRCRAFT_REGISTRY?.[mappedId]) {
+      const config = f3d.AIRCRAFT_REGISTRY[mappedId];
+      if (mappedId === 'B738') {
+        // Hajun3d takeoff rotation calibration: ensure adequate elevator authority and main gear lever arm
+        config.aerodynamics.cmDe = -1.45;
+        if (config.landingGear?.contacts) {
+          for (const c of config.landingGear.contacts) {
+            if (c.id === 'mainLeft' || c.id === 'mainRight') {
+              c.localPos.z = 0.9;
+            }
+          }
+        }
+      }
+      return config;
+    }
+
     if ((type === 'b737' || type === 'b738') && f3d && f3d.BOEING_737_800) {
       const b738 = f3d.BOEING_737_800;
       // Hajun3d takeoff rotation calibration: ensure adequate elevator authority and main gear lever arm
