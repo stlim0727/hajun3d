@@ -34,25 +34,28 @@
     ctx.fillStyle = tireGrad;
     ctx.fillRect(196, 0, 120, 512);
 
-    // 아스팔트 골재 입자 노이즈 (결정론적 패턴)
+    // 아스팔트 골재 입자 노이즈 (결정론적 패턴 - 3인칭 시점에서도 질감이 선명히 보이도록 대비 강화)
     let seed = 1337;
     const nextRand = () => {
       seed = (seed * 16807) % 2147483647;
       return (seed - 1) / 2147483646;
     };
-    for (let i = 0; i < 6500; i++) {
+    for (let i = 0; i < 9000; i++) {
       const x = nextRand() * 512;
       const y = nextRand() * 512;
       const bright = nextRand() > 0.5;
-      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.07)' : 'rgba(10, 15, 28, 0.14)';
-      ctx.fillRect(x, y, 2, 2);
+      const sz = nextRand() > 0.7 ? 3 : 2;
+      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.14)' : 'rgba(10, 15, 28, 0.24)';
+      ctx.fillRect(x, y, sz, sz);
     }
 
-    // 20m 간격 횡방향 포장 이음새 (광학 흐름 기준선)
-    ctx.fillStyle = 'rgba(10, 15, 28, 0.45)';
-    ctx.fillRect(0, 0, 512, 4);
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.14)';
-    ctx.fillRect(0, 4, 512, 2);
+    // 10m / 20m 간격 횡방향 포장 이음새 (광학 흐름 기준선 - 밉맵에서도 선명하게 유지)
+    [0, 256].forEach((seamY, idx) => {
+      ctx.fillStyle = idx === 0 ? 'rgba(10, 15, 28, 0.65)' : 'rgba(10, 15, 28, 0.40)';
+      ctx.fillRect(0, seamY, 512, 8);
+      ctx.fillStyle = idx === 0 ? 'rgba(148, 163, 184, 0.24)' : 'rgba(148, 163, 184, 0.14)';
+      ctx.fillRect(0, seamY + 8, 512, 4);
+    });
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
