@@ -453,7 +453,7 @@
       this.cockpitWindGain.gain.setTargetAtTime(targetWindVol, now, 0.10);
     }
 
-    // 4. 활주로 및 유도로 지상 굴림 럼블 (바퀴 접지 및 지상 속도 연동)
+    // 4. 활주로/유도로 지상 굴림 럼블 및 저고도 지면/수면 근접 에어 쿠션 사운드
     if (this.groundRumbleFilter && this.groundRumbleGain) {
       const groundSpeedKmh = this.groundSpeed ? Math.abs(this.groundSpeed * 3.6) : ((this.speed || 0) * 280);
       if (this.isOnGround && groundSpeedKmh > 3 && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
@@ -462,6 +462,20 @@
         const targetRumbleCutoff = 180 + rumbleRatio * 140;
         this.groundRumbleFilter.frequency.setTargetAtTime(targetRumbleCutoff, now, 0.08);
         this.groundRumbleGain.gain.setTargetAtTime(targetRumbleVol, now, 0.08);
+      } else if (!this.isOnGround && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
+        const clearance = typeof this._surfaceClearance === 'number' ? this._surfaceClearance : 999;
+        const airSpeedKmh = (this.speed || 0) * 280;
+        if (clearance < 35 && airSpeedKmh > 80) {
+          const prox = 1.0 - clearance / 35;
+          const speedRatio = Math.min(1.0, airSpeedKmh / 360);
+          const isWater = Boolean(this._isOverWaterSurface);
+          const targetVol = prox * speedRatio * (isWater ? 0.19 : 0.13);
+          const targetCutoff = (isWater ? 340 : 240) + prox * 220;
+          this.groundRumbleFilter.frequency.setTargetAtTime(targetCutoff, now, 0.08);
+          this.groundRumbleGain.gain.setTargetAtTime(targetVol, now, 0.08);
+        } else {
+          this.groundRumbleGain.gain.setTargetAtTime(0.0, now, 0.08);
+        }
       } else {
         this.groundRumbleGain.gain.setTargetAtTime(0.0, now, 0.08);
       }

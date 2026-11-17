@@ -376,6 +376,9 @@ class AirplaneGame {
       this.updateLandingGearAnimation(dt);
       const currentKmh = this.speed * 280;
       this.updateSpeedEffects(dt, currentKmh);
+      if (typeof this.updateProximitySurfaceEffects === 'function') {
+        this.updateProximitySurfaceEffects(dt, currentKmh);
+      }
       this.checkObstacleCollisions();
       this.updateHUD();
       this.updateParticles(dt);
@@ -388,6 +391,10 @@ class AirplaneGame {
       if (!this.isDestroyed) this.updateLandingGearAnimation(dt);
       this.updateDebrisPhysics(dt);
       this.updateParticles(dt);
+    }
+
+    if (typeof this.updateSunShadowTarget === 'function') {
+      this.updateSunShadowTarget();
     }
 
     // 제트 엔진 티타늄 터보팬 블레이드 고속 회전 (스로틀 & 속도 연동 실기 회전)

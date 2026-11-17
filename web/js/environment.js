@@ -16,24 +16,38 @@
     this.scene.add(this.hemiLight);
 
     this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
-    this.sunLight.position.set(500, 900, 400);
+    this.sunLightOffset = new THREE.Vector3(500, 900, 400);
+    this.sunLight.position.copy(this.sunLightOffset);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 1024;
     this.sunLight.shadow.mapSize.height = 1024;
     this.sunLight.shadow.camera.near = 10;
-    this.sunLight.shadow.camera.far = 5000;
-    const d = 900;
+    this.sunLight.shadow.camera.far = 3200;
+    const d = 420;
     this.sunLight.shadow.camera.left = -d;
     this.sunLight.shadow.camera.right = d;
     this.sunLight.shadow.camera.top = d;
     this.sunLight.shadow.camera.bottom = -d;
     this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
+    this.scene.add(this.sunLight.target);
 
     // 야간 달빛 (Soft Moonlight for Night Flying)
     this.moonLight = new THREE.DirectionalLight(0x93c5fd, 0.0);
     this.moonLight.position.set(-600, 950, -450);
     this.scene.add(this.moonLight);
+  },
+
+  updateSunShadowTarget() {
+    if (!this.sunLight || !this.planeGroup) return;
+    const frustumSize = 840;
+    const texelSize = frustumSize / 1024;
+    const px = Math.round(this.planeGroup.position.x / texelSize) * texelSize;
+    const pz = Math.round(this.planeGroup.position.z / texelSize) * texelSize;
+    this.sunLight.target.position.set(px, 0, pz);
+    const offset = this.sunLightOffset || { x: 500, y: 900, z: 400 };
+    this.sunLight.position.set(px + offset.x, offset.y, pz + offset.z);
+    this.sunLight.target.updateMatrixWorld();
   },
 
   // ----------------------------------------------------------------
@@ -106,26 +120,38 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
 
-    // 물결 패턴 & 포말 (Wave foam lines)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
-    ctx.lineWidth = 2.0;
+    // 물결 패턴 & 포말 (Wave foam lines + fine surface ripples for low-altitude optical flow)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+    ctx.lineWidth = 1.6;
     ctx.lineCap = 'round';
 
-    for (let y = 12; y < 512; y += 24) {
+    for (let y = 8; y < 512; y += 16) {
+      ctx.beginPath();
+      for (let x = 0; x < 512; x += 24) {
+        const offset = Math.sin((x + y) * 0.08) * 5;
+        ctx.bezierCurveTo(x + 8, y + offset, x + 16, y - offset, x + 24, y + offset * 0.5);
+      }
+      ctx.stroke();
+    }
+
+    // 미세 해수면 음영 리플 (Subtle dark troughs for depth)
+    ctx.strokeStyle = 'rgba(3, 105, 161, 0.38)';
+    ctx.lineWidth = 1.2;
+    for (let y = 16; y < 512; y += 20) {
       ctx.beginPath();
       for (let x = 0; x < 512; x += 32) {
-        const offset = Math.sin((x + y) * 0.06) * 7;
-        ctx.bezierCurveTo(x + 10, y + offset, x + 22, y - offset, x + 32, y + offset * 0.5);
+        const offset = Math.cos((x - y) * 0.07) * 4;
+        ctx.lineTo(x + 16, y + offset);
       }
       ctx.stroke();
     }
 
     // 미세 백색 포말 물보라 점들
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    for (let i = 0; i < 280; i++) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    for (let i = 0; i < 420; i++) {
       const px = Math.random() * 512;
       const py = Math.random() * 512;
-      const pr = 0.8 + Math.random() * 1.8;
+      const pr = 0.7 + Math.random() * 1.6;
       ctx.beginPath();
       ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
@@ -134,7 +160,47 @@
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(160, 160);
+    tex.repeat.set(1200, 1200); // 100m x 100m 타일로 저고도 수면 속도감 극대화
+    tex.anisotropy = 4;
+    return tex;
+  },
+
+  createTerrainCanvasTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#245a30';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 자연스러운 초원/농지/지형 패치 (Optical flow patches for low-altitude terrain feel)
+    const patchColors = [
+      'rgba(22, 101, 52, 0.38)',
+      'rgba(45, 106, 79, 0.35)',
+      'rgba(74, 124, 68, 0.28)',
+      'rgba(30, 70, 40, 0.35)'
+    ];
+    for (let i = 0; i < 90; i++) {
+      ctx.fillStyle = patchColors[i % patchColors.length];
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const w = 28 + Math.random() * 68;
+      const h = 24 + Math.random() * 64;
+      ctx.fillRect(x, y, w, h);
+    }
+
+    // 미세 지면 텍스처 그레인 (Ground grain)
+    for (let i = 0; i < 1600; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(134, 239, 172, 0.14)' : 'rgba(20, 45, 25, 0.2)';
+      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 2 + Math.random() * 2);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(500, 400); // ~100m x 100m 타일
+    tex.anisotropy = 4;
     return tex;
   },
 
@@ -584,8 +650,10 @@
     // 1-B. 거대한 대륙 육지 (Continental Mainland: Z = -28000 ~ -68000, 상단 표면 정확히 Y = 0.0)
     // 폭 50km x 길이 40km, 두께 8m, 중심 Y = -4.0 -> 상단면 Y = 0.0 (공항 바닥 Y = 2.0과 2.0m 완벽한 단차로 Z-Fighting 원천 차단!)
     const continentGeo = new THREE.BoxGeometry(50000, 8.0, 40000);
+    this.continentTexture = this.createTerrainCanvasTexture();
     const continentMat = new THREE.MeshStandardMaterial({
-      color: 0x245a30,
+      color: 0xffffff,
+      map: this.continentTexture,
       roughness: 0.88,
       metalness: 0.1
     });

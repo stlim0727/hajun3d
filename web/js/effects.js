@@ -163,6 +163,243 @@
     if (typeof this.updateSpeedEffectUI === 'function') {
       this.updateSpeedEffectUI();
     }
+
+    this.initProximityEffects();
+  },
+
+  /**
+   * Returns local surface elevation and whether the aircraft is over water.
+   */
+  getSurfaceUnderPlane(x, z) {
+    if (x >= -700 && x <= 700 && z >= -2200 && z <= 2200) {
+      return { surfaceY: 2.0, isWater: false };
+    }
+    if (z <= -42800 && z >= -47200 && x >= -700 && x <= 700) {
+      return { surfaceY: 2.0, isWater: false };
+    }
+    if (z <= -28000 && x >= -25000 && x <= 25000) {
+      return { surfaceY: 0.0, isWater: false };
+    }
+    return { surfaceY: -1.5, isWater: true };
+  },
+
+  initProximityEffects() {
+    if (
+      !this.scene ||
+      typeof THREE === 'undefined' ||
+      typeof THREE.PlaneGeometry !== 'function' ||
+      typeof THREE.IcosahedronGeometry !== 'function' ||
+      typeof THREE.MeshBasicMaterial !== 'function' ||
+      typeof THREE.Mesh !== 'function'
+    ) {
+      return;
+    }
+
+    // 1. 저고도 지면/수면 근접 투영 그림자 (Contact / Proximity Shadow)
+    let shadowTex = null;
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext && canvas.getContext('2d');
+      if (ctx) {
+        const grad = ctx.createRadialGradient(64, 64, 6, 64, 64, 60);
+        grad.addColorStop(0.0, 'rgba(0, 0, 0, 0.72)');
+        grad.addColorStop(0.45, 'rgba(0, 0, 0, 0.36)');
+        grad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 128, 128);
+        shadowTex = new THREE.CanvasTexture(canvas);
+      }
+    }
+
+    const shadowGeo = new THREE.PlaneGeometry(1, 1);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x0f172a,
+      map: shadowTex,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    this.proximityShadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+    this.proximityShadowMesh.rotation.x = -Math.PI / 2;
+    this.proximityShadowMesh.visible = false;
+    this.proximityShadowMesh.renderOrder = 1;
+    this.scene.add(this.proximityShadowMesh);
+
+    // 2. 저고도 수면 다운워시 파문 링 (Water Downwash Skim Ring)
+    let ringTex = null;
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      const rCanvas = document.createElement('canvas');
+      rCanvas.width = 128;
+      rCanvas.height = 128;
+      const rCtx = rCanvas.getContext && rCanvas.getContext('2d');
+      if (rCtx) {
+        const rGrad = rCtx.createRadialGradient(64, 64, 24, 64, 64, 62);
+        rGrad.addColorStop(0.0, 'rgba(224, 242, 254, 0.0)');
+        rGrad.addColorStop(0.55, 'rgba(224, 242, 254, 0.35)');
+        rGrad.addColorStop(0.78, 'rgba(255, 255, 255, 0.55)');
+        rGrad.addColorStop(1.0, 'rgba(224, 242, 254, 0.0)');
+        rCtx.fillStyle = rGrad;
+        rCtx.fillRect(0, 0, 128, 128);
+        ringTex = new THREE.CanvasTexture(rCanvas);
+      }
+    }
+
+    const wakeMat = new THREE.MeshBasicMaterial({
+      color: 0xe0f2fe,
+      map: ringTex,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    this.waterWakeRingMesh = new THREE.Mesh(shadowGeo, wakeMat);
+    this.waterWakeRingMesh.rotation.x = -Math.PI / 2;
+    this.waterWakeRingMesh.visible = false;
+    this.waterWakeRingMesh.renderOrder = 2;
+    this.scene.add(this.waterWakeRingMesh);
+
+    // 3. Zero-GC 수면 물보라 / 지면 먼지 파티클 풀 (36개 고정 재사용)
+    const poolSize = 36;
+    const puffGeo = new THREE.IcosahedronGeometry(1.0, 0);
+    this.proximityParticlePool = [];
+    this._proximityPoolCursor = 0;
+    this._proximitySpawnAccum = 0;
+
+    for (let i = 0; i < poolSize; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xe0f2fe,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false
+      });
+      const mesh = new THREE.Mesh(puffGeo, mat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.proximityParticlePool.push({
+        mesh,
+        mat,
+        active: false,
+        life: 0,
+        maxLife: 1,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        baseScale: 1,
+        growRate: 1,
+        maxOpacity: 0.5
+      });
+    }
+  },
+
+  updateProximitySurfaceEffects(dt, currentKmh) {
+    if (!this.planeGroup) return;
+
+    const pos = this.planeGroup.position;
+    const { surfaceY, isWater } = this.getSurfaceUnderPlane(pos.x, pos.z);
+    const gearOffset = Math.max(1.5, (this.groundY || 6.84) - 2.0);
+    const clearance = Math.max(0, pos.y - surfaceY - gearOffset);
+    this._surfaceClearance = clearance;
+    this._isOverWaterSurface = isWater;
+
+    // 1. 근접 투영 그림자 업데이트 (고도 180m 이하에서 선명해짐)
+    if (this.proximityShadowMesh) {
+      if (clearance < 180) {
+        const prox = 1.0 - clearance / 180;
+        const span = this.currentPlaneType === 'dc10' ? 48 : (this.currentPlaneType === 'a380' ? 68 : 34);
+        const spread = span * (0.85 + (clearance / 180) * 1.45);
+        this.proximityShadowMesh.visible = true;
+        this.proximityShadowMesh.position.set(pos.x, surfaceY + 0.08, pos.z);
+        this.proximityShadowMesh.scale.set(spread, spread * 1.15, 1);
+        this.proximityShadowMesh.material.opacity = (isWater ? 0.38 : 0.48) * Math.pow(prox, 1.35);
+      } else {
+        this.proximityShadowMesh.visible = false;
+      }
+    }
+
+    // 2. 저고도 수면 다운워시 파문 링 (수면 위 28m 이하, 속도 60km/h 이상)
+    if (this.waterWakeRingMesh) {
+      if (isWater && clearance < 28 && currentKmh > 60) {
+        const waterProx = 1.0 - clearance / 28;
+        const speedFactor = Math.min(1.0, currentKmh / 280);
+        const pulse = 1.0 + Math.sin(performance.now() * 0.012) * 0.08;
+        const ringScale = (24 + (1.0 - waterProx) * 18) * pulse;
+        this.waterWakeRingMesh.visible = true;
+        this.waterWakeRingMesh.position.set(pos.x, surfaceY + 0.12, pos.z);
+        this.waterWakeRingMesh.scale.set(ringScale, ringScale * 1.55, 1);
+        this.waterWakeRingMesh.rotation.z = this.planeGroup.rotation.y;
+        this.waterWakeRingMesh.material.opacity = Math.min(0.65, waterProx * speedFactor * 0.65);
+      } else {
+        this.waterWakeRingMesh.visible = false;
+      }
+    }
+
+    // 3. 저고도 물보라 / 지면 먼지 파티클 스폰 & 업데이트 (Zero-GC)
+    const pool = this.proximityParticlePool;
+    if (!pool || pool.length === 0) return;
+
+    const maxSpawnClearance = isWater ? 34 : 24;
+    const shouldSpawn = currentKmh > 65 && clearance < maxSpawnClearance && (isWater || !this.isOnGround || currentKmh > 130);
+
+    if (shouldSpawn) {
+      const prox = 1.0 - clearance / maxSpawnClearance;
+      const spawnRate = (isWater ? 42 : 26) * prox * Math.min(1.2, currentKmh / 220);
+      this._proximitySpawnAccum += dt * spawnRate;
+
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
+
+      while (this._proximitySpawnAccum >= 1.0) {
+        this._proximitySpawnAccum -= 1.0;
+        const p = pool[this._proximityPoolCursor];
+        this._proximityPoolCursor = (this._proximityPoolCursor + 1) % pool.length;
+
+        const side = (Math.random() - 0.5) * (isWater ? 26 : 18);
+        const backOffset = 4 + Math.random() * 10;
+        p.active = true;
+        p.maxLife = isWater ? (0.45 + Math.random() * 0.35) : (0.5 + Math.random() * 0.4);
+        p.life = p.maxLife;
+        p.baseScale = (isWater ? 1.4 : 1.1) + prox * 1.8;
+        p.growRate = isWater ? 9.5 : 7.0;
+        p.maxOpacity = (isWater ? 0.58 : 0.36) * prox;
+
+        p.mat.color.setHex(isWater ? (Math.random() > 0.35 ? 0xe0f2fe : 0xffffff) : 0xc2b280);
+        p.mesh.position.set(
+          pos.x + right.x * side - forward.x * backOffset,
+          surfaceY + 0.35 + Math.random() * 0.6,
+          pos.z + right.z * side - forward.z * backOffset
+        );
+        p.vx = right.x * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.x * (6 + Math.random() * 8);
+        p.vy = (isWater ? 3.2 : 2.2) + prox * 3.5 + Math.random() * 2.0;
+        p.vz = right.z * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.z * (6 + Math.random() * 8);
+        p.mesh.scale.setScalar(p.baseScale);
+        p.mat.opacity = p.maxOpacity;
+        p.mesh.visible = true;
+      }
+    }
+
+    for (let i = 0; i < pool.length; i++) {
+      const p = pool[i];
+      if (!p.active) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.active = false;
+        p.mesh.visible = false;
+        continue;
+      }
+      const t = 1.0 - p.life / p.maxLife;
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      p.vy -= 4.5 * dt;
+      const s = p.baseScale + t * p.growRate;
+      p.mesh.scale.set(s, s * 0.65, s);
+      p.mat.opacity = p.maxOpacity * (1.0 - t);
+    }
   },
 
   updateSpeedEffects(dt, currentKmh) {
@@ -231,9 +468,9 @@
       }
     }
 
-    // 4. 바다 텍스처 흘림 애니메이션
+    // 4. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
     if (this.oceanTexture) {
-      this.oceanTexture.offset.y -= (this.speed * 0.008) * dt * 60;
+      this.oceanTexture.offset.y -= dt * 0.035;
     }
   },
 

@@ -1081,6 +1081,20 @@
       this.camera.position.x += (Math.random() - 0.5) * speedTurbulence;
       this.camera.position.y += (Math.random() - 0.5) * speedTurbulence;
     }
+
+    // 저고도 지면/수면 근접 지면효과 미세 기류 진동 (Ground/Water Skim Buffeting)
+    if (!this.isOnGround && currentKmh > 120 && (this.cameraMode === '3rd' || this.cameraMode === '1st' || this.cameraMode === 'wing' || this.cameraMode === 'gear')) {
+      const clearance = typeof this._surfaceClearance === 'number'
+        ? this._surfaceClearance
+        : Math.max(0, planePos.y - (this.groundY || 6.84));
+      if (clearance < 25) {
+        const prox = 1.0 - clearance / 25;
+        const speedFactor = Math.min(1.0, currentKmh / 350);
+        const skimJitter = prox * speedFactor * (this.cameraMode === '1st' ? 0.07 : 0.045);
+        this.camera.position.x += (Math.random() - 0.5) * skimJitter;
+        this.camera.position.y += (Math.random() - 0.5) * skimJitter;
+      }
+    }
   },
 
   // ----------------------------------------------------------------
