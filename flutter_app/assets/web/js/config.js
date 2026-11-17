@@ -113,20 +113,20 @@
         rollDamping: 1.8
       },
       amphibian: {
-        name: 'Canadair CL-415 Amphibian',
-        mass: 19800,          // kg
-        wingArea: 100.0,      // m²
+        name: 'Canadair CL-215 Amphibian',
+        mass: 17100,          // kg (Water MTOW 17,100 kg / Land MTOW 19,731 kg)
+        wingArea: 100.33,     // m²
         wingSpan: 28.6,       // m
-        aspectRatio: 8.2,
-        oswaldEff: 0.76,
-        cd0: 0.032,
+        aspectRatio: 8.15,
+        oswaldEff: 0.75,
+        cd0: 0.034,
         cl0: 0.32,
         clAlpha: 5.0,
-        clMaxClean: 1.70,
+        clMaxClean: 1.65,
         stallAlphaClean: 0.26,
-        maxThrust: 70000,     // N (PW123 터보프롭)
-        vRotateKmh: 155,
-        vStallCleanKmh: 125,
+        maxThrust: 62000,     // N (2 × P&W R-2800-83AM 성형 피스톤)
+        vRotateKmh: 148,
+        vStallCleanKmh: 122,
         pitchAuthority: 0.65,
         rollAuthority: 0.68,
         pitchDamping: 1.6,

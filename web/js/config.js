@@ -223,34 +223,34 @@
         transonicMachBuffet: 1.15
       },
       amphibian: {
-        name: 'Canadair CL-415 Amphibian',
-        emptyWeightKg: 12882, // OEW 28,400 lb
-        mtowKg: 19890,        // Land MTOW 43,850 lb (Water: 17,170 kg)
-        mass: 17500,          // Typical Operating Mass (kg)
-        fuelCapacityKg: 4650, // 5,812 L
-        wingArea: 100.0,      // m²
-        wingSpan: 28.60,      // m (93 ft 11 in)
+        name: 'Canadair CL-215 Amphibian',
+        emptyWeightKg: 12220, // OEW 26,941 lb
+        mtowKg: 19731,        // Land MTOW 43,500 lb (Water: 17,100 kg / 37,700 lb)
+        mass: 17100,          // Typical Operating Mass (kg)
+        fuelCapacityKg: 4250, // ~5,900 L Avgas 100LL
+        wingArea: 100.33,     // m² (1,080 sq ft)
+        wingSpan: 28.60,      // m (93 ft 10 in)
         meanChord: 3.54,      // m
-        wingLoadingKgM2: 175.0, // 17,500 / 100.0 kg/m² (MTOW: 198.9)
-        aspectRatio: 8.18,
-        oswaldEff: 0.76,
-        cd0: 0.031,
+        wingLoadingKgM2: 170.4, // 17,100 / 100.33 kg/m² (Land MTOW: 196.7)
+        aspectRatio: 8.15,
+        oswaldEff: 0.75,
+        cd0: 0.034,
         cl0: 0.32,
         clAlpha: 5.0,
-        clMaxClean: 1.70,
+        clMaxClean: 1.65,
         clFlapBoostMax: 0.85,
         stallAlphaClean: 0.26,
         numEngines: 2,
-        maxThrust: 70000,     // N (2 × PW123AF 2,380 shp / 1,775 kW turboprops)
-        vRotateKmh: 150,      // ~81 kt
-        vStallCleanKmh: 120,  // ~65 kt
+        maxThrust: 62000,     // N (2 × Pratt & Whitney R-2800-83AM 2,100 hp / 1,566 kW radial pistons)
+        vRotateKmh: 148,      // ~80 kt
+        vStallCleanKmh: 122,  // ~66 kt
         pitchAuthority: 0.65,
         rollAuthority: 0.68,
         pitchDamping: 1.6,
         rollDamping: 1.8,
         yawAuthority: 0.50,
         yawDamping: 1.7,
-        transonicMachBuffet: 0.55
+        transonicMachBuffet: 0.50
       },
       ancestor: {
         name: '1903 Wright Flyer',
