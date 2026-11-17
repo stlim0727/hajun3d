@@ -273,6 +273,42 @@
     this.showPopup('💥 쾅! 기수가 찌그러졌습니다! (저속 충돌 손상)');
   },
 
+  resetPartialDamageState() {
+    this.isGearCollapsed = false;
+    this.isBellySliding = false;
+    this.isNoseDented = false;
+    this.gearDamageState = { nose: 'normal', mainLeft: 'normal', mainRight: 'normal' };
+    this.partDamage = {
+      nose: 'normal',
+      belly: 'normal',
+      tail: 'normal',
+      wingL: 'normal',
+      wingR: 'normal',
+      engineL: 'normal',
+      engineR: 'normal'
+    };
+    this._partSparkFrame = 0;
+    this._partSmokeFrame = 0;
+  },
+
+  _collapseGearAssembly(gear, idx) {
+    if (!gear) return;
+    const u = gear.userData;
+    if (u && u.damageState === 'collapsed') return;
+    if (u) u.damageState = 'collapsed';
+    gear.rotation.x = Math.PI / 2.3;
+    gear.rotation.z = idx % 2 === 0 ? 0.45 : -0.45;
+    gear.position.y += 1.3;
+    if (u) {
+      if (u.doorL) u.doorL.rotation.z = -1.2;
+      if (u.doorR) u.doorR.rotation.z = 1.2;
+      if (u.strutPivot) {
+        u.strutPivot.rotation.x = Math.PI / 3.0;
+        u.strutPivot.rotation.z = idx % 2 === 0 ? 0.5 : -0.5;
+      }
+    }
+  },
+
   // 2. 랜딩 기어 파손 & 동체 착륙 (거친 착륙 접지 시)
   collapseLandingGears() {
     if (this.isGearCollapsed) return;
@@ -281,25 +317,210 @@
     this.hullIntegrity = Math.max(20, this.hullIntegrity - 45);
     this.playGearSnapSound();
 
+    if (this.gearDamageState) {
+      this.gearDamageState.nose = 'collapsed';
+      this.gearDamageState.mainLeft = 'collapsed';
+      this.gearDamageState.mainRight = 'collapsed';
+    }
+
     this.landingGears.forEach((gear, idx) => {
-      gear.rotation.x = Math.PI / 2.3;
-      gear.rotation.z = idx % 2 === 0 ? 0.45 : -0.45;
-      gear.position.y += 1.3;
-      const u = gear.userData;
-      if (u) {
-        if (u.doorL) u.doorL.rotation.z = -1.2;
-        if (u.doorR) u.doorR.rotation.z = 1.2;
-        if (u.strutPivot) {
-          u.strutPivot.rotation.x = Math.PI / 3.0;
-          u.strutPivot.rotation.z = idx % 2 === 0 ? 0.5 : -0.5;
-        }
-      }
+      this._collapseGearAssembly(gear, idx);
     });
+
+    if (this.glbGearAction && this.glbMixer) {
+      this.glbGearAction.time = 0;
+      this.glbMixer.update(0);
+    }
 
     this.groundY = 5.02; // 동체 접지 고도 (동체 하단 Y=-2.9, 활주로 표면 Y=2.12)
     this.isBellySliding = true;
     this.updateGearUI('파손 (FAIL)', 'gear-transit');
     this.showPopup('⚠️ 랜딩 기어 파손! 동체 활주(Belly Landing) 중입니다!');
+  },
+
+  applyGearDamageEvent(gearId, state) {
+    if (!gearId || !state) return;
+    const labels = { nose: '노즈', mainLeft: '좌측 메인', mainRight: '우측 메인' };
+    const label = labels[gearId] || gearId;
+    this.gearDamageState = this.gearDamageState || { nose: 'normal', mainLeft: 'normal', mainRight: 'normal' };
+
+    const rank = { normal: 0, damaged: 1, collapsed: 2 };
+    if ((rank[state] ?? 0) <= (rank[this.gearDamageState[gearId]] ?? 0)) return;
+    this.gearDamageState[gearId] = state;
+
+    const sparkPart = gearId === 'nose' ? 'nose' : 'belly';
+    if (state === 'damaged') {
+      this.hullIntegrity = Math.max(25, this.hullIntegrity - 10);
+      this.landingGears.forEach((gear, idx) => {
+        const u = gear.userData;
+        if (u && u.gearId === gearId && u.damageState !== 'collapsed') {
+          u.damageState = 'damaged';
+          gear.rotation.z = idx % 2 === 0 ? 0.14 : -0.14;
+          if (u.strutPivot) u.strutPivot.rotation.z = idx % 2 === 0 ? 0.16 : -0.16;
+        }
+      });
+      this.emitPartParticles(sparkPart, 'spark', 6);
+      if (typeof this.playCautionChime === 'function') this.playCautionChime();
+      this.showPopup(`⚠️ [기어 손상] ${label} 랜딩 기어에 충격 손상 발생!`);
+      return;
+    }
+
+    if (state === 'collapsed') {
+      this.hullIntegrity = Math.max(20, this.hullIntegrity - 20);
+      this.playGearSnapSound();
+      this.landingGears.forEach((gear, idx) => {
+        if (gear.userData && gear.userData.gearId === gearId) {
+          this._collapseGearAssembly(gear, idx);
+        }
+      });
+      this.emitPartParticles(sparkPart, 'spark', 10);
+
+      const allCollapsed = Object.values(this.gearDamageState).every(s => s === 'collapsed');
+      if (allCollapsed) {
+        this.isGearCollapsed = true;
+        this.gearPhase = 'COLLAPSED';
+        this.isBellySliding = true;
+        if (this.glbGearAction && this.glbMixer) {
+          this.glbGearAction.time = 0;
+          this.glbMixer.update(0);
+        }
+        this.updateGearUI('파손 (FAIL)', 'gear-transit');
+        this.showPopup('⚠️ 전 랜딩 기어 파손! 동체 활주(Belly Landing) 중입니다!');
+      } else {
+        this.updateGearUI('부분 파손 (PARTIAL)', 'gear-transit');
+        this.showPopup(`💥 [부분 파손] ${label} 랜딩 기어 붕괴!`);
+      }
+    }
+  },
+
+  getPartLocalOffset(partId) {
+    if (!this._partOffsetCache) {
+      this._partOffsetCache = new THREE.Vector3();
+    }
+    const out = this._partOffsetCache;
+    if ((partId === 'engineL' || partId === 'engineR') && Array.isArray(this.engineExhaustPoints) && this.engineExhaustPoints.length > 0) {
+      const targetLeft = partId === 'engineL';
+      let match = this.engineExhaustPoints.find(p => (targetLeft ? p.x < -0.5 : p.x > 0.5));
+      if (!match) match = this.engineExhaustPoints[targetLeft ? 0 : this.engineExhaustPoints.length - 1];
+      return out.copy(match);
+    }
+    const defaults = {
+      engineL: [-5.06, -1.5, -2.0],
+      engineR: [5.06, -1.5, -2.0],
+      wingL: [-14.0, 0.0, 2.0],
+      wingR: [14.0, 0.0, 2.0],
+      tail: [0.0, 0.0, 12.0],
+      nose: [0.0, -1.0, -12.0],
+      belly: [0.0, -2.2, 0.0]
+    };
+    const coords = defaults[partId] || defaults.belly;
+    return out.set(coords[0], coords[1], coords[2]);
+  },
+
+  emitPartParticles(partId, kind, count = 2) {
+    if (!this.planeGroup || !this.scene || !this.particles) return;
+    if (this.particles.length >= 50) return;
+
+    const offset = this.getPartLocalOffset(partId);
+    const worldPos = offset.clone().applyQuaternion(this.planeGroup.quaternion).add(this.planeGroup.position);
+    const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
+
+    if (!this._dmgSparkMat) {
+      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+      this._dmgSmokeMat = new THREE.MeshBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.72 });
+      this._dmgGeo = new THREE.BoxGeometry(0.55, 0.55, 0.85);
+    }
+
+    const pGeo = this.sharedExhaustGeo || this._dmgGeo;
+    const pMat = kind === 'fire' ? this._dmgFireMat : (kind === 'smoke' ? this._dmgSmokeMat : this._dmgSparkMat);
+    const limit = Math.min(count, 50 - this.particles.length);
+
+    for (let i = 0; i < limit; i++) {
+      const p = new THREE.Mesh(pGeo, pMat);
+      p.position.copy(worldPos).add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.8,
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.8
+      ));
+      if (kind === 'spark') {
+        p.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 4.0,
+          Math.random() * 2.5 + 0.5,
+          (Math.random() - 0.5) * 4.0
+        ).addScaledVector(backward, Math.max(2, (this.speed || 0) * 0.4));
+        p.life = 0.25 + Math.random() * 0.15;
+      } else {
+        p.velocity = backward.clone().multiplyScalar(Math.max(4, (this.speed || 0) * 0.65)).add(new THREE.Vector3(
+          (Math.random() - 0.5) * 1.4,
+          Math.random() * 1.8 + 0.4,
+          (Math.random() - 0.5) * 1.4
+        ));
+        p.life = kind === 'fire' ? 0.35 : 0.65;
+      }
+      this.particles.push(p);
+      this.scene.add(p);
+    }
+  },
+
+  applyBodyDamageEvent(partId, state) {
+    if (!partId || !state) return;
+    this.partDamage = this.partDamage || {
+      nose: 'normal', belly: 'normal', tail: 'normal',
+      wingL: 'normal', wingR: 'normal', engineL: 'normal', engineR: 'normal'
+    };
+    const rank = { normal: 0, damaged: 1, failed: 2 };
+    if ((rank[state] ?? 0) <= (rank[this.partDamage[partId]] ?? 0)) return;
+    this.partDamage[partId] = state;
+
+    const dmgDelta = state === 'failed' ? 20 : 10;
+    this.hullIntegrity = Math.max(15, this.hullIntegrity - dmgDelta);
+    this.playGearSnapSound();
+
+    if (partId === 'nose') this.isNoseDented = true;
+    if (partId === 'belly') this.isBellySliding = true;
+
+    const kind = (state === 'failed' && (partId === 'engineL' || partId === 'engineR')) ? 'fire' : 'spark';
+    this.emitPartParticles(partId, kind, state === 'failed' ? 10 : 6);
+
+    const messages = {
+      engineL: state === 'failed' ? '🔥 [엔진 파손] 좌측 엔진 파손! 추력 상실 및 화재!' : '⚠️ [엔진 손상] 좌측 엔진 지면 접촉 손상!',
+      engineR: state === 'failed' ? '🔥 [엔진 파손] 우측 엔진 파손! 추력 상실 및 화재!' : '⚠️ [엔진 손상] 우측 엔진 지면 접촉 손상!',
+      wingL: state === 'failed' ? '💥 [날개 파손] 좌측 주익 심각한 손상! 비대칭 양력 주의!' : '⚠️ [날개 손상] 좌측 날개 끝 지면 접촉 손상!',
+      wingR: state === 'failed' ? '💥 [날개 파손] 우측 주익 심각한 손상! 비대칭 양력 주의!' : '⚠️ [날개 손상] 우측 날개 끝 지면 접촉 손상!',
+      tail: state === 'failed' ? '💥 [테일 스트라이크] 꼬리 날개/후방 동체 심각한 손상!' : '⚠️ [테일 스트라이크] 후방 동체 지면 마찰 손상!',
+      nose: state === 'failed' ? '💥 [기수 파손] 기수 충격 파손!' : '⚠️ [기수 손상] 기수 경미한 충격 손상!',
+      belly: state === 'failed' ? '💥 [동체 파손] 하부 동체 마찰 파손!' : '⚠️ [동체 접촉] 동체 하부 활주 마찰!'
+    };
+    if (messages[partId]) {
+      this.showPopup(messages[partId]);
+    }
+  },
+
+  applyBodyContactSparks(partId, speed) {
+    if (!partId || (speed || 0) < 1.5) return;
+    this._partSparkFrame = (this._partSparkFrame || 0) + 1;
+    if (this._partSparkFrame % 3 !== 0) return;
+    this.emitPartParticles(partId, 'spark', 2);
+  },
+
+  updatePartialDamageEffects(dt) {
+    if (!this.partDamage || this.isDestroyed || !this.isPlaying) return;
+    this._partSmokeFrame = (this._partSmokeFrame || 0) + 1;
+    if (this._partSmokeFrame % 4 !== 0) return;
+
+    const parts = ['engineL', 'engineR', 'wingL', 'wingR', 'tail'];
+    for (let i = 0; i < parts.length; i++) {
+      const id = parts[i];
+      const st = this.partDamage[id];
+      if (!st || st === 'normal') continue;
+      if ((id === 'engineL' || id === 'engineR') && st === 'failed') {
+        this.emitPartParticles(id, 'fire', 1);
+        this.emitPartParticles(id, 'smoke', 1);
+      } else {
+        this.emitPartParticles(id, 'smoke', 1);
+      }
+    }
   },
 
   // ----------------------------------------------------------------

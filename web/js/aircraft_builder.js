@@ -944,6 +944,8 @@
       }
 
       gearAssembly.userData = {
+        gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
+        damageState: 'normal',
         strutPivot: strutPivot,
         doorL: doorLGroup,
         doorR: doorRGroup,

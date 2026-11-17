@@ -53,6 +53,16 @@ class AirplaneGame {
     this.isNoseDented = false;
     this.isGearCollapsed = false;
     this.isBellySliding = false;
+    this.gearDamageState = { nose: 'normal', mainLeft: 'normal', mainRight: 'normal' };
+    this.partDamage = {
+      nose: 'normal',
+      belly: 'normal',
+      tail: 'normal',
+      wingL: 'normal',
+      wingR: 'normal',
+      engineL: 'normal',
+      engineR: 'normal'
+    };
     this.isWaterLanding = false; // 바다 비상착수 수면 활주/부유 상태
     this.waterBobPhase = 0.0;
 
@@ -371,6 +381,9 @@ class AirplaneGame {
       this.updateParticles(dt);
       this.createJetExhaustParticles();
       this.createBellySparks();
+      if (typeof this.updatePartialDamageEffects === 'function') {
+        this.updatePartialDamageEffects(dt);
+      }
     } else {
       if (!this.isDestroyed) this.updateLandingGearAnimation(dt);
       this.updateDebrisPhysics(dt);

@@ -612,12 +612,27 @@
           if (this.phaseDisplay) this.phaseDisplay.textContent = '대륙 육지 공항 착륙 성공 (게이트 1번으로 주행)';
           this.score += 1500;
         }
-      } else if (ev.type === 'gearDamage' && ev.state === 'collapsed') {
-        if (!this.isGearCollapsed && typeof this.collapseLandingGears === 'function') {
+      } else if (ev.type === 'gearDamage') {
+        if (typeof this.applyGearDamageEvent === 'function') {
+          this.applyGearDamageEvent(ev.id, ev.state);
+        } else if (ev.state === 'collapsed' && !this.isGearCollapsed && typeof this.collapseLandingGears === 'function') {
           this.collapseLandingGears();
         }
-      } else if (ev.type === 'bodyContact' || ev.type === 'bodyDamage') {
-        this.isBellySliding = true;
+      } else if (ev.type === 'bodyDamage') {
+        if (typeof this.applyBodyDamageEvent === 'function') {
+          this.applyBodyDamageEvent(ev.id, ev.state);
+        }
+        if (ev.id === 'belly') this.isBellySliding = true;
+        if (typeof this.checkEmergencyLandingSuccess === 'function') {
+          this.checkEmergencyLandingSuccess('belly_landing');
+        }
+      } else if (ev.type === 'bodyContact') {
+        if (typeof this.applyBodyContactSparks === 'function') {
+          this.applyBodyContactSparks(ev.id, ev.speed);
+        }
+        if (ev.id === 'belly' || this.isGearCollapsed) {
+          this.isBellySliding = true;
+        }
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('belly_landing');
         }

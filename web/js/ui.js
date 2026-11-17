@@ -253,6 +253,9 @@
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') {
+      this.resetPartialDamageState();
+    }
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
@@ -313,6 +316,9 @@
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') {
+      this.resetPartialDamageState();
+    }
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
@@ -580,7 +586,19 @@
     this.boostVal.textContent = `N1: ${n1Val}% (레버 ${thrPercent}%)${revTag}`;
     this.boostBar.style.width = `${n1Val}%`;
 
-    this.hullVal.textContent = `${this.hullIntegrity}% ${this.isNoseDented ? '(기수 찌그러짐)' : (this.isGearCollapsed ? '(기어 파손)' : '(정상)')}`;
+    const damagedLabels = [];
+    if (this.partDamage) {
+      if (this.partDamage.engineL !== 'normal' || this.partDamage.engineR !== 'normal') damagedLabels.push('엔진');
+      if (this.partDamage.wingL !== 'normal' || this.partDamage.wingR !== 'normal') damagedLabels.push('날개');
+      if (this.partDamage.tail !== 'normal') damagedLabels.push('꼬리');
+    }
+    if (!this.isGearCollapsed && this.gearDamageState && Object.values(this.gearDamageState).some(s => s !== 'normal')) {
+      damagedLabels.push('기어');
+    }
+    const hullStatus = this.isGearCollapsed
+      ? '(기어 파손)'
+      : (damagedLabels.length > 0 ? `(${damagedLabels.join('/')} 손상)` : (this.isNoseDented ? '(기수 찌그러짐)' : '(정상)'));
+    this.hullVal.textContent = `${this.hullIntegrity}% ${hullStatus}`;
     this.hullBar.style.width = `${this.hullIntegrity}%`;
     if (this.hullIntegrity < 40) {
       this.hullBar.className = 'gauge-bar-fill hull-fill danger';
