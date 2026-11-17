@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import * as flightsimCore from '@stlim0727/flightsim-core';
 
 function createThreeMathShim() {
   class Vector3 {
@@ -174,33 +175,6 @@ function createThreeMathShim() {
   return { Vector3, Quaternion, Matrix4, Euler, MathUtils };
 }
 
-const FLIGHT3D_LOAD_ORDER = [
-  'Atmosphere.js',
-  'trimWheel.js',
-  'massDistributions.js',
-  'MassProperties.js',
-  'groundContacts.js',
-  'contactCompliance.js',
-  'gearDamage.js',
-  'bodyDamage.js',
-  'bodyContactConstraint.js',
-  'combatDamage.js',
-  'longitudinalForces.js',
-  'gLimiter.js',
-  'massKinematics.js',
-  'loadFactor.js',
-  'EngineModel.js',
-  'stallSpeedEstimate.js',
-  'TrimSolver.js',
-  'TakeoffPerformance.js',
-  'PilotPhysiology.js',
-  'Aerodynamics.js',
-  'LandingGear.js',
-  'WaterDitching.js',
-  'aircraftConfigs.js',
-  'FlightPhysicsCore.js',
-];
-
 function loadPhysicsSandbox() {
   const THREE = createThreeMathShim();
   const sandbox = {
@@ -211,21 +185,26 @@ function loadPhysicsSandbox() {
     performance: { now: () => 0 },
   };
   sandbox.globalThis = sandbox;
+  sandbox.window = sandbox;
   vm.createContext(sandbox);
 
-  for (const file of FLIGHT3D_LOAD_ORDER) {
-    const code = readFileSync(`web/js/flight3d/${file}`, 'utf8');
-    vm.runInContext(code, sandbox);
-  }
+  vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/config.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/physics.js', 'utf8'), sandbox);
   return sandbox;
 }
 
-test('loads all 24 Flight3dPhysics modules and instantiates FlightPhysicsCore for all 9 hajun3d aircraft', () => {
+test('loads flightsim-core npm package and instantiates FlightPhysicsCore for all 9 hajun3d aircraft', () => {
   const sandbox = loadPhysicsSandbox();
-  const { Flight3dPhysics, AirplaneGame } = sandbox;
+  const { Flight3dPhysics, FlightSimCore, AirplaneGame } = sandbox;
   assert.ok(Flight3dPhysics?.FlightPhysicsCore, 'FlightPhysicsCore must be exported');
+  assert.ok(FlightSimCore?.FlightPhysicsCore, 'FlightSimCore must be exported');
+  assert.equal(flightsimCore.FlightPhysicsCore.name, 'FlightPhysicsCore');
+  assert.equal(Flight3dPhysics.FlightPhysicsCore.name, 'FlightPhysicsCore');
+  assert.ok(Flight3dPhysics.BOEING_737_800);
+  assert.ok(flightsimCore.FlightControlLaws, 'FlightControlLaws must be exported');
+  assert.ok(flightsimCore.FlightWarningsCore, 'FlightWarningsCore must be exported');
+  assert.ok(flightsimCore.AutopilotController, 'AutopilotController must be exported');
 
   const types = ['a320', 'b737', 'b738', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'];
   for (const type of types) {

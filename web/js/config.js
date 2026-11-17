@@ -291,9 +291,19 @@
    * schema for FlightPhysicsCore / Aerodynamics / EngineModel / LandingGear.
    */
   getFlight3dConfig(type) {
-    const f3d = globalThis.Flight3dPhysics;
+    const f3d = globalThis.FlightSimCore || globalThis.Flight3dPhysics;
     if ((type === 'b737' || type === 'b738') && f3d && f3d.BOEING_737_800) {
-      return f3d.BOEING_737_800;
+      const b738 = f3d.BOEING_737_800;
+      // Hajun3d takeoff rotation calibration: ensure adequate elevator authority and main gear lever arm
+      b738.aerodynamics.cmDe = -1.45;
+      if (b738.landingGear?.contacts) {
+        for (const c of b738.landingGear.contacts) {
+          if (c.id === 'mainLeft' || c.id === 'mainRight') {
+            c.localPos.z = 0.9;
+          }
+        }
+      }
+      return b738;
     }
 
     const s = this.getAircraftSpecs(type);
