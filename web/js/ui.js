@@ -295,6 +295,7 @@
     this.groundSpeed = 50.0; // ~180 km/h 활주 초기 가속 속도
     this.velocity.set(0, 0, -50.0);
     this.speed = this.velocity.length() / 77.777;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
     this.updateFlapsUI();
     this.updateSpoilerUI();
     this.updateReverserUI();
@@ -352,6 +353,7 @@
     this.groundSpeed = 0.0;
     this.velocity.set(0, 0, 0);
     this.speed = 0.0;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
     this.updateFlapsUI();
     this.updateSpoilerUI();
     this.updateReverserUI();

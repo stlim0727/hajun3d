@@ -209,6 +209,147 @@
       }
     };
     return specs[type] || specs.a320;
+  },
+
+  /**
+   * Convert hajun3d aircraft type into a full stlim0727/flight3d AircraftConfig
+   * schema for FlightPhysicsCore / Aerodynamics / EngineModel / LandingGear.
+   */
+  getFlight3dConfig(type) {
+    const f3d = globalThis.Flight3dPhysics;
+    if ((type === 'b737' || type === 'b738') && f3d && f3d.BOEING_737_800) {
+      return f3d.BOEING_737_800;
+    }
+
+    const s = this.getAircraftSpecs(type);
+    const refB738 = f3d && f3d.BOEING_737_800;
+    const mass = s.mass || 66000;
+    const span = s.wingSpan || 35.8;
+    const area = s.wingArea || 124.6;
+    const chord = s.meanChord || (area / Math.max(1, span));
+    const massRatio = mass / 66000;
+    const spanRatio = span / 35.8;
+    const lenRatio = Math.sqrt(massRatio);
+
+    // Scale diagonal moments of inertia consistently with mass and geometry
+    const Ixx = Math.max(120, 1650000 * massRatio * spanRatio * spanRatio);
+    const Iyy = Math.max(200, 3450000 * massRatio * lenRatio * lenRatio);
+    const Izz = Math.max(280, 4850000 * massRatio * ((spanRatio * spanRatio + lenRatio * lenRatio) * 0.5));
+
+    const numEngines = (type === 'b747' || type === 'concorde') ? 4 : (type === 'dc10' ? 3 : (type === 'ancestor' ? 1 : 2));
+    const maxThrustTotal = s.maxThrust || 242000;
+    const maxThrustPerEngine = maxThrustTotal / numEngines;
+    const fuelCapacity = Math.max(20, Math.round(mass * 0.215));
+    const emptyWeight = Math.max(150, Math.round(mass * 0.625));
+    const maxTakeoffWeight = Math.round(mass * 1.2);
+
+    const kNose = Math.max(4000, 420000 * massRatio);
+    const cNose = Math.max(600, 48000 * Math.sqrt(massRatio));
+    const kMain = Math.max(8000, 850000 * massRatio);
+    const cMain = Math.max(900, 72000 * Math.sqrt(massRatio));
+
+    const baseGear = refB738?.landingGear;
+    const gearScale = Math.max(0.32, Math.min(1.6, spanRatio));
+    const gearY = (type === 'ancestor') ? -1.45 : -3.27;
+    const mainGearY = (type === 'ancestor') ? -1.48 : -3.30;
+
+    return {
+      id: (type || 'a320').toUpperCase(),
+      name: s.name,
+      massProperties: {
+        emptyWeightKg: emptyWeight,
+        maxTakeoffWeightKg: maxTakeoffWeight,
+        currentMassKg: mass,
+        Ixx,
+        Iyy,
+        Izz,
+      },
+      aerodynamics: {
+        wingspanM: span,
+        wingAreaM2: area,
+        meanChordM: chord,
+        tailArmM: 12 * lenRatio,
+        tailAreaM2: 32 * (area / 124.6),
+        tailInducedFactor: 0.10,
+        oswaldEfficiency: s.oswaldEff || 0.82,
+        cl0Clean: s.cl0 ?? 0.22,
+        claPerRad: s.clAlpha ?? 5.65,
+        alphaStallDeg: ((s.stallAlphaClean ?? 0.27) * 180) / Math.PI,
+        clFlapBoostMax: s.clFlapBoostMax ?? 0.95,
+        spoilerLiftDump: 0.38,
+        cd0Clean: s.cd0 ?? 0.0185,
+        gearDrag: type === 'ancestor' ? 0.01 : 0.024,
+        spoilerDrag: 0.075,
+        transonicMachBuffet: s.transonicMachBuffet ?? 0.78,
+        cm0: -0.02,
+        cma: -0.90,
+        cmDe: -1.25 * (s.pitchAuthority ? s.pitchAuthority / 0.55 : 1.0),
+        cmQ: -26.0 * (s.pitchDamping ? s.pitchDamping / 1.8 : 1.0),
+        clBeta: -0.14,
+        clDa: 0.18 * (s.rollAuthority ? s.rollAuthority / 0.70 : 1.0),
+        clP: -0.65 * (s.rollDamping ? s.rollDamping / 2.2 : 1.0),
+        cnBeta: -0.22,
+        cnDr: -0.12 * (s.yawAuthority ? s.yawAuthority / 0.45 : 1.0),
+        cnR: -0.32 * (s.yawDamping ? s.yawDamping / 2.0 : 1.0),
+        adverseYaw: -0.025,
+        flapAngles: type === 'ancestor' ? [0, 0, 0, 0] : [0, 10, 25, 40],
+      },
+      stallWarning: { type: 'stickShaker', marginDeg: 2.0 },
+      propulsion: {
+        numEngines,
+        engineName: s.name + ' Propulsion',
+        maxStaticThrustPerEngineN: maxThrustPerEngine,
+        idleN1Percent: type === 'ancestor' ? 15.0 : 22.0,
+        togaN1Percent: 100.0,
+        spoolUpTimeSec: type === 'ancestor' ? 1.2 : 3.2,
+        spoolDownTimeSec: type === 'ancestor' ? 1.0 : 2.4,
+        reverseThrustEfficiency: (type === 'ancestor' || type === 'concorde') ? 0.25 : 0.45,
+        baseFuelFlowKgPerHour: 350.0 * massRatio,
+        maxFuelFlowKgPerHour: 2500.0 * massRatio,
+        fuelCapacityKg: fuelCapacity,
+      },
+      landingGear: {
+        isFixed: type === 'ancestor' || type === 'amphibian',
+        cgGroundHeightM: type === 'ancestor' ? 1.65 : 3.5,
+        gearTransitTimeSec: baseGear?.gearTransitTimeSec ?? 8.0,
+        contacts: [
+          {
+            id: 'nose',
+            name: 'Nose Gear',
+            localPos: { x: 0.0, y: gearY, z: -12.5 * gearScale },
+            wheelRadius: 0.38 * Math.max(0.5, gearScale),
+            restLength: 0.9 * Math.max(0.5, gearScale),
+            kSpring: kNose,
+            cDamper: cNose,
+            isSteerable: true,
+            maxSteeringDeg: 55.0,
+          },
+          {
+            id: 'mainLeft',
+            name: 'Left Main Gear',
+            localPos: { x: -3.2 * gearScale, y: mainGearY, z: 1.8 * gearScale },
+            wheelRadius: 0.48 * Math.max(0.5, gearScale),
+            restLength: 0.9 * Math.max(0.5, gearScale),
+            kSpring: kMain,
+            cDamper: cMain,
+            isSteerable: false,
+          },
+          {
+            id: 'mainRight',
+            name: 'Right Main Gear',
+            localPos: { x: 3.2 * gearScale, y: mainGearY, z: 1.8 * gearScale },
+            wheelRadius: 0.48 * Math.max(0.5, gearScale),
+            restLength: 0.9 * Math.max(0.5, gearScale),
+            kSpring: kMain,
+            cDamper: cMain,
+            isSteerable: false,
+          },
+        ],
+        rollingFriction: 0.02,
+        maxBrakingFriction: 0.45,
+        tireLateralFriction: 0.75,
+      },
+    };
   }
 
   });
