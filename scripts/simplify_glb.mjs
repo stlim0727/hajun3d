@@ -1,12 +1,35 @@
-// Automated GLB Mesh Decimation & Simplification Pipeline for Hajun Plane 3D
-// Takes any high-detail GLB (100k+ polygons) as input and simplifies it to a stylized
-// lightweight low-poly model while preserving authentic real-world contours and silhouettes.
+#!/usr/bin/env node
+
+/**
+ * Universal 3D GLB/glTF Mesh Decimation & Simplification Pipeline
+ * Converts high-polygon 3D models into stylized, high-performance low-poly models
+ * while strictly preserving authentic real-world contours, CAD curvatures, and UV textures.
+ */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
 
-function getGLBStats(filePath) {
+function printHelp() {
+  console.log(`
+Usage: simplify-glb [options] -i <input.glb> -o <output.glb>
+
+Options:
+  -i, --input <file>     Input 3D model (.glb or .gltf) [required]
+  -o, --output <file>    Output simplified 3D model (.glb) [required]
+  -r, --ratio <number>   Simplification triangle target ratio (0.01 - 1.0, default: 0.025 = 2.5%)
+  --faceted              Apply flat-shading / sharp crease angle (0 deg) for stylized low-poly facets
+  --smooth               Preserve smooth interpolated vertex normals (default)
+  --no-merge             Disable material/primitive merging
+  -h, --help             Show this help message
+
+Examples:
+  simplify-glb -i dc10.glb -o dc10_lowpoly.glb -r 0.02
+  simplify-glb -i airliner.glb -o airliner_faceted.glb -r 0.03 --faceted
+`);
+}
+
+export function getGLBStats(filePath) {
   const buf = readFileSync(filePath);
   const jsonChunkLen = buf.readUInt32LE(12);
   const jsonStr = buf.subarray(20, 20 + jsonChunkLen).toString('utf8');
@@ -35,30 +58,36 @@ function getGLBStats(filePath) {
   };
 }
 
-export function simplifyGLB({ inputPath, outputPath, ratio = 0.025, mergeMeshes = true }) {
+export function simplifyGLB({
+  inputPath,
+  outputPath,
+  ratio = 0.025,
+  mergeMeshes = true,
+  faceted = false
+}) {
   const inResolved = resolve(inputPath);
   const outResolved = resolve(outputPath);
 
   if (!existsSync(inResolved)) {
-    throw new Error(`Input file not found: ${inResolved}`);
+    throw new Error(`Input model not found: ${inResolved}`);
   }
 
   const before = getGLBStats(inResolved);
   console.log(`📦 Input Model: ${basename(inResolved)}`);
-  console.log(`   • Size: ${before.fileSizeKB} KB | Tris: ${before.triangles.toLocaleString()} | Verts: ${before.vertices.toLocaleString()} | Prims: ${before.primitives}`);
+  console.log(`   • Size: ${before.fileSizeKB} KB | Triangles: ${before.triangles.toLocaleString()} | Vertices: ${before.vertices.toLocaleString()} | Draw Calls: ${before.primitives}`);
 
-  // Execute gltfpack mesh simplification
+  // Construct gltfpack options
   const flags = [
     `-i "${inResolved}"`,
     `-o "${outResolved}"`,
     `-si ${ratio}`,
-    '-sa',   // Aggressively reach target ratio for stylized low-poly
+    '-sa',   // Aggressive reach to target ratio for low-poly styling
     '-noq',  // Standard non-quantized glTF binary for 100% Three.js compatibility
     mergeMeshes ? '-mm' : '', // Merge primitives sharing same material
-    '-gn 0'  // Sharp crease angle for faceted shading on simplified facets
+    faceted ? '-gn 0' : ''    // Crease angle 0 for faceted flat shading
   ].filter(Boolean).join(' ');
 
-  console.log(`⚙️ Running Meshoptimizer QEM simplification (target ratio: ${(ratio * 100).toFixed(1)}%)...`);
+  console.log(`⚙️ Running Meshoptimizer QEM decimation (target ratio: ${(ratio * 100).toFixed(1)}%)...`);
   execSync(`npx -y gltfpack ${flags}`, { stdio: 'inherit' });
 
   const after = getGLBStats(outResolved);
@@ -67,25 +96,42 @@ export function simplifyGLB({ inputPath, outputPath, ratio = 0.025, mergeMeshes 
 
   console.log(`✨ Simplified Output: ${basename(outResolved)}`);
   console.log(`   • Size: ${after.fileSizeKB} KB (-${sizeReduction}%)`);
-  console.log(`   • Tris: ${after.triangles.toLocaleString()} (-${triReduction}%)`);
-  console.log(`   • Verts: ${after.vertices.toLocaleString()}`);
-  console.log(`   • Draw Calls / Prims: ${after.primitives} (was ${before.primitives})`);
+  console.log(`   • Triangles: ${after.triangles.toLocaleString()} (-${triReduction}%)`);
+  console.log(`   • Vertices: ${after.vertices.toLocaleString()}`);
+  console.log(`   • Draw Calls / Primitives: ${after.primitives} (was ${before.primitives})`);
 
   return { before, after };
 }
 
-// CLI entry point
+// CLI runner
 const args = process.argv.slice(2);
-if (args.length >= 2 || process.argv[1].endsWith('simplify_glb.mjs')) {
-  let input = 'web/models/dc10.glb';
-  let output = 'web/models/dc10_decimated.glb';
+if (args.includes('-h') || args.includes('--help')) {
+  printHelp();
+  process.exit(0);
+}
+
+if (args.length > 0) {
+  let input = null;
+  let output = null;
   let ratio = 0.025;
+  let merge = true;
+  let faceted = false;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--input' || args[i] === '-i') input = args[++i];
-    else if (args[i] === '--output' || args[i] === '-o') output = args[++i];
-    else if (args[i] === '--ratio' || args[i] === '-r') ratio = parseFloat(args[++i]);
+    const a = args[i];
+    if (a === '-i' || a === '--input') input = args[++i];
+    else if (a === '-o' || a === '--output') output = args[++i];
+    else if (a === '-r' || a === '--ratio') ratio = parseFloat(args[++i]);
+    else if (a === '--no-merge') merge = false;
+    else if (a === '--faceted') faceted = true;
+    else if (a === '--smooth') faceted = false;
   }
 
-  simplifyGLB({ inputPath: input, outputPath: output, ratio });
+  if (!input || !output) {
+    console.error('Error: Both --input (-i) and --output (-o) are required.');
+    printHelp();
+    process.exit(1);
+  }
+
+  simplifyGLB({ inputPath: input, outputPath: output, ratio, mergeMeshes: merge, faceted });
 }
