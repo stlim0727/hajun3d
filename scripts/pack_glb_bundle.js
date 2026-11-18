@@ -1,5 +1,9 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const modelsDir = path.join(__dirname, '..', 'web', 'models');
 const modelKeys = {
@@ -7,6 +11,9 @@ const modelKeys = {
   a320: 'a320.glb',
   b747: 'b747.glb',
   dc10: 'dc10.glb',
+  dc10_lowpoly: 'dc10_lowpoly.glb',
+  dc10_faceted: 'dc10_faceted.glb',
+  a380_lowpoly: 'a380_lowpoly.glb',
   md80: 'md80.glb',
   concorde: 'concorde.glb',
   amphibian: 'amphibian.glb',

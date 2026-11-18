@@ -138,7 +138,7 @@
     });
 
     // 모든 기종 백그라운드 프리페치 유지 (기종 변경 즉시 반응)
-    ['a320', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'].forEach(m => {
+    ['a320', 'b747', 'dc10', 'dc10_lowpoly', 'dc10_faceted', 'a380_lowpoly', 'md80', 'concorde', 'amphibian', 'ancestor'].forEach(m => {
       if (!this.glbBuffers[m]) {
         fetch(`models/${m}.glb`)
           .then(r => r.ok ? r.arrayBuffer() : null)
@@ -381,6 +381,9 @@
 
     const names = {
       dc10: 'DC-10 삼발기',
+      dc10_lowpoly: 'DC-10 로우폴리 (Chunky)',
+      dc10_faceted: 'DC-10 페싯 (Faceted)',
+      a380_lowpoly: 'A380 슈퍼점보 로우폴리',
       md80: 'MD-80 쌍발기',
       a320: 'A320 제트기',
       b747: 'B747-400 점보',

@@ -30,6 +30,9 @@
     if (!type) return;
     const names = {
       dc10: 'DC-10 삼발기',
+      dc10_lowpoly: 'DC-10 로우폴리 (Chunky)',
+      dc10_faceted: 'DC-10 페싯 (Faceted)',
+      a380_lowpoly: 'A380 슈퍼점보 로우폴리',
       md80: 'MD-80 쌍발기',
       a320: 'A320 제트기',
       b747: 'B747-400 점보',
@@ -117,6 +120,7 @@
     this.micToggleBtn = document.getElementById('mic-toggle-btn');
     this.engineShutdownBtn = document.getElementById('engine-shutdown-btn');
     this.gateEngineShutdownBtn = document.getElementById('gate-engine-shutdown-btn');
+    this.updateSpeedEffectUI();
   },
 
   // ----------------------------------------------------------------
@@ -252,6 +256,9 @@
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') {
+      this.resetPartialDamageState();
+    }
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
@@ -292,9 +299,10 @@
     this.flapIndex = 1; // 이륙 기본 플랩 1 (Takeoff Flaps 1)
     this.spoilerExtended = false;
     this.reverseThrustActive = false;
-    this.groundSpeed = 50.0; // ~180 km/h 활주 초기 가속 속도
-    this.velocity.set(0, 0, -50.0);
-    this.speed = this.velocity.length() / 77.777;
+    this.groundSpeed = 0.0; // 정지 상태(0 km/h)에서 이륙 활주 시작
+    this.velocity.set(0, 0, 0);
+    this.speed = 0.0;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
     this.updateFlapsUI();
     this.updateSpoilerUI();
     this.updateReverserUI();
@@ -311,6 +319,9 @@
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') {
+      this.resetPartialDamageState();
+    }
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
@@ -352,6 +363,7 @@
     this.groundSpeed = 0.0;
     this.velocity.set(0, 0, 0);
     this.speed = 0.0;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
     this.updateFlapsUI();
     this.updateSpoilerUI();
     this.updateReverserUI();
@@ -361,10 +373,105 @@
     this.startJetSound();
   },
 
+  getCameraModeDefs() {
+    return [
+      { id: '3rd', icon: '🎥', short: '3인칭', label: '3인칭 후방 시점 (Chase)' },
+      { id: '1st', icon: '🧑‍✈️', short: '1인칭', label: '1인칭 조종석 시점 (Cockpit)' },
+      { id: 'wing', icon: '🪽', short: '날개', label: '승객 창가 날개 시점 (Wing)' },
+      { id: 'drone', icon: '🛸', short: '드론', label: '드론 360° 오빗 시점 (Drone)' },
+      { id: 'flyby', icon: '🎬', short: '플라이바이', label: '시네마틱 플라이바이 (Flyby)' },
+      { id: 'tower', icon: '🗼', short: '관제탑', label: '공항 관제탑 시점 (Tower)' },
+      { id: 'gear', icon: '🛞', short: '랜딩기어', label: '동체 하부 랜딩기어 시점 (Gear)' },
+      { id: 'hud', icon: '🎯', short: 'HUD', label: '순수 HUD 전방 시점 (HUD)' }
+    ];
+  },
+
+  setCameraMode(mode) {
+    const defs = this.getCameraModeDefs();
+    const def = defs.find((d) => d.id === mode) || defs[0];
+    this.cameraMode = def.id;
+
+    const cs = typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState;
+    if (cs) {
+      cs.flybySet = false;
+      cs.flybyRegime = null;
+      cs.droneInitialized = false;
+      cs.chaseTargetInitialized = false;
+      if (def.id === '3rd') cs.chasePos.set(0, 0, 0);
+    }
+
+    if (this.camModeText) {
+      this.camModeText.textContent = def.short;
+    }
+    this.updateCameraModeUI();
+    this.showPopup(`${def.icon} ${def.label}`);
+  },
+
+  updateCameraModeUI() {
+    document.querySelectorAll('[data-cam-mode]').forEach((btn) => {
+      if (btn.dataset.camMode === this.cameraMode) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  },
+
+  toggleCameraMenu(forceClose = false) {
+    const menu = document.getElementById('cam-mode-menu');
+    if (!menu) return;
+    if (forceClose) {
+      menu.classList.add('hidden');
+      return;
+    }
+    this.toggleEffectMenu(true);
+    menu.classList.toggle('hidden');
+    this.updateCameraModeUI();
+  },
+
+  toggleEffectMenu(forceClose = false) {
+    const menu = document.getElementById('effect-settings-menu');
+    if (!menu) return;
+    if (forceClose) {
+      menu.classList.add('hidden');
+      return;
+    }
+    const camMenu = document.getElementById('cam-mode-menu');
+    if (camMenu) camMenu.classList.add('hidden');
+    menu.classList.toggle('hidden');
+    this.updateSpeedEffectUI();
+  },
+
+  updateSpeedEffectUI() {
+    const intensity = typeof this.speedEffectIntensity === 'number'
+      ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
+      : 0.35;
+    const pct = Math.round(intensity * 100);
+    const labelText = pct === 0 ? '기류 OFF' : `기류 ${pct}%`;
+
+    const btnText = document.getElementById('effect-intensity-text');
+    if (btnText) btnText.textContent = labelText;
+
+    const valPc = document.getElementById('effect-slider-val-pc');
+    if (valPc) valPc.textContent = pct === 0 ? 'OFF (0%)' : `${pct}%`;
+
+    const valMob = document.getElementById('effect-slider-val-mobile');
+    if (valMob) valMob.textContent = pct === 0 ? 'OFF (0%)' : `${pct}%`;
+
+    const sliderPc = document.getElementById('effect-intensity-slider-pc');
+    if (sliderPc && Number(sliderPc.value) !== pct) sliderPc.value = String(pct);
+
+    const sliderMob = document.getElementById('effect-intensity-slider-mobile');
+    if (sliderMob && Number(sliderMob.value) !== pct) sliderMob.value = String(pct);
+
+    document.querySelectorAll('[data-effect-preset]').forEach((btn) => {
+      if (Number(btn.dataset.effectPreset) === pct) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  },
+
   toggleCamera() {
-    this.cameraMode = this.cameraMode === '3rd' ? '1st' : '3rd';
-    this.camModeText.textContent = this.cameraMode === '3rd' ? '3인칭' : '1인칭';
-    this.showPopup(this.cameraMode === '3rd' ? '3인칭 후방 시점' : '1인칭 조종석 시점');
+    const defs = this.getCameraModeDefs();
+    const curIdx = defs.findIndex((d) => d.id === this.cameraMode);
+    const nextDef = defs[(curIdx + 1) % defs.length];
+    this.setCameraMode(nextDef.id);
   },
 
   showPopup(text) {
@@ -436,7 +543,7 @@
     const speedPercent = Math.min(100, Math.round((kmh / 800) * 100));
     this.speedBar.style.width = `${speedPercent}%`;
 
-    const altitude = Math.max(0, Math.round((this.planeGroup.position.y - this.groundY) * 10));
+    const altitude = Math.max(0, Math.round(this.planeGroup.position.y - this.groundY));
     const altFt = Math.round(altitude * 3.28084);
     this.altVal.textContent = this.isOnGround ? `0 m (0 ft) [지상]` : `${altitude} m (${altFt} ft) [QNH]`;
     const altPercent = Math.min(100, Math.round((altitude / 2500) * 100));
@@ -444,12 +551,12 @@
 
     // 2. 수직 승강계 (VSI) 갱신
     if (this.vsiVal) {
-      const vsi = (this.verticalSpeed * 10).toFixed(1);
-      const vsiFpm = Math.round(this.verticalSpeed * 10 * 196.85);
+      const vsi = this.verticalSpeed.toFixed(1);
+      const vsiFpm = Math.round(this.verticalSpeed * 196.85);
       this.vsiVal.textContent = (this.verticalSpeed >= 0 ? '+' : '') + vsi + ' m/s (' + (vsiFpm >= 0 ? '+' : '') + vsiFpm + ' fpm)';
-      if (this.verticalSpeed < -0.8) {
+      if (this.verticalSpeed < -8) {
         this.vsiVal.style.color = '#ef4444'; // 위험 강하
-      } else if (this.verticalSpeed < -0.5) {
+      } else if (this.verticalSpeed < -5) {
         this.vsiVal.style.color = '#f59e0b'; // 주의 강하
       } else {
         this.vsiVal.style.color = '#38bdf8'; // 정상
@@ -482,7 +589,19 @@
     this.boostVal.textContent = `N1: ${n1Val}% (레버 ${thrPercent}%)${revTag}`;
     this.boostBar.style.width = `${n1Val}%`;
 
-    this.hullVal.textContent = `${this.hullIntegrity}% ${this.isNoseDented ? '(기수 찌그러짐)' : (this.isGearCollapsed ? '(기어 파손)' : '(정상)')}`;
+    const damagedLabels = [];
+    if (this.partDamage) {
+      if (this.partDamage.engineL !== 'normal' || this.partDamage.engineR !== 'normal') damagedLabels.push('엔진');
+      if (this.partDamage.wingL !== 'normal' || this.partDamage.wingR !== 'normal') damagedLabels.push('날개');
+      if (this.partDamage.tail !== 'normal') damagedLabels.push('꼬리');
+    }
+    if (!this.isGearCollapsed && this.gearDamageState && Object.values(this.gearDamageState).some(s => s !== 'normal')) {
+      damagedLabels.push('기어');
+    }
+    const hullStatus = this.isGearCollapsed
+      ? '(기어 파손)'
+      : (damagedLabels.length > 0 ? `(${damagedLabels.join('/')} 손상)` : (this.isNoseDented ? '(기수 찌그러짐)' : '(정상)'));
+    this.hullVal.textContent = `${this.hullIntegrity}% ${hullStatus}`;
     this.hullBar.style.width = `${this.hullIntegrity}%`;
     if (this.hullIntegrity < 40) {
       this.hullBar.className = 'gauge-bar-fill hull-fill danger';
@@ -720,6 +839,9 @@
     const s = elapsed % 60;
     const names = {
       dc10: 'DC-10 삼발기',
+      dc10_lowpoly: 'DC-10 로우폴리 (Chunky)',
+      dc10_faceted: 'DC-10 페싯 (Faceted)',
+      a380_lowpoly: 'A380 슈퍼점보 로우폴리',
       md80: 'MD-80 쌍발기',
       a320: 'A320 제트기',
       b747: 'B747-400 점보',

@@ -11,7 +11,10 @@
     // Aircraft
     { id: 'a320', name: 'Airbus A320', category: 'aircraft', icon: '✈️', desc: '쌍발 협동체 제트 여객기 (기본 기체)', file: 'a320.glb' },
     { id: 'b747', name: 'Boeing 747-400', category: 'aircraft', icon: '🛫', desc: '4발 점보 광동체 여객기', file: 'b747.glb' },
-    { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기', file: 'dc10.glb' },
+    { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기 (고품질 원본)', file: 'dc10.glb' },
+    { id: 'a380_lowpoly', name: 'Airbus A380 슈퍼점보 (Low-Poly)', category: 'aircraft', icon: '✈️', desc: '더블데크 2층 동체와 4발 엔진의 스타일라이즈드 에어버스 초대형기 (Faceted Low-Poly)', file: 'a380_lowpoly.glb' },
+    { id: 'dc10_lowpoly', name: 'McDonnell Douglas DC-10 (Chunky Low-Poly)', category: 'aircraft', icon: '🛩️', desc: '10각 단면과 각진 3발 엔진의 경량 레트로 로우폴리 모델', file: 'dc10_lowpoly.glb' },
+    { id: 'dc10_faceted', name: 'McDonnell Douglas DC-10 (Faceted Gem)', category: 'aircraft', icon: '💎', desc: '고품질 형상을 다면체 플랫 셰이딩으로 최적화한 하이브리드 모델', file: 'dc10_faceted.glb' },
     { id: 'md80', name: 'McDonnell Douglas MD-80', category: 'aircraft', icon: '✈️', desc: '리어 엔진 T-테일 쌍발 제트기', file: 'md80.glb' },
     { id: 'concorde', name: 'Concorde SST', category: 'aircraft', icon: '🚀', desc: '초음속 델타익 여객기', file: 'concorde.glb' },
     { id: 'amphibian', name: 'Canadair CL-215', category: 'aircraft', icon: '🌊', desc: '수상 이착륙 가능 수륙양용 비행정', file: 'amphibian.glb' },
