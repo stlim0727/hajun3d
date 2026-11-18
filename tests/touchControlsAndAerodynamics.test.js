@@ -459,3 +459,19 @@ test('validates transonic wave drag and dynamic pressure control column stiffnes
   assert.equal(elevatorEffectiveness(0.0), 1.0, 'Clean wing has 100% elevator authority');
   assert.ok(elevatorEffectiveness(1.0) <= 0.20, 'Deep stall wake buries tail with <= 20% authority');
 });
+
+test('validates mobile GPWS warning banner compact sizing and control UI semi-transparency in style.css', () => {
+  const css = readFileSync('web/style.css', 'utf8');
+
+  // 1. GPWS warning banner is styled with compact fonts and higher positioning on mobile
+  assert.ok(css.includes('.gpws-banner'), 'gpws-banner class must exist');
+  assert.ok(css.includes('top: 14% !important'), 'gpws-banner must have mobile top positioning to avoid screen center');
+  assert.ok(css.includes('max-width: min(290px'), 'gpws-banner must have compact max-width on mobile');
+
+  // 2. Control UIs (.glass, touch cards, joystick) have semi-transparent backgrounds
+  assert.ok(css.includes('rgba(15, 23, 42, 0.45)'), 'glass common background must be semi-transparent');
+  assert.ok(css.includes('rgba(15, 23, 42, 0.40)'), 'touch control cards must be semi-transparent');
+  assert.ok(css.includes('rgba(30, 41, 59, 0.45)'), 'touch preset and action buttons must be semi-transparent');
+  assert.ok(css.includes('backdrop-filter: blur'), 'backdrop-filter blur must be applied for glass readability');
+});
+
