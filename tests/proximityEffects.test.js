@@ -183,6 +183,30 @@ test('updateProximitySurfaceEffects activates shadow, water wake ring, and spray
   game.updateProximitySurfaceEffects(0.05, 260);
   assert.equal(game.proximityShadowMesh.visible, false);
   assert.equal(game.waterWakeRingMesh.visible, false);
+  assert.equal(game.waterBowWakeMesh.visible, false);
+});
+
+test('water landing and planing activate bow wake, expanding ripple rings, and bilateral chine spray', () => {
+  const { game } = loadProximityHarness();
+  game.currentPlaneType = 'amphibian';
+  game.initSpeedEffects();
+
+  game.planeGroup.position.set(0, 0.35, -10000);
+  game.isOnGround = true;
+
+  game.triggerWaterTouchdownSplash(2.2);
+  game.updateProximitySurfaceEffects(0.25, 140);
+
+  assert.equal(game.waterBowWakeMesh.visible, true);
+  assert.ok(game.waterBowWakeMesh.material.opacity > 0.2);
+
+  const activeRipples = game.waterRipplePool.filter((r) => r.active && r.mesh.visible);
+  assert.ok(activeRipples.length >= 4, 'Splash and planing must emit expanding concentric ripple rings');
+  const initialScaleX = activeRipples[0].mesh.scale.x;
+
+  game.updateProximitySurfaceEffects(0.35, 140);
+  assert.ok(activeRipples[0].mesh.scale.x > initialScaleX, 'Active water ripple rings must expand over time');
+  assert.ok(game.proximityParticlePool.some((p) => p.active && p.mesh.visible), 'Water planing must emit chine spray particles');
 });
 
 test('updateSunShadowTarget tracks aircraft position across the entire flight path', () => {

@@ -758,5 +758,83 @@ test('FLAPS >= 2 overspeed applies 8-kt hysteresis, 0.6s debounce, and 2.2s FLRS
   assert.ok(popups.some(msg => msg.includes('FLRS 자동 보호')));
 });
 
+test('CL-215 normal water landing approach suppresses false PULL_UP and GEAR warnings while steep dives still warn', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const makeGame = () => {
+    const game = Object.create(AirplaneGame.prototype);
+    game.isPlaying = true;
+    game.isDestroyed = false;
+    game.currentPlaneType = 'amphibian';
+    game.groundY = 6.84;
+    game.planeGroup = {
+      position: new THREE.Vector3(0, 25, -10000),
+      rotation: new THREE.Euler(),
+      quaternion: new THREE.Quaternion(),
+    };
+    game.velocity = new THREE.Vector3(0, -3.5, -38);
+    game.throttle = 0.25;
+    game.speed = 135 / 280;
+    game.keys = {};
+    game.gearExtended = false;
+    game.flapIndex = 2;
+    game.isOnGround = false;
+    game.isOverAirport = () => false;
+    game.triggered = null;
+    game.triggerGPWS = (type, text, subtext) => {
+      game.triggered = { type, text, subtext };
+    };
+    game.speakGPWS = () => {};
+    game.playGPWSWhoopSiren = () => {};
+    game.playCautionChime = () => {};
+    game.clearGPWS = () => { game.triggered = null; };
+    return game;
+  };
+
+  // 1. With FlightWarningsCore active across multiple frames (closure accumulation)
+  const gameWithCore = makeGame();
+  gameWithCore.initFlight3dPhysics();
+  for (const gearDown of [false, true]) {
+    gameWithCore.gearExtended = gearDown;
+    gameWithCore._flightWarningsCore.reset();
+    for (let step = 0; step < 8; step++) {
+      const alt = 30 - step * 3.5;
+      gameWithCore.planeGroup.position.y = alt;
+      gameWithCore.verticalSpeed = -3.5;
+      gameWithCore.checkGPWS(0.2);
+      assert.equal(
+        gameWithCore.triggered,
+        null,
+        `Normal CL-215 water approach (gear=${gearDown}, y=${alt}) must not warn (got ${gameWithCore.triggered?.type})`
+      );
+    }
+    gameWithCore.planeGroup.position.y = 12;
+    gameWithCore.verticalSpeed = -4.8;
+    gameWithCore.checkGPWS(0.2);
+    assert.equal(gameWithCore.triggered, null, `Gentle 4.8 m/s flare over water (gear=${gearDown}) must not warn`);
+  }
+
+  // Excessive sink rate (> 5.2 m/s) over water must still trigger PULL_UP
+  gameWithCore._flightWarningsCore.reset();
+  gameWithCore.planeGroup.position.y = 25;
+  gameWithCore.verticalSpeed = -7.0;
+  gameWithCore.checkGPWS(0.2);
+  assert.equal(gameWithCore.triggered?.type, 'PULL_UP', 'Steep 7.0 m/s dive over water must still trigger PULL_UP');
+
+  // 2. Fallback GPWS branch without _flightWarningsCore
+  const fallbackGame = makeGame();
+  fallbackGame._flightWarningsCore = null;
+  fallbackGame.planeGroup.position.y = 20;
+  fallbackGame.verticalSpeed = -3.5;
+  fallbackGame.checkGPWS(0.1);
+  assert.equal(fallbackGame.triggered, null, 'Fallback GPWS must allow normal CL-215 water approach with gear up');
+
+  fallbackGame.planeGroup.position.y = 25;
+  fallbackGame.verticalSpeed = -7.0;
+  fallbackGame.checkGPWS(0.1);
+  assert.equal(fallbackGame.triggered?.type, 'PULL_UP', 'Fallback GPWS must trigger PULL_UP on 7.0 m/s water dive');
+});
+
 
 

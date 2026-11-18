@@ -534,15 +534,21 @@
       this.speedTitle.textContent = `SPEED (V_stall: ${dynamicVStall} km/h)`;
     }
 
+    const onWater = Boolean(this._flight3dCore?.telemetry?.onWater) || (this.isOnGround && Boolean(this._isOverWaterSurface));
     const kmh = Math.round(this.speed * 280);
     const knots = Math.round(kmh / 1.852);
-    this.speedVal.textContent = this.isOnGround ? `${kmh} km/h (${knots} kt) [지상 주행]` : `${kmh} km/h (${knots} kt) [비행 IAS]`;
+    this.speedVal.textContent = onWater
+      ? `${kmh} km/h (${knots} kt) [수상 활주]`
+      : (this.isOnGround ? `${kmh} km/h (${knots} kt) [지상 주행]` : `${kmh} km/h (${knots} kt) [비행 IAS]`);
     const speedPercent = Math.min(100, Math.round((kmh / 800) * 100));
     this.speedBar.style.width = `${speedPercent}%`;
 
-    const altitude = Math.max(0, Math.round(this.planeGroup.position.y - this.groundY));
+    const altRefY = this._isOverWaterSurface ? Math.min(this.groundY || 6.84, -0.3) : (this.groundY || 6.84);
+    const altitude = Math.max(0, Math.round(this.planeGroup.position.y - altRefY));
     const altFt = Math.round(altitude * 3.28084);
-    this.altVal.textContent = this.isOnGround ? `0 m (0 ft) [지상]` : `${altitude} m (${altFt} ft) [QNH]`;
+    this.altVal.textContent = onWater
+      ? `0 m (0 ft) [수면]`
+      : (this.isOnGround ? `0 m (0 ft) [지상]` : `${altitude} m (${altFt} ft) [QNH]`);
     const altPercent = Math.min(100, Math.round((altitude / 2500) * 100));
     this.altBar.style.width = `${altPercent}%`;
 

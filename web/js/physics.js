@@ -742,6 +742,8 @@
         }
       } else if (ev.type === 'amphibianWaterTouchdown') {
         if (typeof this.clearGPWS === 'function') this.clearGPWS();
+        if (typeof this.triggerWaterTouchdownSplash === 'function') this.triggerWaterTouchdownSplash(ev.sinkRate || 2.0);
+        if (typeof this.playWaterSplashSound === 'function') this.playWaterSplashSound(this.groundSpeed || 35, ev.sinkRate || 2.0);
         this.flightPhase = 'TOUCHDOWN';
         if (this.phaseDisplay) this.phaseDisplay.textContent = '수상 착수 완료 (수상 활주 / 이수 가능)';
         this.showPopup('🌊 [수륙양용기 착수] 안정적인 수상 착수! 스로틀을 올리면 수면에서 다시 이륙할 수 있습니다.');
@@ -750,6 +752,8 @@
           this.checkEmergencyLandingSuccess('amphibian_water');
         }
       } else if (ev.type === 'waterDitching') {
+        if (typeof this.triggerWaterTouchdownSplash === 'function') this.triggerWaterTouchdownSplash(ev.sinkRate || 2.0);
+        if (typeof this.playWaterSplashSound === 'function') this.playWaterSplashSound(this.groundSpeed || 35, ev.sinkRate || 2.0);
         this.isWaterLanding = true;
         this.flightPhase = 'TOUCHDOWN';
         if (this.phaseDisplay) this.phaseDisplay.textContent = '해상 비상착수 안전 부유 중';
@@ -1283,8 +1287,19 @@
       return;
     }
 
-    const radioAltM = Math.max(0, this.planeGroup.position.y - this.groundY); // 미터 단위 대지 고도
+    const pos = this.planeGroup.position;
+    const isOverWater = typeof this.isOverAirport === 'function'
+      ? !this.isOverAirport(pos.x, pos.z)
+      : Boolean(this._isOverWaterSurface);
+    const isAmphibian = this.currentPlaneType === 'amphibian';
+    const baseGroundY = this.groundY ?? 6.84;
+    const surfaceRefY = isOverWater ? Math.min(baseGroundY, -0.3) : baseGroundY;
+    const radioAltM = Math.max(0, pos.y - surfaceRefY); // 미터 단위 대지/대수면 고도
     const sinkRateMs = -(this.verticalSpeed || 0); // m/s 수직 하강 속도
+
+    const isNormalRunwayTouchdown = Boolean(this.gearExtended) && radioAltM < 45 && sinkRateMs < 4.2;
+    const isNormalWaterTouchdown = isAmphibian && isOverWater && radioAltM < 75 && sinkRateMs < 5.2;
+    const isNormalTouchdown = isNormalRunwayTouchdown || isNormalWaterTouchdown;
 
     // 1순위: FlightSimCore.FlightWarningsCore 연속 항공역학 경보 평가
     if (this._flightWarningsCore) {
@@ -1292,19 +1307,28 @@
         onGround: Boolean(this.isOnGround),
         radioAltFt: radioAltM * 3.28084,
         vsiFpm: (this.verticalSpeed || 0) * 196.85,
-        altitudeFt: this.planeGroup.position.y * 3.28084,
+        altitudeFt: pos.y * 3.28084,
         gearState: this.gearExtended ? 1.0 : 0.0,
         flapDegree: this._flight3dCore?.aero?.currentFlapAngle ?? 0,
         isStallWarning: Boolean(this.isStalling || this._flight3dCore?.aero?.isStallWarning),
         isStalled: Boolean(this.isStalling || this._flight3dCore?.aero?.isStalled),
-        rollDeg: (this.planeGroup.rotation.z * 180) / Math.PI,
+        rollDeg: ((this.planeGroup.rotation?.z || this.roll || 0) * 180) / Math.PI,
         throttle: this.throttle || 0,
         iasKnots: ((this.speed || 0) * 280) / 1.852,
         configurationOverspeed: this._flight3dCore?.telemetry?.configurationOverspeed,
         configurationDamage: this._flight3dCore?.telemetry?.configurationDamage,
       };
       const result = this._flightWarningsCore.update(dt, telemetry);
-      const topWarning = result?.activeWarnings?.[0];
+      const activeWarnings = (result?.activeWarnings || []).filter((w) => {
+        if (isAmphibian && isOverWater && (w.id === 'gear' || w.id === 'flaps')) {
+          return false;
+        }
+        if (isNormalTouchdown && (w.id === 'pull-up' || w.id === 'terrain' || w.id === 'sink-rate')) {
+          return false;
+        }
+        return true;
+      });
+      const topWarning = activeWarnings[0];
 
       if (topWarning) {
         if (topWarning.id === 'stall') {
@@ -1331,6 +1355,21 @@
           this.playCautionChime();
           return;
         }
+      }
+
+      if (sinkRateMs > 0.8) {
+        const timeToImpact = radioAltM / sinkRateMs;
+        const unsafeSinkThreshold = (isAmphibian && isOverWater) ? 5.2 : 4.2;
+        if (timeToImpact <= 10.0 && !isNormalTouchdown && sinkRateMs >= unsafeSinkThreshold) {
+          const sec = Math.max(0.1, timeToImpact).toFixed(1);
+          this.triggerGPWS('PULL_UP', 'PULL UP! PULL UP!', `지면 충돌 ${sec}초 전 - 즉시 기수 상승! (TERRAIN PULL UP)`, 'danger');
+          this.playGPWSWhoopSiren();
+          this.speakGPWS('PULL UP');
+          return;
+        }
+      }
+
+      if (topWarning) {
         if (topWarning.id === 'gear') {
           this.triggerGPWS('GEAR', 'TOO LOW, GEAR!', 'LOWER LANDING GEAR [단축키 G]', 'gear-warn');
           this.speakGPWS('TOO LOW, GEAR');
@@ -1360,7 +1399,6 @@
     // 2. 지면 충돌 예상 시간 (Time to Impact) 계산 (10초 전 정밀 PULL UP 경보)
     if (sinkRateMs > 0.8) {
       const timeToImpact = radioAltM / sinkRateMs; // 초(s) 단위 충돌까지 남은 시간
-      const isNormalTouchdown = this.gearExtended && radioAltM < 22 && sinkRateMs < 3.8;
 
       // ★ 충돌 10초 전 긴급 기수 인양 경보 (PULL UP!)
       if (timeToImpact <= 10.0 && !isNormalTouchdown) {
@@ -1372,8 +1410,8 @@
       }
     }
 
-    // 3. 바퀴 미전개 착륙 경보 (TOO LOW, GEAR!): 고도 140m 이하에서 하강 중인데 랜딩 기어가 접혀있음
-    if (radioAltM < 140 && sinkRateMs > 0.5 && !this.gearExtended) {
+    // 3. 바퀴 미전개 착륙 경보 (TOO LOW, GEAR!): 고도 140m 이하에서 하강 중인데 랜딩 기어가 접혀있음 (수상 착수 중인 수륙양용기 제외)
+    if (radioAltM < 140 && sinkRateMs > 0.5 && !this.gearExtended && !(isAmphibian && isOverWater)) {
       this.triggerGPWS('GEAR', 'TOO LOW, GEAR!', 'LOWER LANDING GEAR [단축키 G]', 'gear-warn');
       this.speakGPWS('TOO LOW, GEAR');
       this.playCautionChime();
@@ -1383,7 +1421,6 @@
     // 4. 주의 단계 강하율 경보 (SINK RATE!): 충돌 18초 전 또는 급격한 강하율
     if (sinkRateMs > 5.5) {
       const timeToImpact = radioAltM / sinkRateMs;
-      const isNormalTouchdown = this.gearExtended && radioAltM < 22 && sinkRateMs < 3.8;
       if (timeToImpact <= 18.0 && !isNormalTouchdown) {
         const sec = Math.max(0.1, timeToImpact).toFixed(1);
         this.triggerGPWS('SINK_RATE', 'SINK RATE!', `강하율 과다 (지면 충돌 ${sec}초 전)`, 'caution');
