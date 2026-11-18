@@ -299,7 +299,6 @@
       a320: 'A320',
       b747: 'B747',
       dc10: 'DC10',
-      dc10_decimated: 'DC10',
       md80: 'MD80',
       concorde: 'CONCORDE',
       amphibian: 'CL215',

@@ -11,7 +11,6 @@ const modelKeys = {
   a320: 'a320.glb',
   b747: 'b747.glb',
   dc10: 'dc10.glb',
-  dc10_decimated: 'dc10_decimated.glb',
   md80: 'md80.glb',
   concorde: 'concorde.glb',
   amphibian: 'amphibian.glb',

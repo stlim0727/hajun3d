@@ -11,8 +11,7 @@
     // Aircraft
     { id: 'a320', name: 'Airbus A320', category: 'aircraft', icon: '✈️', desc: '쌍발 협동체 제트 여객기 (기본 기체)', file: 'a320.glb' },
     { id: 'b747', name: 'Boeing 747-400', category: 'aircraft', icon: '🛫', desc: '4발 점보 광동체 여객기', file: 'b747.glb' },
-    { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기 (고품질 원본)', file: 'dc10.glb' },
-    { id: 'dc10_decimated', name: 'DC-10 실물 기반 로우폴리 (Decimated)', category: 'aircraft', icon: '🛩️', desc: '고품질 DC-10 원본 GLB를 입력으로 받아 97% 폴리곤 축소한 실물 비례 로우폴리', file: 'dc10_decimated.glb' },
+    { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기 (실물 비례 로우폴리 최적화 모델)', file: 'dc10.glb' },
     { id: 'md80', name: 'McDonnell Douglas MD-80', category: 'aircraft', icon: '✈️', desc: '리어 엔진 T-테일 쌍발 제트기', file: 'md80.glb' },
     { id: 'concorde', name: 'Concorde SST', category: 'aircraft', icon: '🚀', desc: '초음속 델타익 여객기', file: 'concorde.glb' },
     { id: 'amphibian', name: 'Canadair CL-215', category: 'aircraft', icon: '🌊', desc: '수상 이착륙 가능 수륙양용 비행정', file: 'amphibian.glb' },

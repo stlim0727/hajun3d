@@ -30,7 +30,6 @@
     if (!type) return;
     const names = {
       dc10: 'DC-10 삼발기',
-      dc10_decimated: 'DC-10 디시메이트 (실물 기반)',
       md80: 'MD-80 쌍발기',
       a320: 'A320 제트기',
       b747: 'B747-400 점보',
@@ -837,7 +836,6 @@
     const s = elapsed % 60;
     const names = {
       dc10: 'DC-10 삼발기',
-      dc10_decimated: 'DC-10 디시메이트 (실물 기반)',
       md80: 'MD-80 쌍발기',
       a320: 'A320 제트기',
       b747: 'B747-400 점보',
