@@ -347,10 +347,34 @@
       this.attachAircraftNavLights(this.currentPlaneType || 'dc10');
     }
 
-    this.engineExhaustPoints = [
-      new THREE.Vector3(-6.5, -0.2, 5.0),
-      new THREE.Vector3(6.5, -0.2, 5.0)
-    ];
+    this.planeGroup.updateMatrixWorld(true);
+    const fanExhaustPoints = [];
+    if (this.glbMovingParts && Array.isArray(this.glbMovingParts.fans) && this.glbMovingParts.fans.length > 0) {
+      const nozzleOffset = new THREE.Vector3(0, 0, 3.2);
+      for (const fan of this.glbMovingParts.fans) {
+        if (typeof fan.getWorldPosition !== 'function') continue;
+        const worldPos = fan.getWorldPosition(new THREE.Vector3());
+        const localPos = this.planeGroup.worldToLocal(worldPos).add(nozzleOffset);
+        fanExhaustPoints.push(localPos);
+      }
+      fanExhaustPoints.sort((a, b) => a.x - b.x);
+    }
+
+    if (fanExhaustPoints.length > 0) {
+      this.engineExhaustPoints = fanExhaustPoints;
+    } else {
+      const fallbackByType = {
+        a320: [[-5.06, -1.5, 1.8], [5.06, -1.5, 1.8]],
+        b747: [[-11.5, -1.4, -0.5], [-6.2, -1.8, 2.2], [6.2, -1.8, 2.2], [11.5, -1.4, -0.5]],
+        dc10: [[-6.8, -1.8, 2.2], [0, 3.6, 13.5], [6.8, -1.8, 2.2]],
+        md80: [[-2.6, 0.5, 13.0], [2.6, 0.5, 13.0]],
+        concorde: [[-3.8, -1.4, 12.5], [3.8, -1.4, 12.5]],
+        amphibian: [[-4.8, 1.5, 0.8], [4.8, 1.5, 0.8]],
+        ancestor: [[0.8, 1.2, 0.6]]
+      };
+      const coords = fallbackByType[this.currentPlaneType] || fallbackByType.a320;
+      this.engineExhaustPoints = coords.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    }
 
     const cleanName = fileName.replace(/\.[^/.]+$/, "");
     const planeNameText = document.getElementById('plane-name-text');

@@ -10,6 +10,9 @@ function loadProximityHarness() {
     }
     set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
     copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+    clone() { return new Vector3(this.x, this.y, this.z); }
+    add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+    multiplyScalar(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
     applyQuaternion() { return this; }
     setScalar(s) { this.x = s; this.y = s; this.z = s; return this; }
   }
@@ -203,4 +206,42 @@ test('ocean and terrain canvas textures use high-frequency tiling for low-altitu
   assert.equal(oceanTex.repeat.ry, 1200);
   assert.equal(terrainTex.repeat.rx, 500);
   assert.equal(terrainTex.repeat.ry, 400);
+});
+
+test('takeoff roll and low climb over runway/land spawn no ground dust particles', () => {
+  const { game } = loadProximityHarness();
+  game.initSpeedEffects();
+
+  // Takeoff roll on departure runway (x = 0, z = 0 -> isWater = false)
+  game.isOnGround = true;
+  game.planeGroup.position.set(0, 6.84, 0);
+  game.updateProximitySurfaceEffects(0.05, 220);
+  assert.equal(game.proximityParticlePool.some((p) => p.active || p.mesh.visible), false);
+
+  // Low-altitude climb over runway/land
+  game.isOnGround = false;
+  game.planeGroup.position.set(0, 10.84, -400);
+  game.updateProximitySurfaceEffects(0.05, 260);
+  assert.equal(game.proximityParticlePool.some((p) => p.active || p.mesh.visible), false);
+});
+
+test('createJetExhaustParticles does not emit flame or exhaust cubes at full takeoff throttle', () => {
+  const { game, THREE } = loadProximityHarness();
+  game.isPlaying = true;
+  game.isDestroyed = false;
+  game.throttle = 1.0;
+  game.speed = 0.85;
+  game.particles = [];
+  game.engineExhaustPoints = [
+    new THREE.Vector3(-6.5, -0.2, 5.0),
+    new THREE.Vector3(6.5, -0.2, 5.0)
+  ];
+  game.sharedExhaustGeo = {};
+  game.exhaustMatFull = {};
+  game.exhaustMatNormal = {};
+
+  for (let i = 0; i < 4; i++) {
+    game.createJetExhaustParticles();
+  }
+  assert.equal(game.particles.length, 0);
 });

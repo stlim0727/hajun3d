@@ -263,7 +263,7 @@
     this.waterWakeRingMesh.renderOrder = 2;
     this.scene.add(this.waterWakeRingMesh);
 
-    // 3. Zero-GC 수면 물보라 / 지면 먼지 파티클 풀 (36개 고정 재사용)
+    // 3. Zero-GC 수면 물보라 파티클 풀 (36개 고정 재사용)
     const poolSize = 36;
     const puffGeo = new THREE.IcosahedronGeometry(1.0, 0);
     this.proximityParticlePool = [];
@@ -338,16 +338,16 @@
       }
     }
 
-    // 3. 저고도 물보라 / 지면 먼지 파티클 스폰 & 업데이트 (Zero-GC)
+    // 3. 저고도 수면 물보라 파티클 스폰 & 업데이트 (Zero-GC, 수면 위에서만 발생)
     const pool = this.proximityParticlePool;
     if (!pool || pool.length === 0) return;
 
-    const maxSpawnClearance = isWater ? 34 : 24;
-    const shouldSpawn = currentKmh > 65 && clearance < maxSpawnClearance && (isWater || !this.isOnGround || currentKmh > 130);
+    const maxSpawnClearance = 34;
+    const shouldSpawn = isWater && currentKmh > 65 && clearance < maxSpawnClearance;
 
     if (shouldSpawn) {
       const prox = 1.0 - clearance / maxSpawnClearance;
-      const spawnRate = (isWater ? 42 : 26) * prox * Math.min(1.2, currentKmh / 220);
+      const spawnRate = 42 * prox * Math.min(1.2, currentKmh / 220);
       this._proximitySpawnAccum += dt * spawnRate;
 
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
@@ -358,23 +358,23 @@
         const p = pool[this._proximityPoolCursor];
         this._proximityPoolCursor = (this._proximityPoolCursor + 1) % pool.length;
 
-        const side = (Math.random() - 0.5) * (isWater ? 26 : 18);
+        const side = (Math.random() - 0.5) * 26;
         const backOffset = 4 + Math.random() * 10;
         p.active = true;
-        p.maxLife = isWater ? (0.45 + Math.random() * 0.35) : (0.5 + Math.random() * 0.4);
+        p.maxLife = 0.45 + Math.random() * 0.35;
         p.life = p.maxLife;
-        p.baseScale = (isWater ? 1.4 : 1.1) + prox * 1.8;
-        p.growRate = isWater ? 9.5 : 7.0;
-        p.maxOpacity = (isWater ? 0.58 : 0.36) * prox;
+        p.baseScale = 1.4 + prox * 1.8;
+        p.growRate = 9.5;
+        p.maxOpacity = 0.58 * prox;
 
-        p.mat.color.setHex(isWater ? (Math.random() > 0.35 ? 0xe0f2fe : 0xffffff) : 0xc2b280);
+        p.mat.color.setHex(Math.random() > 0.35 ? 0xe0f2fe : 0xffffff);
         p.mesh.position.set(
           pos.x + right.x * side - forward.x * backOffset,
           surfaceY + 0.35 + Math.random() * 0.6,
           pos.z + right.z * side - forward.z * backOffset
         );
         p.vx = right.x * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.x * (6 + Math.random() * 8);
-        p.vy = (isWater ? 3.2 : 2.2) + prox * 3.5 + Math.random() * 2.0;
+        p.vy = 3.2 + prox * 3.5 + Math.random() * 2.0;
         p.vz = right.z * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.z * (6 + Math.random() * 8);
         p.mesh.scale.setScalar(p.baseScale);
         p.mat.opacity = p.maxOpacity;
@@ -1230,26 +1230,9 @@
   },
 
   createJetExhaustParticles() {
-    if (!this.isPlaying || this.throttle < 0.1 || this.isDestroyed) return;
-    this.exhaustFrameCount = (this.exhaustFrameCount || 0) + 1;
-    if (this.exhaustFrameCount % 2 !== 0) return; // 2프레임에 1회 방출로 GC 부하 50% 절감
-    if (this.particles.length > 50) return; // 파티클 풀 상한선 유지
-
-    const isFull = this.throttle > 0.8;
-    const pMat = isFull ? this.exhaustMatFull : this.exhaustMatNormal;
-    const pGeo = this.sharedExhaustGeo;
-
-    this.engineExhaustPoints.forEach(pt => {
-      const p = new THREE.Mesh(pGeo, pMat);
-      const worldPos = pt.clone().applyQuaternion(this.planeGroup.quaternion).add(this.planeGroup.position);
-      p.position.copy(worldPos);
-
-      const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
-      p.velocity = backward.multiplyScalar(this.speed * 0.7);
-      p.life = isFull ? 0.45 : 0.25;
-      this.particles.push(p);
-      this.scene.add(p);
-    });
+    // 정상 이륙 및 비행 시 비현실적인 사각형 화염/배기 큐브 파티클 방출 비활성화
+    // (실제 엔진 화재 비상 상황은 emergency.js의 createEngineFireParticles 및 damage emitPartParticles에서 처리)
+    return;
   },
 
   // ----------------------------------------------------------------
