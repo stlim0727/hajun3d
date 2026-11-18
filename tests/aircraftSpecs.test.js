@@ -29,3 +29,25 @@ test('validates aircraft aerodynamic specs from config.js', () => {
     assert.ok(spec.vRotateKmh > spec.vStallCleanKmh, `Rotation speed must exceed stall speed for ${type}`);
   }
 });
+
+test('validates DC-10 and airliner rudder hinge rotation axis alignment in aircraft_builder.js', () => {
+  const code = readFileSync('web/js/aircraft_builder.js', 'utf8');
+
+  // Verify DC-10 rudder pivot alignment with the vertical stabilizer trailing edge
+  const dc10Match = code.match(/if \(type === 'dc10'\) \{[\s\S]*?finMesh\.position\.set\(([^)]+)\);[\s\S]*?finMesh\.rotation\.x = ([^;]+);[\s\S]*?const rudderPivot = new THREE\.Group\(\);[\s\S]*?rudderPivot\.position\.set\(([^)]+)\);[\s\S]*?rudderPivot\.rotation\.x = ([^;]+);/);
+  assert.ok(dc10Match, 'DC-10 must configure finMesh and rudderPivot');
+
+  const finPos = dc10Match[1].split(',').map(s => parseFloat(s.trim()));
+  const finRotX = parseFloat(dc10Match[2].trim());
+  const pivotPos = dc10Match[3].split(',').map(s => parseFloat(s.trim()));
+  const pivotRotX = parseFloat(dc10Match[4].trim());
+
+  assert.equal(pivotRotX, finRotX, 'DC-10 rudderPivot must match finMesh sweep rotation.x');
+
+  // Trailing edge center calculation: finMesh depth = 5.2 (halfDepth = 2.6)
+  const expectedPivotY = finPos[1] - 2.6 * Math.sin(finRotX);
+  const expectedPivotZ = finPos[2] + 2.6 * Math.cos(finRotX);
+
+  assert.ok(Math.abs(pivotPos[1] - expectedPivotY) < 0.05, `DC-10 rudderPivot Y (${pivotPos[1]}) must match trailing edge Y (${expectedPivotY.toFixed(2)})`);
+  assert.ok(Math.abs(pivotPos[2] - expectedPivotZ) < 0.05, `DC-10 rudderPivot Z (${pivotPos[2]}) must match trailing edge Z (${expectedPivotZ.toFixed(2)})`);
+});

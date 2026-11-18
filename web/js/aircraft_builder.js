@@ -1147,12 +1147,13 @@
       finMesh.castShadow = true;
       finGroup.add(finMesh);
 
-      // ★ 가동 방향타 (Movable Rudder)
+      // ★ 가동 방향타 (Movable Rudder - 수직날개 후방 결합 모서리를 힌지 회전축으로 정렬)
       const rudderPivot = new THREE.Group();
-      rudderPivot.position.set(0, 8.8, 17.0);
+      rudderPivot.position.set(0, 9.62, 16.97);
+      rudderPivot.rotation.x = -0.32;
       const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 7.2, 1.8), cheatlineMat);
       rudderMesh.position.set(0, 0, 0.9);
-      rudderMesh.rotation.x = -0.32;
+      rudderMesh.castShadow = true;
       rudderPivot.add(rudderMesh);
       finGroup.add(rudderPivot);
       this.controlSurfaces.rudder = rudderPivot;
@@ -1323,10 +1324,10 @@
       finGroup.add(vFin);
 
       const rudderPivot = new THREE.Group();
-      rudderPivot.position.set(0, 5.2, 19.2);
+      rudderPivot.position.set(0, 5.93, 19.07);
+      rudderPivot.rotation.x = -0.34;
       const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 7.8, 1.6), cheatlineMat);
       rudderMesh.position.set(0, 0, 0.8);
-      rudderMesh.rotation.x = -0.34;
       rudderPivot.add(rudderMesh);
       finGroup.add(rudderPivot);
       this.controlSurfaces.rudder = rudderPivot;
@@ -1527,10 +1528,10 @@
       finGroup.add(finMesh);
 
       const rudderPivot = new THREE.Group();
-      rudderPivot.position.set(0, 5.6, 15.4);
+      rudderPivot.position.set(0, 6.50, 15.35);
+      rudderPivot.rotation.x = -0.34;
       const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 7.6, 1.8), cheatlineMat);
       rudderMesh.position.set(0, 0, 0.9);
-      rudderMesh.rotation.x = -0.34;
       rudderPivot.add(rudderMesh);
       finGroup.add(rudderPivot);
       this.controlSurfaces.rudder = rudderPivot;
@@ -1754,10 +1755,10 @@
       finGroup.add(finMesh);
 
       const rudderPivot = new THREE.Group();
-      rudderPivot.position.set(0, 9.2, 20.8);
+      rudderPivot.position.set(0, 10.46, 20.66);
+      rudderPivot.rotation.x = -0.38;
       const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 9.8, 2.2), cheatlineMat);
       rudderMesh.position.set(0, 0, 1.1);
-      rudderMesh.rotation.x = -0.38;
       rudderPivot.add(rudderMesh);
       finGroup.add(rudderPivot);
       this.controlSurfaces.rudder = rudderPivot;
@@ -1912,10 +1913,10 @@
       finGroup.add(finMesh);
 
       const rudderPivot = new THREE.Group();
-      rudderPivot.position.set(0, 5.5, 18.2);
+      rudderPivot.position.set(0, 7.46, 17.70);
+      rudderPivot.rotation.x = -0.55;
       const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 8.2, 1.8), cheatlineMat);
       rudderMesh.position.set(0, 0, 0.9);
-      rudderMesh.rotation.x = -0.55;
       rudderPivot.add(rudderMesh);
       finGroup.add(rudderPivot);
       this.controlSurfaces.rudder = rudderPivot;
@@ -2087,10 +2088,10 @@
       finGroup.add(finMesh);
 
       const rudderPivot = new THREE.Group();
-      rudderPivot.position.set(0, 4.8, 14.4);
+      rudderPivot.position.set(0, 5.55, 14.28);
+      rudderPivot.rotation.x = -0.32;
       const rudderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 6.8, 1.6), cheatlineMat);
       rudderMesh.position.set(0, 0, 0.8);
-      rudderMesh.rotation.x = -0.32;
       rudderPivot.add(rudderMesh);
       finGroup.add(rudderPivot);
       this.controlSurfaces.rudder = rudderPivot;
