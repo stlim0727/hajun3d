@@ -173,8 +173,10 @@
         if (this.throttle > 0.5) {
           this.throttle = 0.5;
         }
-        // 좌측 엔진 화재로 인한 지속적 좌측 요(Yaw) 모멘트 -> 조종사는 D키(우측 러더)로 보정해야 함
-        this.planeGroup.rotateY(0.0032);
+        // 6-DOF 물리 코어 미연동 시에만 수동 요 모멘트 적용 (연동 시 EngineModel의 비대칭 추력 모멘트가 물리적으로 작용)
+        if (!this._flight3dCore) {
+          this.planeGroup.rotateY(0.0032);
+        }
         // 화염 및 연기 지속 분출
         this.createEngineFireParticles();
         // 기체 미세 진동
@@ -187,12 +189,14 @@
         break;
 
       case 'windshear':
-        // 급격한 하강 기류 (10~15 m/s) 및 난기류 롤/피치 진동
-        const shearOsc = Math.sin(Date.now() * 0.007);
-        const downdraft = (11.0 + shearOsc * 6.0) * dt;
-        this.planeGroup.position.y -= downdraft;
-        this.planeGroup.rotateZ(shearOsc * 0.005);
-        this.planeGroup.rotateX(Math.cos(Date.now() * 0.005) * 0.004);
+        // 6-DOF 코어가 활성화된 경우 getWindWorld가 3D 마이크로버스트 하강기류(-14 m/s)와 돌풍 전단을 자연스럽게 가함
+        if (!this._flight3dCore) {
+          const shearOsc = Math.sin(Date.now() * 0.007);
+          const downdraft = (11.0 + shearOsc * 6.0) * dt;
+          this.planeGroup.position.y -= downdraft;
+          this.planeGroup.rotateZ(shearOsc * 0.005);
+          this.planeGroup.rotateX(Math.cos(Date.now() * 0.005) * 0.004);
+        }
         this.screenShake = Math.max(this.screenShake, 0.35);
         break;
 

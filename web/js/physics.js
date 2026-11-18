@@ -607,7 +607,12 @@
       getWindWorld: (pos, timeSeconds, out) => {
         if (this.currentEmergency === 'windshear') {
           const t = (Number.isFinite(timeSeconds) ? timeSeconds : 0) * 1.5;
-          out.set(Math.sin(t) * 14.0, Math.cos(t * 1.7) * 5.0, Math.cos(t * 0.8) * 8.0);
+          // 마이크로버스트 윈드시어 3D 공기역학:
+          // 중심부 강한 하강기류 (-14 m/s) 및 위치/시간에 따른 돌풍 전선(Gust Front)과 횡풍 전단
+          const downdraft = -14.0 + Math.sin(t * 1.3) * 3.5;
+          const crosswind = Math.sin(t) * 15.0;
+          const headwind = Math.cos(t * 0.85) * 10.0;
+          out.set(crosswind, downdraft, headwind);
         } else {
           out.set(0, 0, 0);
         }
@@ -634,14 +639,31 @@
           this.spoilerExtended = true;
           if (typeof this.updateSpoilerUI === 'function') this.updateSpoilerUI();
         }
-        const sinkRate = ev.sinkRate || 0;
-        if (sinkRate <= 1.8) {
+
+        const f3d = globalThis.FlightSimCore || globalThis.Flight3dPhysics;
+        const sinkRateFpm = (ev.sinkRate || 0) * 196.85;
+        const contactG = result?.telemetry?.gForce ?? (ev.sinkRate ? 1.0 + (ev.sinkRate / 4.0) : 1.0);
+        const planeId = (this.currentPlaneType || 'b738').toUpperCase();
+        const landingRating = f3d?.classifyLanding
+          ? f3d.classifyLanding(planeId, contactG, sinkRateFpm)
+          : { rating: (ev.sinkRate || 0) <= 1.8 ? 'butter' : 'normal', isHard: false, isCrash: false };
+
+        if (landingRating.rating === 'butter') {
           this.showPopup('🧈 [BUTTER LANDING] 환상적인 소프트 터치다운! 승객들이 기립 박수를 보냅니다!');
           this.score += 2000;
-        } else {
+        } else if (landingRating.rating === 'normal' || landingRating.rating === 'smooth' || landingRating.rating === 'soft') {
           this.showPopup('🛬 정상 착륙 성공! 스포일러가 자동 전개되었습니다. S 또는 R 키로 역추진 제동하세요.');
           this.score += 1000;
+        } else if (landingRating.rating === 'firm') {
+          this.showPopup('⚠️ 다소 강한 접지 (FIRM TOUCHDOWN)! 안전하게 감속하십시오.');
+          this.score += 500;
+        } else if (landingRating.rating === 'severeHard') {
+          this.showPopup('🚨 하드 랜딩 경고 (HARD LANDING)! 기체 및 랜딩 기어 점검이 필요합니다.');
+          this.score += 200;
+        } else if (landingRating.rating === 'crash') {
+          this.showPopup('💥 과도한 충격 접지 (CRASH LANDING)!');
         }
+
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('runway_landing');
         }
@@ -741,11 +763,16 @@
 
     if (this.isEngineOff || this.currentEmergency === 'bird_strike') {
       if (Array.isArray(core.engines.failed)) core.engines.failed.fill(true);
+    } else if (this.currentEmergency === 'engine_fire') {
+      if (Array.isArray(core.engines.failed)) {
+        core.engines.failed[0] = true;
+        for (let i = 1; i < core.engines.failed.length; i++) core.engines.failed[i] = false;
+      }
+      if (Array.isArray(core.engines.contactDamage)) {
+        core.engines.contactDamage[0] = Math.max(core.engines.contactDamage[0] || 0, 0.75);
+      }
     } else {
       if (Array.isArray(core.engines.failed)) core.engines.failed.fill(false);
-      if (this.currentEmergency === 'engine_fire' && Array.isArray(core.engines.contactDamage)) {
-        core.engines.contactDamage[0] = Math.max(core.engines.contactDamage[0] || 0, 0.55);
-      }
     }
 
     const inputs = this.collectFlight3dInputs(effectiveDt);
@@ -1186,6 +1213,8 @@
         rollDeg: (this.planeGroup.rotation.z * 180) / Math.PI,
         throttle: this.throttle || 0,
         iasKnots: ((this.speed || 0) * 280) / 1.852,
+        configurationOverspeed: this._flight3dCore?.telemetry?.configurationOverspeed,
+        configurationDamage: this._flight3dCore?.telemetry?.configurationDamage,
       };
       const result = this._flightWarningsCore.update(dt, telemetry);
       const topWarning = result?.activeWarnings?.[0];
@@ -1201,6 +1230,18 @@
           this.triggerGPWS('PULL_UP', 'PULL UP! PULL UP!', `지면 충돌 ${sec}초 전 - 즉시 기수 상승! (TERRAIN PULL UP)`, 'danger');
           this.playGPWSWhoopSiren();
           this.speakGPWS('PULL UP');
+          return;
+        }
+        if (topWarning.id === 'flap-overspeed') {
+          this.triggerGPWS('OVERSPEED', 'FLAP OVERSPEED!', '플랩 한계 속도 초과 (Vfe EXCEEDED)! 플랩을 즉시 올리거나 감속하십시오', 'danger');
+          this.speakGPWS('FLAP OVERSPEED');
+          this.playCautionChime();
+          return;
+        }
+        if (topWarning.id === 'gear-overspeed') {
+          this.triggerGPWS('OVERSPEED', 'GEAR OVERSPEED!', '랜딩 기어 한계 속도 초과 (Vle EXCEEDED)! 즉시 감속하십시오', 'danger');
+          this.speakGPWS('GEAR OVERSPEED');
+          this.playCautionChime();
           return;
         }
         if (topWarning.id === 'gear') {

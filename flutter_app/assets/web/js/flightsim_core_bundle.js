@@ -89,6 +89,41 @@
     wrapHeading: () => wrapHeading
   });
 
+  // node_modules/@stlim0727/flightsim-core/src/physics/configurationOverspeed.js
+  var excessPressure = (iasKnots, limit) => Math.max(0, (iasKnots / limit) ** 2 - 1);
+  var accumulateDamage = (damage, load, dt) => Math.min(1, damage + 0.5 * load * load * dt);
+  function flapLoad(angle, iasKnots, angles, limits) {
+    if (angle < 0.1) return 0;
+    const upper = angles.findIndex((detent) => detent >= angle);
+    if (upper < 1 || !limits[upper]) return 0;
+    const lower = upper - 1;
+    const progress = (angle - angles[lower]) / (angles[upper] - angles[lower]);
+    const lowerLimit = limits[lower] || limits[upper];
+    const limit = lowerLimit + (limits[upper] - lowerLimit) * progress;
+    return excessPressure(iasKnots, limit);
+  }
+  function advanceConfigurationOverspeed(aero, gear, limits, iasKnots, dt) {
+    const offset2 = aero.flapAngleOffset ?? 0;
+    const left = flapLoad(aero.currentFlapAngle - offset2, iasKnots, aero.flapAngles, limits.flap);
+    const right = flapLoad(aero.currentFlapAngle + offset2, iasKnots, aero.flapAngles, limits.flap);
+    const bias = Math.max(-0.3, Math.min(0.3, aero.beta ?? 0));
+    aero.leftFlapDamage = accumulateDamage(aero.leftFlapDamage ?? 0, left * (1 - bias), dt);
+    aero.rightFlapDamage = accumulateDamage(aero.rightFlapDamage ?? 0, right * (1 + bias), dt);
+    let gearLoad = 0;
+    if (!gear.isFixed && limits.gearOperating && limits.gearExtended) {
+      const moving = Math.abs(gear.targetGearState - gear.gearState) > 1e-3;
+      const exposed = Math.max(gear.gearState, moving ? 0.05 : 0);
+      const limit = moving ? limits.gearOperating : limits.gearExtended;
+      gearLoad = exposed > 0 ? excessPressure(iasKnots, limit) : 0;
+      gear.overspeedDamage = accumulateDamage(gear.overspeedDamage ?? 0, gearLoad * exposed, dt);
+    }
+    const selectedFlapLimit = limits.flap[aero.flapsIndex];
+    return {
+      flap: left > 0 || right > 0 || Boolean(selectedFlapLimit && iasKnots > selectedFlapLimit),
+      gear: gearLoad > 0
+    };
+  }
+
   // node_modules/@stlim0727/flightsim-core/src/physics/FlightPhysicsCore.js
   var THREE8 = __toESM(require_three(), 1);
 
@@ -264,6 +299,7 @@
 
   // node_modules/@stlim0727/flightsim-core/src/config/aircraftConfigs.js
   var BOEING_737_800 = {
+    configurationLimits: { flap: [0, 250, 250, 200, 195, 175, 162], gearOperating: 235, gearExtended: 320 },
     id: "B738",
     massDistribution: B738_MASS_DISTRIBUTION,
     name: "Boeing 737-800",
@@ -425,6 +461,7 @@
     }
   };
   var F16_FALCON = {
+    configurationLimits: { flap: [0, 250], gearOperating: 300, gearExtended: 300 },
     id: "F16",
     flightControls: { gLimiter: true },
     massDistribution: F16_MASS_DISTRIBUTION,
@@ -560,6 +597,7 @@
     }
   };
   var CESSNA_172 = {
+    configurationLimits: { flap: [0, 110, 85, 85] },
     id: "C172",
     massDistribution: C172_MASS_DISTRIBUTION,
     name: "Cessna 172 Skyhawk",
@@ -689,6 +727,7 @@
     }
   };
   var AIRBUS_A320 = {
+    configurationLimits: { flap: [0, 230, 200, 177], gearOperating: 250, gearExtended: 280 },
     id: "A320",
     name: "Airbus A320-200",
     description: "Twin-engine narrow-body jet airliner with CFM56-5B high-bypass turbofans",
@@ -813,6 +852,7 @@
     }
   };
   var BOEING_747_400 = {
+    configurationLimits: { flap: [0, 250, 205, 180], gearOperating: 235, gearExtended: 320 },
     id: "B747",
     name: "Boeing 747-400",
     description: "Four-engine wide-body commercial airliner with GE CF6-80C2 high-bypass turbofans",
@@ -937,6 +977,7 @@
     }
   };
   var DC10_30 = {
+    configurationLimits: { flap: [0, 250, 205, 180], gearOperating: 235, gearExtended: 270 },
     id: "DC10",
     name: "McDonnell Douglas DC-10-30",
     description: "Three-engine wide-body jet airliner with two underwing turbofans and one tail-mounted engine",
@@ -1061,6 +1102,7 @@
     }
   };
   var MD82 = {
+    configurationLimits: { flap: [0, 240, 195, 180], gearOperating: 210, gearExtended: 250 },
     id: "MD80",
     name: "McDonnell Douglas MD-82",
     description: "Twin-engine narrow-body airliner with aft fuselage-mounted JT8D turbofans and T-tail",
@@ -1185,6 +1227,7 @@
     }
   };
   var CONCORDE = {
+    configurationLimits: { flap: [], gearOperating: 270, gearExtended: 270 },
     id: "CONCORDE",
     name: "A\xE9rospatiale/BAC Concorde",
     description: "Supersonic passenger airliner featuring ogival delta wing and four Rolls-Royce/Snecma Olympus 593 turbojets with reheat",
@@ -1309,6 +1352,7 @@
     }
   };
   var CANADAIR_CL215 = {
+    configurationLimits: { flap: [0, 140, 120, 105] },
     id: "CL215",
     name: "Canadair CL-215 Amphibian",
     description: "Twin-engine amphibious flying boat designed for aerial firefighting and water landings",
@@ -2087,10 +2131,23 @@
       }
       this.flapsIndex = Math.max(0, Math.min(this.flapAngles.length - 1, this.flapsIndex ?? 0));
       this.currentFlapAngle = this.flapAngles[this.flapsIndex];
+      this.resetFlapDamage();
+    }
+    resetFlapDamage() {
+      this.flapAngleOffset = 0;
+      this.leftFlapDamage = 0;
+      this.rightFlapDamage = 0;
     }
     advanceFlaps(dt) {
       const target = this.flapAngles[this.flapsIndex];
-      this.currentFlapAngle += (target - this.currentFlapAngle) * Math.min(1, dt * 0.4);
+      const travel = Math.min(1, dt * 0.4);
+      const offset2 = this.flapAngleOffset ?? 0;
+      const left = this.currentFlapAngle - offset2;
+      const right = this.currentFlapAngle + offset2;
+      const nextLeft = left + (target - left) * travel * (1 - (this.leftFlapDamage ?? 0));
+      const nextRight = right + (target - right) * travel * (1 - (this.rightFlapDamage ?? 0));
+      this.currentFlapAngle = (nextLeft + nextRight) * 0.5;
+      this.flapAngleOffset = (nextRight - nextLeft) * 0.5;
     }
     syncMassProperties() {
       const state = this.massProperties;
@@ -2194,7 +2251,7 @@
         }
       }
       let cdParasitic = this.CD0;
-      cdParasitic += 12e-4 * this.currentFlapAngle + 45e-6 * (this.currentFlapAngle * this.currentFlapAngle);
+      cdParasitic += 12e-4 * this.currentFlapAngle + 45e-6 * (this.currentFlapAngle ** 2 + this.flapAngleOffset ** 2);
       cdParasitic += this.gearDrag * gearState;
       cdParasitic += this.spoilerDrag * this.spoilers;
       if (this.mach > this.transonicMachBuffet) {
@@ -2233,8 +2290,8 @@
       const adverseYaw = 0.025 * aileronRad;
       const cn = this.Cn_b * stabilityScale * this.beta + this.Cn_dr * rudderRad + this.Cn_r * rHat + adverseYaw;
       const pitchMoment = qDyn * this.wingArea * this.meanChord * cm + thrustPitchMoment;
-      const rollAsymmetry = dmg ? dmg.rollAsymmetry * cl : 0;
-      const yawAsymmetry = dmg ? dmg.yawAsymmetry : 0;
+      const rollAsymmetry = (dmg ? dmg.rollAsymmetry * cl : 0) + 0.2 * (1 - W) * (1 - 0.28 * brk) * 0.95 * this.flapAngleOffset / 40;
+      const yawAsymmetry = (dmg ? dmg.yawAsymmetry : 0) - 0.2 * this.flapAngleOffset * (12e-4 + 9e-5 * this.currentFlapAngle);
       const rollMoment = -(qDyn * this.wingArea * this.wingspan * cl_roll) + qDyn * this.wingArea * this.wingspan * rollAsymmetry;
       const yawMoment = qDyn * this.wingArea * this.wingspan * (cn + yawAsymmetry);
       result.momentBody.set(
@@ -2757,6 +2814,7 @@
       this.resetDamage();
     }
     resetDamage() {
+      this.overspeedDamage = 0;
       this.failure = null;
       this.maxImpactSpeed = 0;
       this.lastMomentBody.set(0, 0, 0);
@@ -2824,10 +2882,13 @@
         this.targetGearState = 1;
         this.gearState = 1;
         this.isTransit = false;
+      } else if (this.overspeedDamage >= 1) {
+        this.isTransit = false;
       } else if (Math.abs(this.targetGearState - this.gearState) > 1e-3) {
         this.isTransit = true;
-        const step = Math.sign(this.targetGearState - this.gearState) * this.gearTransitSpeed * dt;
-        this.gearState = Math.max(0, Math.min(1, this.gearState + step));
+        const remaining = this.targetGearState - this.gearState;
+        const travel = this.gearTransitSpeed * (1 - (this.overspeedDamage ?? 0)) * dt;
+        this.gearState += Math.sign(remaining) * Math.min(Math.abs(remaining), travel);
       } else {
         this.isTransit = false;
         this.gearState = this.targetGearState;
@@ -2947,6 +3008,7 @@
             dynamicLateralLoad += limits.lateral * 0.5 * shockRatio;
             dynamicLongitudinalLoad += limits.longitudinal * 0.5 * shockRatio;
           }
+          const locked = gearDeploy >= 0.99 && this.targetGearState === 1 && !(this.overspeedDamage >= 1);
           const stateBefore = c.damageState;
           updateGearDamage(c, {
             sinkRate,
@@ -2955,14 +3017,14 @@
             lateralLoad: dynamicLateralLoad,
             longitudinalLoad: dynamicLongitudinalLoad,
             overtravel: Math.max(0, normalPenetration - c.restLength),
-            locked: gearDeploy >= 0.99 && this.targetGearState === 1
+            locked
           }, dt, limits);
           if (stateBefore !== c.damageState) {
             this.failure ??= {
               contact: c.id,
               sinkRate,
               penetration,
-              reason: sinkRate > limits.impact ? "impact" : normalPenetration > c.restLength + 0.08 ? "bottom-out" : c.turfEngagement > 0.5 ? "excursion" : gearDeploy < 0.99 || this.targetGearState !== 1 ? "unlocked" : "overload"
+              reason: sinkRate > limits.impact ? "impact" : normalPenetration > c.restLength + 0.08 ? "bottom-out" : c.turfEngagement > 0.5 ? "excursion" : !locked ? "unlocked" : "overload"
             };
             damageEvents.push({ id: c.id, state: c.damageState, damage: c.damage });
           }
@@ -3940,6 +4002,10 @@
       this.waterDitching?.reset?.();
       this.pilotPhysiology?.reset?.();
       this.gForceFilter?.reset?.();
+      this.aero.resetFlapDamage?.();
+      this.gear.overspeedDamage = 0;
+      this.telemetry.configurationOverspeed = void 0;
+      this.telemetry.configurationDamage = void 0;
     }
     /**
      * Resolve body support-point penetration against the ground callback.
@@ -4116,6 +4182,13 @@
       }
       this._cgBefore.copy(this.aero.cg);
       this.engines.bindMassProperties(this.aero.massProperties);
+      const configurationOverspeed = this.config.configurationLimits && advanceConfigurationOverspeed(
+        this.aero,
+        this.gear,
+        this.config.configurationLimits,
+        Atmosphere.msToKnots(tas * Math.sqrt(atmos.densityRatio)),
+        dt
+      );
       this.gear.advanceConfiguration(dt);
       this.aero.advanceFlaps(dt);
       const engineData = this.engines.update(dt, altitudeMeters, tas, atmos.densityRatio);
@@ -4373,6 +4446,12 @@
         structuralDamage: gearResult.structuralDamage,
         groundRoughness,
         bodyDamage: gearResult.bodyDamage,
+        configurationOverspeed,
+        configurationDamage: {
+          flapLeft: this.aero.leftFlapDamage ?? 0,
+          flapRight: this.aero.rightFlapDamage ?? 0,
+          gear: this.gear.overspeedDamage ?? 0
+        },
         flapDegree: this.aero.currentFlapAngle,
         flapIndex: this.aero.flapsIndex,
         spoilers: this.aero.spoilers,
@@ -5096,6 +5175,8 @@
         const overspeed = this.active.has("overspeed");
         if (s.iasKnots > p2.vne - (overspeed ? 5 : 0) || s.mach > (p2.mach ?? Infinity) - (overspeed ? 0.01 : 0))
           add("overspeed", "OVERSPEED", 85, this.id === "F16" ? "Limit" : null);
+        if (s.configurationOverspeed?.flap) add("flap-overspeed", "FLAP OVERSPEED", 84, null);
+        if (s.configurationOverspeed?.gear) add("gear-overspeed", "GEAR OVERSPEED", 84, null);
         if (Math.abs(s.rollDeg) > p2.bank + (validHeight && ra > 1e3 ? 10 : 0))
           add("bank", "BANK ANGLE", 50, this.id === "B738" ? "Bank angle, bank angle" : null);
         if (s.engine1?.failed || this.numEngines > 1 && s.engine2?.failed) add("engine", "ENGINE FAILURE", 70, this.id === "F16" ? "Engine" : null);

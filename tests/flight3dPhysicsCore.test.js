@@ -519,3 +519,93 @@ test('FlightWarningsCore is wired into physics and triggers GPWS alerts', () => 
   assert.ok(triggered.type === 'PULL_UP' || triggered.type === 'GEAR' || triggered.type === 'SINK_RATE');
 });
 
+test('Touchdown evaluates landing ratings using FlightSimCore.classifyLanding', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentPlaneType = 'b738';
+  let popupMessage = null;
+  game.showPopup = (msg) => { popupMessage = msg; };
+  game.clearGPWS = () => {};
+  game.score = 0;
+
+  // 1. Soft touchdown -> BUTTER
+  game.handleFlight3dEvents([{ type: 'touchdown', sinkRate: 0.5 }], { telemetry: { gForce: 1.1 } });
+  assert.ok(popupMessage.includes('BUTTER LANDING'), `Expected butter landing, got: ${popupMessage}`);
+
+  // 2. High G / hard touchdown
+  popupMessage = null;
+  game.handleFlight3dEvents([{ type: 'touchdown', sinkRate: 2.0 }], { telemetry: { gForce: 1.7 } });
+  assert.ok(popupMessage.includes('하드 랜딩') || popupMessage.includes('다소 강한 접지'), `Expected hard landing note, got: ${popupMessage}`);
+});
+
+test('GPWS triggers flap and gear overspeed warnings from configuration limits', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.isPlaying = true;
+  game.isDestroyed = false;
+  game.currentPlaneType = 'b738';
+  game.groundY = 0;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 3000, 0),
+    rotation: new THREE.Euler(),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.verticalSpeed = 0;
+  game.gearExtended = false;
+  game.isOnGround = false;
+  game.speed = 1.2; // High speed
+
+  let triggered = null;
+  game.triggerGPWS = (type, text, subtext) => {
+    triggered = { type, text, subtext };
+  };
+  game.speakGPWS = () => {};
+  game.playCautionChime = () => {};
+  game.clearGPWS = () => { triggered = null; };
+
+  game.initFlight3dPhysics();
+
+  // Simulate flap overspeed telemetry
+  game._flight3dCore.telemetry = {
+    configurationOverspeed: { flap: true, gear: false },
+  };
+  game.checkGPWS(0.1);
+  assert.ok(triggered, 'Warning must trigger for flap overspeed');
+  assert.equal(triggered.type, 'OVERSPEED');
+  assert.ok(triggered.text.includes('FLAP OVERSPEED'));
+
+  // Simulate gear overspeed telemetry
+  triggered = null;
+  if (game._flightWarningsCore?.reset) {
+    game._flightWarningsCore.reset();
+  }
+  game._flight3dCore.telemetry = {
+    configurationOverspeed: { flap: false, gear: true },
+  };
+  game.checkGPWS(0.1);
+  assert.ok(triggered, 'Warning must trigger for gear overspeed');
+  assert.equal(triggered.type, 'OVERSPEED');
+  assert.ok(triggered.text.includes('GEAR OVERSPEED'));
+});
+
+test('Windshear emergency injects 3D downdraft and wind vector in flight environment', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentEmergency = 'windshear';
+  const env = game.buildFlight3dEnvironment();
+
+  const out = new THREE.Vector3();
+  env.getWindWorld(new THREE.Vector3(0, 500, 0), 2.0, out);
+
+  // Must inject negative Y downdraft (< -10 m/s) and lateral wind
+  assert.ok(out.y < -10.0, `Microburst must have downdraft < -10 m/s (got ${out.y})`);
+  assert.ok(Math.abs(out.x) > 0 || Math.abs(out.z) > 0, 'Microburst must have crosswind / headwind components');
+});
+
+
