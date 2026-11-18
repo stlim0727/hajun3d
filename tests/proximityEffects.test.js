@@ -37,6 +37,7 @@ function loadProximityHarness() {
       constructor(array, itemSize) {
         this.array = array;
         this.itemSize = itemSize;
+        this.count = array.length / itemSize;
         this.needsUpdate = false;
       }
     },
@@ -119,6 +120,7 @@ function loadProximityHarness() {
           fill: () => {},
           stroke: () => {},
           bezierCurveTo: () => {},
+          moveTo: () => {},
           lineTo: () => {},
           createLinearGradient: () => ({ addColorStop: () => {} }),
           createRadialGradient: () => ({ addColorStop: () => {} })
@@ -131,6 +133,7 @@ function loadProximityHarness() {
 
   vm.runInNewContext(readFileSync('web/js/effects.js', 'utf8'), context);
   vm.runInNewContext(readFileSync('web/js/environment.js', 'utf8'), context);
+  vm.runInNewContext(readFileSync('web/js/airports.js', 'utf8'), context);
 
   const game = new AirplaneGame();
   game.scene = { add: () => {} };
@@ -268,4 +271,111 @@ test('createJetExhaustParticles does not emit flame or exhaust cubes at full tak
     game.createJetExhaustParticles();
   }
   assert.equal(game.particles.length, 0);
+});
+
+test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white base color to GLB ground/ocean meshes', () => {
+  const { game, THREE } = loadProximityHarness();
+
+  const makeMat = (name, hex = 0x1e293b) => {
+    const mat = {
+      name,
+      color: { _hex: hex, setHex(h) { this._hex = h; } },
+      map: null,
+      bumpMap: null,
+      bumpScale: 0,
+      roughness: 0.5,
+      metalness: 0.5,
+      vertexColors: false,
+      polygonOffset: false,
+      polygonOffsetFactor: 0,
+      polygonOffsetUnits: 0,
+      needsUpdate: false,
+      clone() {
+        return makeMat(this.name, this.color._hex);
+      }
+    };
+    return mat;
+  };
+
+  const makeMesh = (verts, mat) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+    return {
+      isMesh: true,
+      geometry: geo,
+      material: mat,
+      position: new THREE.Vector3()
+    };
+  };
+
+  const quadVerts = (x0, x1, y, z0, z1) => [
+    x0, y, z0,
+    x1, y, z0,
+    x1, y, z1,
+    x0, y, z1
+  ];
+
+  const oceanMesh = makeMesh(quadVerts(-60000, 60000, -1.5, -85000, 35000), makeMat('VastOceanFloor', 0x026bb8));
+  const haeundaeWaterMesh = makeMesh(quadVerts(-2500, 2500, 0, -28000, -26000), makeMat('OceanWater', 0x0f70ad));
+  const continentMesh = makeMesh(quadVerts(-25000, 25000, 0, -68000, -28000), makeMat('ContinentalMainlandGrass', 0x24612e));
+  const airportMesh = makeMesh(quadVerts(-700, 700, 2, -2200, 2200), makeMat('AirportGround', 0x333d4d));
+  const sharedAsphaltMat = makeMat('AsphaltRunway', 0x1f242e);
+  const runwayMesh = makeMesh(quadVerts(110, 210, 2.1, -1900, 1900), sharedAsphaltMat);
+  const taxiwayVerts = [
+    ...quadVerts(-150, -90, 2.08, -1900, 1900),
+    ...quadVerts(-90, 130, 2.08, -1625, -1575),
+    ...quadVerts(-90, 130, 2.08, -825, -775),
+    ...quadVerts(-90, 130, 2.08, -25, 25),
+    ...quadVerts(-90, 130, 2.08, 775, 825),
+    ...quadVerts(-90, 130, 2.08, 1575, 1625)
+  ];
+  const taxiwayMesh = makeMesh(taxiwayVerts, sharedAsphaltMat);
+  const sandMesh = makeMesh(quadVerts(-25000, 25000, 0.04, -28300, -27700), makeMat('GoldenCoastlineSand', 0xf5d140));
+  const mountainMesh = makeMesh([0, 0, -56000, 100, 500, -56000, -100, 0, -56000], makeMat('MountainProceduralTerrain', 0xffffff));
+
+  const meshes = [
+    oceanMesh,
+    haeundaeWaterMesh,
+    continentMesh,
+    airportMesh,
+    runwayMesh,
+    taxiwayMesh,
+    sandMesh,
+    mountainMesh
+  ];
+  const mockScene = {
+    traverse(fn) {
+      meshes.forEach(fn);
+    }
+  };
+
+  game.applyEnvironmentTexturesToGLB(mockScene, 'terrain');
+
+  assert.ok(game.oceanTexture, 'oceanTexture should be populated on the game instance');
+  assert.equal(game.oceanMaterial, oceanMesh.material);
+
+  for (const m of [oceanMesh, haeundaeWaterMesh, continentMesh, airportMesh, runwayMesh, taxiwayMesh, sandMesh]) {
+    const uv = m.geometry.attributes.uv;
+    const pos = m.geometry.attributes.position;
+    assert.ok(uv, `${m.material.name} must receive uv attribute`);
+    assert.equal(uv.itemSize, 2);
+    assert.equal(uv.array.length, (pos.array.length / 3) * 2);
+    assert.ok(m.material.map, `${m.material.name} must receive diffuse map`);
+    assert.ok(m.material.bumpMap, `${m.material.name} must receive bumpMap`);
+    assert.equal(m.material.color._hex, 0xffffff, `${m.material.name} base color must reset to white`);
+  }
+
+  assert.equal(haeundaeWaterMesh.position.y, -1.46);
+  assert.equal(haeundaeWaterMesh.material.polygonOffset, true);
+
+  assert.notEqual(runwayMesh.material, taxiwayMesh.material, 'Runway and taxiway must clone shared AsphaltRunway material');
+  assert.equal(runwayMesh.material.map, game.runwayAsphaltTexture);
+  assert.equal(taxiwayMesh.material.map, game.taxiwayAsphaltTexture);
+  assert.equal(runwayMesh.geometry.attributes.uv.array[0], 0);
+  assert.equal(runwayMesh.geometry.attributes.uv.array[2], 1);
+
+  assert.ok(mountainMesh.geometry.attributes.uv, 'Mountain terrain must receive uv attribute for bump mapping');
+  assert.equal(mountainMesh.material.vertexColors, true);
+  assert.equal(mountainMesh.material.bumpMap, game.continentTexture);
+  assert.equal(mountainMesh.material.map, null);
 });

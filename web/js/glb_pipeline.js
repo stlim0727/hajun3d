@@ -1193,6 +1193,9 @@
     parseAndMountGLB('airport', ['models/airport.glb', 'assets/models/airport.glb'], (scene, buf) => {
       if (this.airportGroup) {
         while (this.airportGroup.children.length > 0) this.airportGroup.remove(this.airportGroup.children[0]);
+        if (typeof this.applyEnvironmentTexturesToGLB === 'function') {
+          this.applyEnvironmentTexturesToGLB(scene, 'airport');
+        }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.airportGroup.add(scene);
         this.glbAirportBuffer = buf;
@@ -1213,6 +1216,9 @@
     parseAndMountGLB('incheon_airport', ['models/incheon_airport.glb', 'assets/models/incheon_airport.glb'], (scene, buf) => {
       if (this.incheonAirportGroup) {
         while (this.incheonAirportGroup.children.length > 0) this.incheonAirportGroup.remove(this.incheonAirportGroup.children[0]);
+        if (typeof this.applyEnvironmentTexturesToGLB === 'function') {
+          this.applyEnvironmentTexturesToGLB(scene, 'incheon_airport');
+        }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.incheonAirportGroup.add(scene);
         this.glbIncheonBuffer = buf;
@@ -1233,6 +1239,9 @@
     parseAndMountGLB('terrain', ['models/terrain.glb', 'assets/models/terrain.glb', 'models/mountains_terrain.glb'], (scene, buf) => {
       if (this.terrainGroup) {
         while (this.terrainGroup.children.length > 0) this.terrainGroup.remove(this.terrainGroup.children[0]);
+        if (typeof this.applyEnvironmentTexturesToGLB === 'function') {
+          this.applyEnvironmentTexturesToGLB(scene, 'terrain');
+        }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.terrainGroup.add(scene);
         this.glbNatureBuffer = buf;
@@ -1243,6 +1252,9 @@
     parseAndMountGLB('haeundae', ['models/haeundae.glb', 'models/city_beach.glb', 'models/haeundae_beach_city.glb', 'assets/models/haeundae.glb'], (scene, buf) => {
       if (this.cityGroup) {
         while (this.cityGroup.children.length > 0) this.cityGroup.remove(this.cityGroup.children[0]);
+        if (typeof this.applyEnvironmentTexturesToGLB === 'function') {
+          this.applyEnvironmentTexturesToGLB(scene, 'haeundae');
+        }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.cityGroup.add(scene);
         this.glbCityBuffer = buf;

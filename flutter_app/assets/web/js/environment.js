@@ -103,56 +103,121 @@
   // ----------------------------------------------------------------
   // 2. 현실적인 자연 지형, 산맥, 해안선, 입체 구름 및 해상 참조물
   // ----------------------------------------------------------------
+  _makeTextureRng(seed = 4242) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  },
+
   createOceanCanvasTexture() {
+    if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
+    const rand = this._makeTextureRng(7319);
+    const TWO_PI = Math.PI * 2;
 
-    // 베이스 딥 오션 컬러
-    ctx.fillStyle = '#0284c7';
+    // 베이스 깊은 해수면 컬러 (Rich deep marine blue)
+    ctx.fillStyle = '#035388';
     ctx.fillRect(0, 0, 512, 512);
 
-    // 부드러운 해류 그라데이션
-    const grad = ctx.createLinearGradient(0, 0, 512, 512);
-    grad.addColorStop(0, 'rgba(3, 105, 161, 0.45)');
-    grad.addColorStop(0.5, 'rgba(14, 165, 233, 0.4)');
-    grad.addColorStop(1, 'rgba(2, 132, 199, 0.45)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 512);
+    // 4주기 매크로 너울 대역 (Macro ocean swell bands - 512px 주기 완벽 심리스 타일)
+    for (let y = 0; y < 512; y += 8) {
+      const swellPhase = (y / 512) * TWO_PI * 4;
+      const swell = Math.sin(swellPhase);
+      if (swell > 0) {
+        ctx.fillStyle = `rgba(14, 165, 233, ${(0.18 + swell * 0.32).toFixed(3)})`;
+      } else {
+        ctx.fillStyle = `rgba(2, 40, 78, ${(0.20 + (-swell) * 0.38).toFixed(3)})`;
+      }
+      ctx.fillRect(0, y, 512, 8);
+    }
 
-    // 물결 패턴 & 포말 (Wave foam lines + fine surface ripples for low-altitude optical flow)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
-    ctx.lineWidth = 1.6;
+    // 사선 방향 해류 / 교차 너울 음영 (Cross-swell shading)
+    for (let k = 0; k < 6; k++) {
+      const bandY = (k / 6) * 512;
+      const grad = ctx.createLinearGradient(0, bandY, 0, bandY + 42);
+      grad.addColorStop(0.0, 'rgba(2, 40, 78, 0.0)');
+      grad.addColorStop(0.45, 'rgba(2, 40, 78, 0.42)');
+      grad.addColorStop(0.75, 'rgba(56, 189, 248, 0.24)');
+      grad.addColorStop(1.0, 'rgba(2, 40, 78, 0.0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, bandY, 512, 42);
+    }
+
     ctx.lineCap = 'round';
 
-    for (let y = 8; y < 512; y += 16) {
+    // 1차 풍파 능선 (Primary bright wind-wave crests, 16행 심리스 주기)
+    ctx.strokeStyle = 'rgba(186, 230, 253, 0.62)';
+    ctx.lineWidth = 2.4;
+    for (let row = 0; row < 16; row++) {
+      const yBase = row * 32 + 12;
+      const phase = row * 1.15;
       ctx.beginPath();
-      for (let x = 0; x < 512; x += 24) {
-        const offset = Math.sin((x + y) * 0.08) * 5;
-        ctx.bezierCurveTo(x + 8, y + offset, x + 16, y - offset, x + 24, y + offset * 0.5);
+      for (let x = 0; x <= 512; x += 16) {
+        const wy = yBase + Math.sin((x / 512) * TWO_PI * 4 + phase) * 6.5
+          + Math.cos((x / 512) * TWO_PI * 8 - phase) * 2.5;
+        if (x === 0) {
+          if (typeof ctx.moveTo === 'function') ctx.moveTo(x, wy);
+          else ctx.lineTo(x, wy);
+        } else {
+          ctx.lineTo(x, wy);
+        }
       }
       ctx.stroke();
     }
 
-    // 미세 해수면 음영 리플 (Subtle dark troughs for depth)
-    ctx.strokeStyle = 'rgba(3, 105, 161, 0.38)';
-    ctx.lineWidth = 1.2;
-    for (let y = 16; y < 512; y += 20) {
+    // 2차 깊은 골짜기 음영 리플 (Secondary dark wave troughs for crisp bump relief)
+    ctx.strokeStyle = 'rgba(2, 32, 68, 0.55)';
+    ctx.lineWidth = 2.0;
+    for (let row = 0; row < 16; row++) {
+      const yBase = row * 32 + 24;
+      const phase = row * 1.7 + 0.8;
       ctx.beginPath();
-      for (let x = 0; x < 512; x += 32) {
-        const offset = Math.cos((x - y) * 0.07) * 4;
-        ctx.lineTo(x + 16, y + offset);
+      for (let x = 0; x <= 512; x += 16) {
+        const wy = yBase + Math.cos((x / 512) * TWO_PI * 3 + phase) * 5.5
+          + Math.sin((x / 512) * TWO_PI * 6 + phase) * 2.0;
+        if (x === 0) {
+          if (typeof ctx.moveTo === 'function') ctx.moveTo(x, wy);
+          else ctx.lineTo(x, wy);
+        } else {
+          ctx.lineTo(x, wy);
+        }
       }
       ctx.stroke();
     }
 
-    // 미세 백색 포말 물보라 점들
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    for (let i = 0; i < 420; i++) {
-      const px = Math.random() * 512;
-      const py = Math.random() * 512;
-      const pr = 0.7 + Math.random() * 1.6;
+    // 선명한 백색 포말 파도 호 (Whitecap foam arcs, 좌우 래핑)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+    ctx.lineWidth = 2.6;
+    for (let i = 0; i < 64; i++) {
+      const sx = rand() * 512;
+      const sy = rand() * 512;
+      const len = 14 + rand() * 26;
+      const arch = (rand() - 0.5) * 8;
+      for (const ox of [0, sx + len > 512 ? -512 : (sx < 0 ? 512 : 9999)]) {
+        if (ox === 9999) continue;
+        ctx.beginPath();
+        if (typeof ctx.moveTo === 'function') ctx.moveTo(sx + ox, sy);
+        else ctx.lineTo(sx + ox, sy);
+        ctx.bezierCurveTo(
+          sx + ox + len * 0.35, sy - arch,
+          sx + ox + len * 0.65, sy + arch * 0.4,
+          sx + ox + len, sy + (rand() - 0.5) * 3
+        );
+        ctx.stroke();
+      }
+    }
+
+    // 햇빛 반사 & 물보라 포말 입자 (650 foam spray/sparkle speckles)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+    for (let i = 0; i < 650; i++) {
+      const px = rand() * 512;
+      const py = rand() * 512;
+      const pr = 0.8 + rand() * 1.9;
       ctx.beginPath();
       ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
@@ -162,47 +227,413 @@
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(1200, 1200); // 100m x 100m 타일로 저고도 수면 속도감 극대화
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     return tex;
   },
 
   createTerrainCanvasTexture() {
+    if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
+    const rand = this._makeTextureRng(9187);
 
-    ctx.fillStyle = '#245a30';
+    // 베이스 비옥한 대륙 녹지 컬러
+    ctx.fillStyle = '#254f2b';
     ctx.fillRect(0, 0, 512, 512);
 
-    // 자연스러운 초원/농지/지형 패치 (Optical flow patches for low-altitude terrain feel)
-    const patchColors = [
-      'rgba(22, 101, 52, 0.38)',
-      'rgba(45, 106, 79, 0.35)',
-      'rgba(74, 124, 68, 0.28)',
-      'rgba(30, 70, 40, 0.35)'
+    // 8x8 결정론적 농지/초원/숲/토양 패치 그리드 (고고도/저고도 모두 식별 가능한 패치워크)
+    const parcelColors = [
+      'rgba(34, 112, 56, 0.68)',
+      'rgba(20, 62, 35, 0.70)',
+      'rgba(110, 128, 52, 0.54)',
+      'rgba(92, 82, 56, 0.46)',
+      'rgba(54, 130, 72, 0.58)'
     ];
-    for (let i = 0; i < 90; i++) {
-      ctx.fillStyle = patchColors[i % patchColors.length];
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const w = 28 + Math.random() * 68;
-      const h = 24 + Math.random() * 64;
-      ctx.fillRect(x, y, w, h);
+    const cellSize = 64; // 512 / 8 = 64px (완벽 심리스)
+    for (let gy = 0; gy < 8; gy++) {
+      for (let gx = 0; gx < 8; gx++) {
+        const px = gx * cellSize;
+        const py = gy * cellSize;
+        const colorIdx = Math.floor(rand() * parcelColors.length);
+        ctx.fillStyle = parcelColors[colorIdx];
+        ctx.fillRect(px, py, cellSize, cellSize);
+
+        // 밭 이랑 / 경작 줄무늬 (Internal furrow/crop stripes)
+        const horizontal = rand() > 0.5;
+        ctx.strokeStyle = rand() > 0.5 ? 'rgba(134, 239, 172, 0.24)' : 'rgba(16, 40, 22, 0.30)';
+        ctx.lineWidth = 1.5;
+        for (let s = 8; s < cellSize; s += 10) {
+          ctx.beginPath();
+          if (horizontal) {
+            if (typeof ctx.moveTo === 'function') ctx.moveTo(px + 2, py + s);
+            else ctx.lineTo(px + 2, py + s);
+            ctx.lineTo(px + cellSize - 2, py + s);
+          } else {
+            if (typeof ctx.moveTo === 'function') ctx.moveTo(px + s, py + 2);
+            else ctx.lineTo(px + s, py + 2);
+            ctx.lineTo(px + s, py + cellSize - 2);
+          }
+          ctx.stroke();
+        }
+      }
     }
 
-    // 미세 지면 텍스처 그레인 (Ground grain)
-    for (let i = 0; i < 1600; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(134, 239, 172, 0.14)' : 'rgba(20, 45, 25, 0.2)';
-      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 2 + Math.random() * 2);
+    // 방풍림 경계 & 시골 비포장 도로 그리드 (Hedgerows & dirt track grid lines)
+    for (let g = 0; g < 8; g++) {
+      const pos = g * cellSize;
+      const isRoad = g % 4 === 0;
+      ctx.strokeStyle = isRoad ? 'rgba(140, 128, 102, 0.42)' : 'rgba(16, 36, 20, 0.62)';
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      if (typeof ctx.moveTo === 'function') ctx.moveTo(0, pos);
+      else ctx.lineTo(0, pos);
+      ctx.lineTo(512, pos);
+      ctx.stroke();
+
+      ctx.beginPath();
+      if (typeof ctx.moveTo === 'function') ctx.moveTo(pos, 0);
+      else ctx.lineTo(pos, 0);
+      ctx.lineTo(pos, 512);
+      ctx.stroke();
+    }
+
+    // 2,800개 고대비 식생/토양 입자 그레인 (2px ~ 4px)
+    for (let i = 0; i < 2800; i++) {
+      const gx = rand() * 510;
+      const gy = rand() * 510;
+      const sz = 2 + Math.floor(rand() * 3);
+      const tone = rand();
+      if (tone > 0.65) ctx.fillStyle = 'rgba(163, 230, 53, 0.28)';
+      else if (tone > 0.30) ctx.fillStyle = 'rgba(20, 48, 25, 0.38)';
+      else ctx.fillStyle = 'rgba(120, 104, 74, 0.28)';
+      ctx.fillRect(gx, gy, sz, sz);
     }
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(500, 400); // ~100m x 100m 타일
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     return tex;
+  },
+
+  createAirfieldGroundTexture() {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const rand = this._makeTextureRng(5521);
+
+    // 공항 잔디 깎기 줄무늬 (Alternating mowed airfield turf bands - 64px 스트라이프)
+    for (let y = 0; y < 512; y += 64) {
+      ctx.fillStyle = (y / 64) % 2 === 0 ? '#285432' : '#346b40';
+      ctx.fillRect(0, y, 512, 64);
+    }
+
+    // 자연스러운 잔디/클로버/모래 패치
+    const patchColors = [
+      'rgba(22, 78, 38, 0.34)',
+      'rgba(74, 124, 68, 0.30)',
+      'rgba(101, 118, 62, 0.25)',
+      'rgba(20, 52, 28, 0.32)'
+    ];
+    for (let i = 0; i < 110; i++) {
+      ctx.fillStyle = patchColors[i % patchColors.length];
+      ctx.fillRect(rand() * 480, rand() * 480, 18 + rand() * 46, 16 + rand() * 42);
+    }
+
+    // 배수로 및 공항 서비스 도로 이음새 그리드 (Drainage channels & service road seams)
+    for (let g = 0; g < 4; g++) {
+      const p = g * 128;
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.48)';
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      if (typeof ctx.moveTo === 'function') ctx.moveTo(0, p);
+      else ctx.lineTo(0, p);
+      ctx.lineTo(512, p);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.34)';
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      if (typeof ctx.moveTo === 'function') ctx.moveTo(p, 0);
+      else ctx.lineTo(p, 0);
+      ctx.lineTo(p, 512);
+      ctx.stroke();
+    }
+
+    // 3,000개 거친 잔디/토양 그레인 입자 (2px ~ 4px)
+    for (let i = 0; i < 3000; i++) {
+      const sz = 2 + Math.floor(rand() * 3);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(134, 239, 172, 0.24)' : 'rgba(15, 38, 22, 0.34)';
+      ctx.fillRect(rand() * 510, rand() * 510, sz, sz);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    tex.anisotropy = 8;
+    return tex;
+  },
+
+  createSandCanvasTexture() {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const rand = this._makeTextureRng(3109);
+    const TWO_PI = Math.PI * 2;
+
+    // 따뜻한 백사장 베이스
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 바람에 쓸린 모래 언덕 물결 무늬 (Wind-rippled dune bands)
+    ctx.lineCap = 'round';
+    for (let row = 0; row < 24; row++) {
+      const yBase = row * (512 / 24) + 8;
+      ctx.strokeStyle = row % 2 === 0 ? 'rgba(254, 240, 138, 0.52)' : 'rgba(161, 98, 7, 0.38)';
+      ctx.lineWidth = 4.0;
+      ctx.beginPath();
+      for (let x = 0; x <= 512; x += 16) {
+        const wy = yBase + Math.sin((x / 512) * TWO_PI * 3 + row * 0.7) * 4.5;
+        if (x === 0) {
+          if (typeof ctx.moveTo === 'function') ctx.moveTo(x, wy);
+          else ctx.lineTo(x, wy);
+        } else {
+          ctx.lineTo(x, wy);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // 젖은 모래 해안선 줄무늬 (Wet-sand shoreline streaks)
+    for (let i = 0; i < 18; i++) {
+      ctx.fillStyle = 'rgba(133, 77, 14, 0.24)';
+      ctx.fillRect(rand() * 420, rand() * 500, 48 + rand() * 88, 6 + rand() * 12);
+    }
+
+    // 2,200개 자갈 및 조개껍데기 반점
+    for (let i = 0; i < 2200; i++) {
+      const sz = 2 + Math.floor(rand() * 2);
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(255, 251, 235, 0.48)' : 'rgba(120, 53, 15, 0.30)';
+      ctx.fillRect(rand() * 510, rand() * 510, sz, sz);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    tex.anisotropy = 8;
+    return tex;
+  },
+
+  applyPlanarWorldUVs(geometry, tileSizeX, tileSizeZ, repeatX = 1, repeatZ = 1, originX = 0, originZ = 0) {
+    if (!geometry || !geometry.attributes || !geometry.attributes.position || typeof THREE === 'undefined') return;
+    const pos = geometry.attributes.position;
+    const count = typeof pos.count === 'number'
+      ? pos.count
+      : Math.floor((pos.array ? pos.array.length : 0) / (pos.itemSize || 3));
+    if (!count) return;
+
+    const uvs = new Float32Array(count * 2);
+    const denomX = (tileSizeX || 1) * (repeatX || 1);
+    const denomZ = (tileSizeZ || 1) * (repeatZ || 1);
+    for (let i = 0; i < count; i++) {
+      const x = pos.array ? pos.array[i * 3] : pos.getX(i);
+      const z = pos.array ? pos.array[i * 3 + 2] : pos.getZ(i);
+      uvs[i * 2] = (x - originX) / denomX;
+      uvs[i * 2 + 1] = (z - originZ) / denomZ;
+    }
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  },
+
+  applyRunwayStripUVs(geometry, repeatY = 380) {
+    if (!geometry || !geometry.attributes || !geometry.attributes.position || typeof THREE === 'undefined') return;
+    const pos = geometry.attributes.position;
+    const count = typeof pos.count === 'number'
+      ? pos.count
+      : Math.floor((pos.array ? pos.array.length : 0) / (pos.itemSize || 3));
+    if (!count) return;
+
+    const uvs = new Float32Array(count * 2);
+    const denomZ = 10.0 * (repeatY || 380);
+    const chunkSize = (count % 4 === 0) ? 4 : count;
+
+    for (let start = 0; start < count; start += chunkSize) {
+      const end = Math.min(count, start + chunkSize);
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minZ = Infinity;
+      for (let i = start; i < end; i++) {
+        const x = pos.array ? pos.array[i * 3] : pos.getX(i);
+        const z = pos.array ? pos.array[i * 3 + 2] : pos.getZ(i);
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+      }
+      const spanX = (maxX - minX) || 1;
+      for (let i = start; i < end; i++) {
+        const x = pos.array ? pos.array[i * 3] : pos.getX(i);
+        const z = pos.array ? pos.array[i * 3 + 2] : pos.getZ(i);
+        uvs[i * 2] = (x - minX) / spanX;
+        uvs[i * 2 + 1] = (z - minZ) / denomZ;
+      }
+    }
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  },
+
+  applyEnvironmentTexturesToGLB(scene, groupType) {
+    if (!scene || typeof THREE === 'undefined') return;
+
+    if (!this.oceanTexture) this.oceanTexture = this.createOceanCanvasTexture();
+    if (!this.continentTexture) this.continentTexture = this.createTerrainCanvasTexture();
+    if (!this.airfieldGroundTexture) this.airfieldGroundTexture = this.createAirfieldGroundTexture();
+    if (!this.sandTexture) this.sandTexture = this.createSandCanvasTexture();
+    if (!this.runwayAsphaltTexture && typeof this.createRunwayAsphaltTexture === 'function') {
+      this.runwayAsphaltTexture = this.createRunwayAsphaltTexture(380);
+    }
+    if (!this.taxiwayAsphaltTexture && typeof this.createRunwayAsphaltTexture === 'function') {
+      this.taxiwayAsphaltTexture = this.createRunwayAsphaltTexture(1);
+    }
+
+    const setWhite = (mat) => {
+      if (mat.color && typeof mat.color.setHex === 'function') {
+        mat.color.setHex(0xffffff);
+      }
+    };
+
+    const getPosCount = (geo) => {
+      const pos = geo && geo.attributes && geo.attributes.position;
+      if (!pos) return 0;
+      if (typeof pos.count === 'number') return pos.count;
+      return pos.array ? Math.floor(pos.array.length / (pos.itemSize || 3)) : 0;
+    };
+
+    scene.traverse((c) => {
+      if (!c || !c.isMesh || !c.geometry || !c.material) return;
+      let mat = Array.isArray(c.material) ? c.material[0] : c.material;
+      const matName = mat && mat.name ? mat.name : '';
+      if (!matName) return;
+
+      if (matName === 'VastOceanFloor' || matName === 'OceanWater' || matName === 'MasterOcean') {
+        this.applyPlanarWorldUVs(c.geometry, 90, 90, 1200, 1200, 0, 0);
+        setWhite(mat);
+        mat.map = this.oceanTexture;
+        mat.bumpMap = this.oceanTexture;
+        mat.bumpScale = 0.45;
+        mat.roughness = 0.20;
+        mat.metalness = 0.25;
+        if (matName === 'OceanWater') {
+          if (c.position) c.position.y = -1.46;
+          mat.polygonOffset = true;
+          mat.polygonOffsetFactor = 1;
+          mat.polygonOffsetUnits = 1;
+        } else {
+          mat.polygonOffset = true;
+          mat.polygonOffsetFactor = 2;
+          mat.polygonOffsetUnits = 2;
+          if (matName === 'VastOceanFloor') {
+            this.oceanMaterial = mat;
+          }
+        }
+        mat.needsUpdate = true;
+      } else if (matName === 'ContinentalMainlandGrass' || matName === 'MasterContinent') {
+        this.applyPlanarWorldUVs(c.geometry, 120, 120, 500, 400, 0, -28000);
+        setWhite(mat);
+        mat.map = this.continentTexture;
+        mat.bumpMap = this.continentTexture;
+        mat.bumpScale = 0.55;
+        mat.roughness = 0.86;
+        mat.metalness = 0.06;
+        mat.needsUpdate = true;
+      } else if (matName === 'AirportGround' || matName === 'IncheonApronGround') {
+        this.applyPlanarWorldUVs(c.geometry, 80, 80, 1, 1, 0, 0);
+        setWhite(mat);
+        mat.map = this.airfieldGroundTexture;
+        mat.bumpMap = this.airfieldGroundTexture;
+        mat.bumpScale = 0.42;
+        mat.roughness = 0.85;
+        mat.metalness = 0.08;
+        mat.needsUpdate = true;
+      } else if (matName === 'AsphaltRunway' || matName === 'IncheonMegaRunways' || matName === 'MasterRunway') {
+        mat = typeof mat.clone === 'function' ? mat.clone() : mat;
+        c.material = mat;
+        const posCount = getPosCount(c.geometry);
+        const isRunwayStrip = posCount <= 12;
+        if (isRunwayStrip) {
+          this.applyRunwayStripUVs(c.geometry, 380);
+          setWhite(mat);
+          mat.map = this.runwayAsphaltTexture;
+          mat.bumpMap = this.runwayAsphaltTexture;
+          mat.bumpScale = 0.28;
+          mat.roughness = 0.76;
+          mat.metalness = 0.12;
+        } else {
+          this.applyPlanarWorldUVs(c.geometry, 24, 24, 1, 1, 0, 0);
+          setWhite(mat);
+          mat.map = this.taxiwayAsphaltTexture;
+          mat.bumpMap = this.taxiwayAsphaltTexture;
+          mat.bumpScale = 0.24;
+          mat.roughness = 0.80;
+          mat.metalness = 0.10;
+        }
+        const offset = isRunwayStrip ? -2 : -1;
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = offset;
+        mat.polygonOffsetUnits = offset;
+        mat.needsUpdate = true;
+      } else if (
+        matName === 'TaxiwayYellowLines' ||
+        matName === 'IncheonTaxiLines'
+      ) {
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = -3;
+        mat.polygonOffsetUnits = -3;
+        mat.needsUpdate = true;
+      } else if (
+        matName === 'RunwayWhiteMarkings' ||
+        matName === 'IncheonWhiteMarkings' ||
+        matName === 'MasterWhiteMarkings'
+      ) {
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = -4;
+        mat.polygonOffsetUnits = -4;
+        mat.needsUpdate = true;
+      } else if (
+        matName === 'GoldenCoastlineSand' ||
+        matName === 'IslandTropicalSand' ||
+        matName === 'BeachSand'
+      ) {
+        this.applyPlanarWorldUVs(c.geometry, 45, 45, 1, 1, 0, -28000);
+        setWhite(mat);
+        mat.map = this.sandTexture;
+        mat.bumpMap = this.sandTexture;
+        mat.bumpScale = 0.30;
+        mat.roughness = 0.90;
+        mat.metalness = 0.04;
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = -2;
+        mat.polygonOffsetUnits = -2;
+        mat.needsUpdate = true;
+      } else if (
+        matName === 'IslandTropicalHill' ||
+        matName === 'MountainProceduralTerrain' ||
+        matName === 'MasterMountains'
+      ) {
+        this.applyPlanarWorldUVs(c.geometry, 75, 75, 500, 400, 0, 0);
+        mat.vertexColors = true;
+        mat.bumpMap = this.continentTexture;
+        mat.bumpScale = 0.65;
+        mat.roughness = 0.92;
+        mat.needsUpdate = true;
+      }
+    });
   },
 
   // ----------------------------------------------------------------
@@ -328,6 +759,89 @@
           new THREE.Vector3(cx + 21, h, cz + 21)
         ),
         name: `해운대 마린시티 마천루 #${i + 1} (${h}m)`
+      });
+    });
+
+    this.initTerrainColliders();
+  },
+
+  _getIslandTerrainDefs() {
+    return [
+      { x: -450, z: -3500, r: 90, h: 30, variant: 'rolling' },
+      { x: 480, z: -7500, r: 120, h: 38, variant: 'twin' },
+      { x: -380, z: -12500, r: 110, h: 35, variant: 'ridge' },
+      { x: 520, z: -17500, r: 130, h: 42, variant: 'volcanic' },
+      { x: -480, z: -22000, r: 140, h: 48, variant: 'twin' },
+      { x: 380, z: -26000, r: 110, h: 38, variant: 'rolling' }
+    ];
+  },
+
+  _getMountainTerrainDefs() {
+    return [
+      // 출발 해상 공항 주변 원경
+      { x: -3200, z: -2500, r: 580, h: 580, variant: 'ridge' },
+      { x: 3300, z: -2200, r: 600, h: 620, variant: 'twin' },
+      // 항로 주변
+      { x: -4200, z: -12000, r: 880, h: 920, variant: 'alpine' },
+      { x: 4200, z: -18000, r: 920, h: 960, variant: 'massif' },
+      // 대륙 해안선 좌우 거대 곶 (Z = -28000)
+      { x: -5500, z: -28500, r: 1150, h: 1150, variant: 'ridge' },
+      { x: 5500, z: -28500, r: 1150, h: 1150, variant: 'twin' },
+      // ★ 목적지 대륙 육지 공항 배후의 웅장한 대륙 산맥 능선 (Continental Majestic Mountain Range: Z = -47000 ~ -60000)
+      { x: -3800, z: -47500, r: 1300, h: 1300, variant: 'massif' },
+      { x: 3800, z: -47800, r: 1250, h: 1250, variant: 'ridge' },
+      { x: -5500, z: -52000, r: 1600, h: 1650, variant: 'alpine' },
+      { x: 5500, z: -52000, r: 1550, h: 1600, variant: 'twin' },
+      { x: 0, z: -56000, r: 1900, h: 1850, variant: 'alpine' },
+      { x: -3500, z: -58000, r: 1700, h: 1700, variant: 'ridge' },
+      { x: 3500, z: -58000, r: 1650, h: 1680, variant: 'massif' },
+      // 산맥 앞자락 구릉지대 (Foothills for layered mountain range depth)
+      { x: -2900, z: -49200, r: 900, h: 640, variant: 'rolling' },
+      { x: 2950, z: -49600, r: 880, h: 610, variant: 'twin' },
+      { x: -6400, z: -55000, r: 1200, h: 980, variant: 'ridge' },
+      { x: 6400, z: -55200, r: 1180, h: 950, variant: 'alpine' }
+    ];
+  },
+
+  initTerrainColliders() {
+    this.terrainColliders = [];
+    const islandDefs = this._getIslandTerrainDefs();
+    islandDefs.forEach((isl, idx) => {
+      const islSeed = 101 + idx * 37.3;
+      const hillRadius = isl.r * 0.82;
+      const hillSeed = islSeed + 13.7;
+      const hillMaxR = hillRadius * 1.6;
+      this.terrainColliders.push({
+        x: isl.x,
+        z: isl.z,
+        baseY: 1.6,
+        radius: hillRadius,
+        maxRadiusSq: hillMaxR * hillMaxR,
+        height: isl.h,
+        variant: isl.variant,
+        seed: hillSeed,
+        isMountain: false,
+        params: this._getTerrainParams(isl.variant, hillSeed),
+        name: `해상 섬 언덕 #${idx + 1}`
+      });
+    });
+
+    const mountainDefs = this._getMountainTerrainDefs();
+    mountainDefs.forEach((m, idx) => {
+      const mSeed = 501 + idx * 43.9;
+      const mMaxR = m.r * 1.6;
+      this.terrainColliders.push({
+        x: m.x,
+        z: m.z,
+        baseY: -20,
+        radius: m.r,
+        maxRadiusSq: mMaxR * mMaxR,
+        height: m.h,
+        variant: m.variant,
+        seed: mSeed,
+        isMountain: true,
+        params: this._getTerrainParams(m.variant, mSeed),
+        name: `대륙 산악 지형 (${Math.round(m.h)}m)`
       });
     });
   },
@@ -520,7 +1034,7 @@
     if (!this.terrainColliders || this.terrainColliders.length === 0) return null;
     for (let i = 0; i < this.terrainColliders.length; i++) {
       const c = this.terrainColliders[i];
-      if (worldY - clearance > c.baseY + c.height) continue;
+      if (worldY - clearance > c.baseY + c.height * 1.25) continue;
       const dx = worldX - c.x;
       const dz = worldZ - c.z;
       if (dx * dx + dz * dz > c.maxRadiusSq) continue;
@@ -530,15 +1044,23 @@
       const ndz = dz / c.radius;
       const lx = ndx * p.cosR + ndz * p.sinR;
       const lz = -ndx * p.sinR + ndz * p.cosR;
-      const u = lx / p.aspectX;
-      const v = lz / p.aspectZ;
-      const rScaled = Math.hypot(u, v);
-      if (rScaled >= 1.2) continue;
 
-      const theta = Math.atan2(v, u);
-      const edgeNoise = this._terrainFbm(Math.cos(theta) * 2.1, Math.sin(theta) * 2.1, c.seed + 5.1, 3);
-      const t = rScaled / (1.0 + 0.18 * edgeNoise * Math.pow(Math.min(1, rScaled), 0.65));
-      if (t >= 1.0) continue;
+      // Invert summitOffset shift iteratively so collider height matches procedural mesh
+      let t = Math.min(1.0, Math.hypot(lx / p.aspectX, lz / p.aspectZ));
+      let theta = 0;
+      let edgeNoise = 0;
+      let rScaled = 0;
+      for (let iter = 0; iter < 4; iter++) {
+        const shiftFade = Math.pow(Math.max(0, 1 - t), 1.4);
+        const u = (lx - p.summitOffsetX * shiftFade) / p.aspectX;
+        const v = (lz - p.summitOffsetZ * shiftFade) / p.aspectZ;
+        rScaled = Math.hypot(u, v);
+        theta = Math.atan2(v, u);
+        edgeNoise = this._terrainFbm(Math.cos(theta) * 2.1, Math.sin(theta) * 2.1, c.seed + 5.1, 3);
+        const nextT = rScaled / (1.0 + 0.18 * edgeNoise * Math.pow(Math.min(1, rScaled), 0.65));
+        t = iter < 3 ? Math.max(0, Math.min(1.2, 0.5 * t + 0.5 * nextT)) : nextT;
+      }
+      if (rScaled >= 1.2 || t >= 1.0) continue;
 
       const { hNorm } = this._evalTerrainHeightNorm(lx, lz, t, theta, edgeNoise, c.variant, c.seed, c.isMountain, p);
       const terrainY = c.baseY + hNorm * c.height;
@@ -680,66 +1202,80 @@
   },
 
   initTerrainAndSky() {
-    // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5)
+    // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5, 대륙 영역[-25000..25000, -68000..-28000]과 비중첩 분할로 원거리 Z-Fighting 원천 차단)
     this.oceanTexture = this.createOceanCanvasTexture();
-    const seaGeo = new THREE.PlaneGeometry(120000, 120000, 16, 16);
     this.oceanMaterial = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+      color: 0xffffff,
       map: this.oceanTexture,
-      roughness: 0.18,
-      metalness: 0.35
+      bumpMap: this.oceanTexture,
+      bumpScale: 0.45,
+      roughness: 0.20,
+      metalness: 0.25,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 2
     });
-    const sea = new THREE.Mesh(seaGeo, this.oceanMaterial);
-    sea.rotation.x = -Math.PI / 2;
-    sea.position.set(0, -1.5, -25000);
-    sea.receiveShadow = true;
-    this.scene.add(sea);
+    const seaTiles = [
+      { w: 120000, d: 63000, x: 0, z: 3500 },       // 남측 대양 (Z: -28000 ~ +35000)
+      { w: 120000, d: 17000, x: 0, z: -76500 },     // 북측 대양 (Z: -85000 ~ -68000)
+      { w: 35000, d: 40000, x: -42500, z: -48000 }, // 서측 대양 (X: -60000 ~ -25000)
+      { w: 35000, d: 40000, x: 42500, z: -48000 }   // 동측 대양 (X: +25000 ~ +60000)
+    ];
+    seaTiles.forEach(tile => {
+      const seaGeo = new THREE.PlaneGeometry(tile.w, tile.d, 8, 8);
+      const seaMesh = new THREE.Mesh(seaGeo, this.oceanMaterial);
+      seaMesh.rotation.x = -Math.PI / 2;
+      seaMesh.position.set(tile.x, -1.5, tile.z);
+      seaMesh.receiveShadow = true;
+      this.scene.add(seaMesh);
+    });
 
     // 1-B. 거대한 대륙 육지 (Continental Mainland: Z = -28000 ~ -68000, 상단 표면 정확히 Y = 0.0)
-    // 폭 50km x 길이 40km, 두께 8m, 중심 Y = -4.0 -> 상단면 Y = 0.0 (공항 바닥 Y = 2.0과 2.0m 완벽한 단차로 Z-Fighting 원천 차단!)
+    // 폭 50km x 길이 40km, 두께 8m, 중심 Y = -4.0 -> 상단면 Y = 0.0 (공항 바닥과 단차 및 바다 비중첩으로 Z-Fighting 원천 차단)
     const continentGeo = new THREE.BoxGeometry(50000, 8.0, 40000);
     this.continentTexture = this.createTerrainCanvasTexture();
     const continentMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: this.continentTexture,
-      roughness: 0.88,
-      metalness: 0.1
+      bumpMap: this.continentTexture,
+      bumpScale: 0.55,
+      roughness: 0.86,
+      metalness: 0.06
     });
     const continent = new THREE.Mesh(continentGeo, continentMat);
     continent.position.set(0, -4.0, -48000);
     continent.receiveShadow = true;
     this.scene.add(continent);
 
-    // 대륙 남쪽 해안선 백사장 (Golden Beach Coastline: Z = -28000 - 대륙 상단보다 4cm 위 Y = 0.04 + polygonOffset)
+    // 대륙 남쪽 해안선 백사장 (Golden Beach Coastline: Z = -28000 - 대륙 상단보다 25cm 위 Y = 0.25 + polygonOffset)
     const coastGeo = new THREE.PlaneGeometry(50000, 600);
-    const coastMat = new THREE.MeshLambertMaterial({ 
-      color: 0xfacc15,
+    this.sandTexture = this.sandTexture || this.createSandCanvasTexture();
+    const coastMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      map: this.sandTexture,
+      bumpMap: this.sandTexture,
+      bumpScale: 0.30,
+      roughness: 0.90,
+      metalness: 0.04,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
     });
     const coast = new THREE.Mesh(coastGeo, coastMat);
     coast.rotation.x = -Math.PI / 2;
-    coast.position.set(0, 0.04, -28000);
+    coast.position.set(0, 0.25, -28000);
     coast.receiveShadow = true;
     this.scene.add(coast);
 
     // 2. 해상 섬 군락 (Islands along 45km flight path - 속도 체감 시각적 이정표)
-    this.terrainColliders = [];
+    this.initTerrainColliders();
     this.islandsGroup = new THREE.Group();
     const sandMat = new THREE.MeshLambertMaterial({ color: 0xfde047 });
     const grassMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const palmTrunkMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
     const palmLeafMat = new THREE.MeshLambertMaterial({ color: 0x16a34a });
 
-    const islandDefs = [
-      { x: -450, z: -3500, r: 90, h: 30, variant: 'rolling' },
-      { x: 480, z: -7500, r: 120, h: 38, variant: 'twin' },
-      { x: -380, z: -12500, r: 110, h: 35, variant: 'ridge' },
-      { x: 520, z: -17500, r: 130, h: 42, variant: 'volcanic' },
-      { x: -480, z: -22000, r: 140, h: 48, variant: 'twin' },
-      { x: 380, z: -26000, r: 110, h: 38, variant: 'rolling' },
-    ];
+    const islandDefs = this._getIslandTerrainDefs();
 
     islandDefs.forEach((isl, idx) => {
       const island = new THREE.Group();
@@ -769,21 +1305,6 @@
       hill.castShadow = true;
       hill.receiveShadow = true;
       island.add(hill);
-
-      const hillMaxR = hillRadius * 1.6;
-      this.terrainColliders.push({
-        x: isl.x,
-        z: isl.z,
-        baseY: 1.6,
-        radius: hillRadius,
-        maxRadiusSq: hillMaxR * hillMaxR,
-        height: isl.h,
-        variant: isl.variant,
-        seed: hillSeed,
-        isMountain: false,
-        params: this._getTerrainParams(isl.variant, hillSeed),
-        name: `해상 섬 언덕 #${idx + 1}`
-      });
 
       // 야자수 몇 그루
       for (let p = 0; p < 5; p++) {
@@ -857,30 +1378,7 @@
     this.mountainsGroup = new THREE.Group();
     const mountainMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 
-    const mountainDefs = [
-      // 출발 해상 공항 주변 원경
-      { x: -3200, z: -2500, r: 580, h: 580, variant: 'ridge' },
-      { x: 3300, z: -2200, r: 600, h: 620, variant: 'twin' },
-      // 항로 주변
-      { x: -4200, z: -12000, r: 880, h: 920, variant: 'alpine' },
-      { x: 4200, z: -18000, r: 920, h: 960, variant: 'massif' },
-      // 대륙 해안선 좌우 거대 곶 (Z = -28000)
-      { x: -5500, z: -28500, r: 1150, h: 1150, variant: 'ridge' },
-      { x: 5500, z: -28500, r: 1150, h: 1150, variant: 'twin' },
-      // ★ 목적지 대륙 육지 공항 배후의 웅장한 대륙 산맥 능선 (Continental Majestic Mountain Range: Z = -47000 ~ -60000)
-      { x: -3800, z: -47500, r: 1300, h: 1300, variant: 'massif' },
-      { x: 3800, z: -47800, r: 1250, h: 1250, variant: 'ridge' },
-      { x: -5500, z: -52000, r: 1600, h: 1650, variant: 'alpine' },
-      { x: 5500, z: -52000, r: 1550, h: 1600, variant: 'twin' },
-      { x: 0, z: -56000, r: 1900, h: 1850, variant: 'alpine' },
-      { x: -3500, z: -58000, r: 1700, h: 1700, variant: 'ridge' },
-      { x: 3500, z: -58000, r: 1650, h: 1680, variant: 'massif' },
-      // 산맥 앞자락 구릉지대 (Foothills for layered mountain range depth)
-      { x: -2900, z: -49200, r: 900, h: 640, variant: 'rolling' },
-      { x: 2950, z: -49600, r: 880, h: 610, variant: 'twin' },
-      { x: -6400, z: -55000, r: 1200, h: 980, variant: 'ridge' },
-      { x: 6400, z: -55200, r: 1180, h: 950, variant: 'alpine' },
-    ];
+    const mountainDefs = this._getMountainTerrainDefs();
 
     mountainDefs.forEach((m, idx) => {
       const mSeed = 501 + idx * 43.9;
@@ -897,21 +1395,6 @@
       const mesh = new THREE.Mesh(geo, mountainMat);
       mesh.position.set(m.x, -20, m.z);
       this.mountainsGroup.add(mesh);
-
-      const mMaxR = m.r * 1.6;
-      this.terrainColliders.push({
-        x: m.x,
-        z: m.z,
-        baseY: -20,
-        radius: m.r,
-        maxRadiusSq: mMaxR * mMaxR,
-        height: m.h,
-        variant: m.variant,
-        seed: mSeed,
-        isMountain: true,
-        params: this._getTerrainParams(m.variant, mSeed),
-        name: `대륙 산악 지형 (${Math.round(m.h)}m)`
-      });
     });
     this.scene.add(this.mountainsGroup);
 

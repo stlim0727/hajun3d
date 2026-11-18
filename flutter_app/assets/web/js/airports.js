@@ -18,34 +18,42 @@
     ctx.fillStyle = '#243044';
     ctx.fillRect(0, 0, 512, 512);
 
-    // 세로 방향 포장 레인 명암 (60m 폭 기준 6레인)
+    // 세로 방향 포장 레인 명암 및 이음매 (60m~100m 폭 기준 6레인)
     for (let i = 0; i < 6; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.10)';
-      ctx.fillRect(i * (512 / 6), 0, 512 / 6, 512);
+      const lx = i * (512 / 6);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.055)' : 'rgba(10, 15, 28, 0.14)';
+      ctx.fillRect(lx, 0, 512 / 6, 512);
+      if (i > 0) {
+        ctx.fillStyle = 'rgba(10, 15, 28, 0.35)';
+        ctx.fillRect(lx - 1, 0, 2, 512);
+      }
     }
 
-    // 중앙선 주변 타이어 고무 스키드 마크
-    const tireGrad = ctx.createLinearGradient(196, 0, 316, 0);
-    tireGrad.addColorStop(0.0, 'rgba(10, 15, 25, 0.0)');
-    tireGrad.addColorStop(0.3, 'rgba(10, 15, 25, 0.36)');
-    tireGrad.addColorStop(0.5, 'rgba(10, 15, 25, 0.12)');
-    tireGrad.addColorStop(0.7, 'rgba(10, 15, 25, 0.36)');
-    tireGrad.addColorStop(1.0, 'rgba(10, 15, 25, 0.0)');
+    // 중앙선 좌우 양측 메인기어 타이어 고무 스키드 마크 (Dual rubber skidmark bands)
+    const tireGrad = ctx.createLinearGradient(180, 0, 332, 0);
+    tireGrad.addColorStop(0.0, 'rgba(8, 12, 22, 0.0)');
+    tireGrad.addColorStop(0.24, 'rgba(8, 12, 22, 0.38)');
+    tireGrad.addColorStop(0.40, 'rgba(8, 12, 22, 0.14)');
+    tireGrad.addColorStop(0.50, 'rgba(8, 12, 22, 0.08)');
+    tireGrad.addColorStop(0.60, 'rgba(8, 12, 22, 0.14)');
+    tireGrad.addColorStop(0.76, 'rgba(8, 12, 22, 0.38)');
+    tireGrad.addColorStop(1.0, 'rgba(8, 12, 22, 0.0)');
     ctx.fillStyle = tireGrad;
-    ctx.fillRect(196, 0, 120, 512);
+    ctx.fillRect(180, 0, 152, 512);
 
-    // 아스팔트 골재 입자 노이즈 (결정론적 패턴 - 3인칭 시점에서도 질감이 선명히 보이도록 대비 강화)
+    // 아스팔트 골재 입자 노이즈 (결정론적 패턴 - 다중 크기 2px~4px, 3인칭 시점 선명도 극대화)
     let seed = 1337;
     const nextRand = () => {
       seed = (seed * 16807) % 2147483647;
       return (seed - 1) / 2147483646;
     };
-    for (let i = 0; i < 9000; i++) {
-      const x = nextRand() * 512;
-      const y = nextRand() * 512;
+    for (let i = 0; i < 11000; i++) {
+      const x = nextRand() * 510;
+      const y = nextRand() * 510;
       const bright = nextRand() > 0.5;
-      const sz = nextRand() > 0.7 ? 3 : 2;
-      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.20)' : 'rgba(10, 15, 28, 0.34)';
+      const r = nextRand();
+      const sz = r > 0.85 ? 4 : (r > 0.5 ? 3 : 2);
+      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.20)' : 'rgba(8, 12, 22, 0.34)';
       ctx.fillRect(x, y, sz, sz);
     }
 
@@ -53,7 +61,7 @@
     [0, 128, 256, 384].forEach((seamY, idx) => {
       ctx.fillStyle = idx === 0 ? 'rgba(8, 12, 24, 0.72)' : 'rgba(10, 15, 28, 0.48)';
       ctx.fillRect(0, seamY, 512, idx === 0 ? 8 : 6);
-      ctx.fillStyle = idx === 0 ? 'rgba(148, 163, 184, 0.28)' : 'rgba(148, 163, 184, 0.16)';
+      ctx.fillStyle = idx === 0 ? 'rgba(148, 163, 184, 0.30)' : 'rgba(148, 163, 184, 0.18)';
       ctx.fillRect(0, seamY + (idx === 0 ? 8 : 6), 512, 4);
     });
 
@@ -66,6 +74,12 @@
   },
 
   addRunwayVisualDetails(group, xCenter, zCenter, length, whiteMat) {
+    const lineMat = whiteMat || new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
     const halfLen = length / 2;
 
     // 0. 고주파 아스팔트 텍스처가 입혀진 46m 활성 활주로 오버레이 및 갓길 (GLB 평면/대형 점선 대체)
@@ -73,6 +87,8 @@
     const activeRunwayMat = new THREE.MeshStandardMaterial({
       color: overlayTex ? 0xffffff : 0x1e293b,
       map: overlayTex || null,
+      bumpMap: overlayTex || null,
+      bumpScale: 0.28,
       roughness: 0.78,
       polygonOffset: true,
       polygonOffsetFactor: -2,
@@ -110,7 +126,7 @@
       polygonOffsetUnits: -4
     });
     for (let z = -halfLen + 90; z <= halfLen - 90; z += 16) {
-      const dash = new THREE.Mesh(dashGeo, whiteMat);
+      const dash = new THREE.Mesh(dashGeo, lineMat);
       dash.rotation.x = -Math.PI / 2;
       dash.position.set(xCenter, 2.165, zCenter + z);
       group.add(dash);
@@ -127,7 +143,7 @@
     const sideLen = length - 120;
     const edgeStripeGeo = new THREE.PlaneGeometry(0.9, sideLen);
     [-22.0, 22.0].forEach(xOff => {
-      const edgeStripe = new THREE.Mesh(edgeStripeGeo, whiteMat);
+      const edgeStripe = new THREE.Mesh(edgeStripeGeo, lineMat);
       edgeStripe.rotation.x = -Math.PI / 2;
       edgeStripe.position.set(xCenter + xOff, 2.165, zCenter);
       group.add(edgeStripe);
@@ -148,7 +164,7 @@
     [-1, 1].forEach(dir => {
       const zBase = zCenter + dir * (halfLen - 100);
       for (let k = -20; k <= 20; k += 2.5) {
-        const bar = new THREE.Mesh(pianoGeo, whiteMat);
+        const bar = new THREE.Mesh(pianoGeo, lineMat);
         bar.rotation.x = -Math.PI / 2;
         bar.position.set(xCenter + k, 2.165, zBase);
         group.add(bar);
@@ -159,7 +175,7 @@
     [-1, 1].forEach(dir => {
       const zAim = zCenter + dir * (halfLen - 400);
       [-9.5, 9.5].forEach(xOff => {
-        const aim = new THREE.Mesh(aimGeo, whiteMat);
+        const aim = new THREE.Mesh(aimGeo, lineMat);
         aim.rotation.x = -Math.PI / 2;
         aim.position.set(xCenter + xOff, 2.165, zAim);
         group.add(aim);
@@ -174,7 +190,7 @@
         const barCount = Math.max(1, 3 - Math.floor(idx / 2));
         for (let b = 0; b < barCount; b++) {
           [-11 - b * 2.2, 11 + b * 2.2].forEach(xOff => {
-            const tdz = new THREE.Mesh(tdzGeo, whiteMat);
+            const tdz = new THREE.Mesh(tdzGeo, lineMat);
             tdz.rotation.x = -Math.PI / 2;
             tdz.position.set(xCenter + xOff, 2.165, zPos);
             group.add(tdz);
@@ -248,6 +264,8 @@
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: runwayTex ? 0xffffff : 0x1e293b,
       map: runwayTex || null,
+      bumpMap: runwayTex || null,
+      bumpScale: 0.28,
       roughness: 0.78,
       polygonOffset: true,
       polygonOffsetFactor: -2,
@@ -915,6 +933,8 @@
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: incheonRunwayTex ? 0xffffff : 0x1e293b, 
       map: incheonRunwayTex || null,
+      bumpMap: incheonRunwayTex || null,
+      bumpScale: 0.28,
       roughness: 0.78, 
       polygonOffset: true, 
       polygonOffsetFactor: -2, 
