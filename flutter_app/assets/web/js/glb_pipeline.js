@@ -318,8 +318,8 @@
         if (node.material) {
           const mats = Array.isArray(node.material) ? node.material : [node.material];
           mats.forEach((m) => {
-            m.roughness = Math.max(0.18, m.roughness || 0.4);
-            m.metalness = Math.min(0.85, m.metalness || 0.2);
+            m.roughness = Math.max(0.15, Math.min(0.35, m.roughness || 0.28));
+            m.metalness = Math.min(0.85, m.metalness || 0.25);
             m.side = THREE.DoubleSide;
             if (m.transparent) m.depthWrite = true;
             if (m.transmission > 0) m.transmission = 0;
@@ -342,6 +342,10 @@
 
     this.customGLBModel = scene;
     this.planeGroup.add(scene);
+
+    if (typeof this.attachAircraftNavLights === 'function') {
+      this.attachAircraftNavLights(this.currentPlaneType || 'dc10');
+    }
 
     this.engineExhaustPoints = [
       new THREE.Vector3(-6.5, -0.2, 5.0),

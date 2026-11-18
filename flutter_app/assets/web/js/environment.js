@@ -7,15 +7,15 @@
   'use strict';
 
   Object.assign(AirplaneGame.prototype, {
-  // 조명 설정 (주간 태양광 & 야간 달빛 & 1024 고속 섀도우 맵)
+  // 조명 설정 (주간 쨍한 태양광 & 난반사 억제 & 야간 달빛 & 1024 고속 섀도우 맵)
   initLights() {
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.28);
     this.scene.add(this.ambientLight);
 
-    this.hemiLight = new THREE.HemisphereLight(0xdff2fd, 0x334155, 0.65);
+    this.hemiLight = new THREE.HemisphereLight(0xdff2fd, 0x1e293b, 0.38);
     this.scene.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+    this.sunLight = new THREE.DirectionalLight(0xfffaed, 2.15);
     this.sunLightOffset = new THREE.Vector3(500, 900, 400);
     this.sunLight.position.copy(this.sunLightOffset);
     this.sunLight.castShadow = true;
@@ -29,6 +29,7 @@
     this.sunLight.shadow.camera.top = d;
     this.sunLight.shadow.camera.bottom = -d;
     this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.normalBias = 0.04;
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
 

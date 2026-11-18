@@ -154,21 +154,21 @@
       }
     }
 
-    // 2. 태양광 & 달빛 조명 조절
+    // 2. 태양광 & 달빛 조명 조절 (주간 쨍한 직사광 + 난반사 억제)
     if (this.sunLight) {
-      this.sunLight.intensity = isNight ? 0.05 : 1.35;
+      this.sunLight.intensity = isNight ? 0.05 : 2.15;
     }
     if (this.moonLight) {
       this.moonLight.intensity = isNight ? 0.45 : 0.0;
     }
     if (this.ambientLight) {
       this.ambientLight.color.setHex(isNight ? 0x1e293b : 0xffffff);
-      this.ambientLight.intensity = isNight ? 0.35 : 0.75;
+      this.ambientLight.intensity = isNight ? 0.35 : 0.28;
     }
     if (this.hemiLight) {
       this.hemiLight.color.setHex(isNight ? 0x1e3a8a : 0xdff2fd);
-      this.hemiLight.groundColor.setHex(isNight ? 0x020617 : 0x334155);
-      this.hemiLight.intensity = isNight ? 0.30 : 0.65;
+      this.hemiLight.groundColor.setHex(isNight ? 0x020617 : 0x1e293b);
+      this.hemiLight.intensity = isNight ? 0.30 : 0.38;
     }
 
     // 3. 밤하늘 별무리 (Stars)
