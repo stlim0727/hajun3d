@@ -1241,28 +1241,46 @@
   checkObstacleCollisions() {
     if (this.isDestroyed || !this.planeGroup) return;
 
-    this.collisionFrameCount = (this.collisionFrameCount || 0) + 1;
-    if (this.collisionFrameCount % 2 !== 0) return; // 2프레임에 1회 검사
-
     const planePos = this.planeGroup.position;
     const currentKmh = this.speed * 280;
 
-    // 1) 산악·언덕 지형 충돌 검사 (최고봉 1,850m 이하 구간)
-    if (planePos.y <= 1900 && typeof this.getTerrainColliderHit === 'function') {
-      const terrainHit = this.getTerrainColliderHit(planePos.x, planePos.y, planePos.z, 6.0);
-      if (terrainHit) {
-        if (currentKmh > 55) {
-          this.triggerExplosion(`${terrainHit.collider.name} 정면 충돌 폭발`);
-          return;
-        } else {
-          this.applyNoseDent();
-          this.speed = -0.15;
-          const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
-          this.planeGroup.position.addScaledVector(backward, 4.0);
-          return;
+    // 1) 산악·언덕 지형 충돌 검사 (최고봉 ~2,050m 이하 구간, 기체 중심+기수+미부+양날개+동체하부 다점 검사)
+    if (planePos.y <= 2500 && typeof this.getTerrainColliderHit === 'function') {
+      if (!this._terrainProbeVec) this._terrainProbeVec = new THREE.Vector3();
+      if (!this._terrainProbeOffsets) {
+        this._terrainProbeOffsets = [
+          { x: 0, y: 0, z: 0, clearance: 6.0 },
+          { x: 0, y: -3.2, z: 0, clearance: 2.5 },
+          { x: 0, y: 0, z: -20, clearance: 4.0 },
+          { x: 0, y: 2.5, z: 20, clearance: 4.0 },
+          { x: -20, y: 0, z: 2, clearance: 4.0 },
+          { x: 20, y: 0, z: 2, clearance: 4.0 }
+        ];
+      }
+      const q = this.planeGroup.quaternion;
+      const probe = this._terrainProbeVec;
+      const offsets = this._terrainProbeOffsets;
+      for (let i = 0; i < offsets.length; i++) {
+        const o = offsets[i];
+        probe.set(o.x, o.y, o.z).applyQuaternion(q).add(planePos);
+        const terrainHit = this.getTerrainColliderHit(probe.x, probe.y, probe.z, o.clearance);
+        if (terrainHit) {
+          if (currentKmh > 55) {
+            this.triggerExplosion(`${terrainHit.collider.name} 정면 충돌 폭발`);
+            return;
+          } else {
+            this.applyNoseDent();
+            this.speed = -0.15;
+            const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+            this.planeGroup.position.addScaledVector(backward, 4.0);
+            return;
+          }
         }
       }
     }
+
+    this.collisionFrameCount = (this.collisionFrameCount || 0) + 1;
+    if (this.collisionFrameCount % 2 !== 0) return; // 건물 충돌은 2프레임에 1회 검사
 
     // 2) 공항/도심 건물 충돌 검사 (최고층 엘시티 411m 이상이면 스킵)
     if (planePos.y > 450) return;

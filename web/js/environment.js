@@ -520,7 +520,7 @@
     if (!this.terrainColliders || this.terrainColliders.length === 0) return null;
     for (let i = 0; i < this.terrainColliders.length; i++) {
       const c = this.terrainColliders[i];
-      if (worldY - clearance > c.baseY + c.height) continue;
+      if (worldY - clearance > c.baseY + c.height * 1.25) continue;
       const dx = worldX - c.x;
       const dz = worldZ - c.z;
       if (dx * dx + dz * dz > c.maxRadiusSq) continue;
@@ -530,15 +530,23 @@
       const ndz = dz / c.radius;
       const lx = ndx * p.cosR + ndz * p.sinR;
       const lz = -ndx * p.sinR + ndz * p.cosR;
-      const u = lx / p.aspectX;
-      const v = lz / p.aspectZ;
-      const rScaled = Math.hypot(u, v);
-      if (rScaled >= 1.2) continue;
 
-      const theta = Math.atan2(v, u);
-      const edgeNoise = this._terrainFbm(Math.cos(theta) * 2.1, Math.sin(theta) * 2.1, c.seed + 5.1, 3);
-      const t = rScaled / (1.0 + 0.18 * edgeNoise * Math.pow(Math.min(1, rScaled), 0.65));
-      if (t >= 1.0) continue;
+      // Invert summitOffset shift iteratively so collider height matches procedural mesh
+      let t = Math.min(1.0, Math.hypot(lx / p.aspectX, lz / p.aspectZ));
+      let theta = 0;
+      let edgeNoise = 0;
+      let rScaled = 0;
+      for (let iter = 0; iter < 4; iter++) {
+        const shiftFade = Math.pow(Math.max(0, 1 - t), 1.4);
+        const u = (lx - p.summitOffsetX * shiftFade) / p.aspectX;
+        const v = (lz - p.summitOffsetZ * shiftFade) / p.aspectZ;
+        rScaled = Math.hypot(u, v);
+        theta = Math.atan2(v, u);
+        edgeNoise = this._terrainFbm(Math.cos(theta) * 2.1, Math.sin(theta) * 2.1, c.seed + 5.1, 3);
+        const nextT = rScaled / (1.0 + 0.18 * edgeNoise * Math.pow(Math.min(1, rScaled), 0.65));
+        t = iter < 3 ? Math.max(0, Math.min(1.2, 0.5 * t + 0.5 * nextT)) : nextT;
+      }
+      if (rScaled >= 1.2 || t >= 1.0) continue;
 
       const { hNorm } = this._evalTerrainHeightNorm(lx, lz, t, theta, edgeNoise, c.variant, c.seed, c.isMountain, p);
       const terrainY = c.baseY + hNorm * c.height;
@@ -680,23 +688,34 @@
   },
 
   initTerrainAndSky() {
-    // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5)
+    // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5, 대륙 영역[-25000..25000, -68000..-28000]과 비중첩 분할로 원거리 Z-Fighting 원천 차단)
     this.oceanTexture = this.createOceanCanvasTexture();
-    const seaGeo = new THREE.PlaneGeometry(120000, 120000, 16, 16);
     this.oceanMaterial = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
       map: this.oceanTexture,
       roughness: 0.18,
-      metalness: 0.35
+      metalness: 0.35,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 2
     });
-    const sea = new THREE.Mesh(seaGeo, this.oceanMaterial);
-    sea.rotation.x = -Math.PI / 2;
-    sea.position.set(0, -1.5, -25000);
-    sea.receiveShadow = true;
-    this.scene.add(sea);
+    const seaTiles = [
+      { w: 120000, d: 63000, x: 0, z: 3500 },       // 남측 대양 (Z: -28000 ~ +35000)
+      { w: 120000, d: 17000, x: 0, z: -76500 },     // 북측 대양 (Z: -85000 ~ -68000)
+      { w: 35000, d: 40000, x: -42500, z: -48000 }, // 서측 대양 (X: -60000 ~ -25000)
+      { w: 35000, d: 40000, x: 42500, z: -48000 }   // 동측 대양 (X: +25000 ~ +60000)
+    ];
+    seaTiles.forEach(tile => {
+      const seaGeo = new THREE.PlaneGeometry(tile.w, tile.d, 8, 8);
+      const seaMesh = new THREE.Mesh(seaGeo, this.oceanMaterial);
+      seaMesh.rotation.x = -Math.PI / 2;
+      seaMesh.position.set(tile.x, -1.5, tile.z);
+      seaMesh.receiveShadow = true;
+      this.scene.add(seaMesh);
+    });
 
     // 1-B. 거대한 대륙 육지 (Continental Mainland: Z = -28000 ~ -68000, 상단 표면 정확히 Y = 0.0)
-    // 폭 50km x 길이 40km, 두께 8m, 중심 Y = -4.0 -> 상단면 Y = 0.0 (공항 바닥 Y = 2.0과 2.0m 완벽한 단차로 Z-Fighting 원천 차단!)
+    // 폭 50km x 길이 40km, 두께 8m, 중심 Y = -4.0 -> 상단면 Y = 0.0 (공항 바닥과 단차 및 바다 비중첩으로 Z-Fighting 원천 차단)
     const continentGeo = new THREE.BoxGeometry(50000, 8.0, 40000);
     this.continentTexture = this.createTerrainCanvasTexture();
     const continentMat = new THREE.MeshStandardMaterial({
@@ -710,17 +729,17 @@
     continent.receiveShadow = true;
     this.scene.add(continent);
 
-    // 대륙 남쪽 해안선 백사장 (Golden Beach Coastline: Z = -28000 - 대륙 상단보다 4cm 위 Y = 0.04 + polygonOffset)
+    // 대륙 남쪽 해안선 백사장 (Golden Beach Coastline: Z = -28000 - 대륙 상단보다 25cm 위 Y = 0.25 + polygonOffset)
     const coastGeo = new THREE.PlaneGeometry(50000, 600);
     const coastMat = new THREE.MeshLambertMaterial({ 
       color: 0xfacc15,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
     });
     const coast = new THREE.Mesh(coastGeo, coastMat);
     coast.rotation.x = -Math.PI / 2;
-    coast.position.set(0, 0.04, -28000);
+    coast.position.set(0, 0.25, -28000);
     coast.receiveShadow = true;
     this.scene.add(coast);
 

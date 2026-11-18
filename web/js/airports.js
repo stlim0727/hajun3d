@@ -141,11 +141,11 @@
     this.airportGroup = new THREE.Group();
     this.obstacles = [];
 
-    // 아스팔트 바닥 (초대형 1,400m x 4,400m)
+    // 아스팔트 바닥 (초대형 1,400m x 4,400m, 상단면 Y = 1.75로 유도로/활주로와 Z-Fighting 원천 차단)
     const islandGeo = new THREE.BoxGeometry(1400, 4, 4400);
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 });
     const airportGround = new THREE.Mesh(islandGeo, groundMat);
-    airportGround.position.set(0, 0, 0);
+    airportGround.position.set(0, -0.25, 0);
     airportGround.receiveShadow = true;
     this.airportGroup.add(airportGround);
 
@@ -159,8 +159,8 @@
       map: runwayTex || null,
       roughness: 0.78,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
     });
     const runway = new THREE.Mesh(runwayGeo, runwayMat);
     runway.rotation.x = -Math.PI / 2;
@@ -172,8 +172,8 @@
     const whiteMat = new THREE.MeshBasicMaterial({ 
       color: 0xffffff,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
     });
     [-1800, 1800].forEach(zBase => {
       for (let k = -26; k <= 26; k += 4.0) {
@@ -221,7 +221,7 @@
     }
 
     // --------------------------------------------------------------
-    // 유도로 및 황색 유도선 (Taxiways - 75m x 3800m, Y = 2.06)
+    // 유도로 및 황색 유도선 (Taxiways - 75m x 3800m, Y = 1.92)
     // --------------------------------------------------------------
     const taxiway = new THREE.Mesh(
       new THREE.PlaneGeometry(75, 3800),
@@ -234,11 +234,11 @@
       })
     );
     taxiway.rotation.x = -Math.PI / 2;
-    taxiway.position.set(-80, 2.06, 0);
+    taxiway.position.set(-80, 1.92, 0);
     taxiway.receiveShadow = true;
     this.airportGroup.add(taxiway);
 
-    // 연결 유도로 5개소 (Connectors: -1500, -750, 0, 750, 1500, Y = 2.06)
+    // 연결 유도로 5개소 (Connectors: -1500, -750, 0, 750, 1500, Y = 1.96)
     [-1500, -750, 0, 750, 1500].forEach(z => {
       const link = new THREE.Mesh(new THREE.PlaneGeometry(240, 65), new THREE.MeshStandardMaterial({ 
         color: 0x242e3d,
@@ -247,19 +247,19 @@
         polygonOffsetUnits: -1
       }));
       link.rotation.x = -Math.PI / 2;
-      link.position.set(40, 2.06, z);
+      link.position.set(40, 1.96, z);
       this.airportGroup.add(link);
     });
 
     const yellowMat = new THREE.MeshBasicMaterial({ 
       color: 0xfacc15,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3
     });
     const taxiLine = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3750), yellowMat);
     taxiLine.rotation.x = -Math.PI / 2;
-    taxiLine.position.set(-80, 2.09, 0);
+    taxiLine.position.set(-80, 2.02, 0);
     this.airportGroup.add(taxiLine);
 
     // --------------------------------------------------------------
@@ -811,26 +811,34 @@
 
     // 공용 재질
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x242e3d, roughness: 0.85, metalness: 0.1 });
+    const taxiwayMat = new THREE.MeshStandardMaterial({
+      color: 0x242e3d,
+      roughness: 0.85,
+      metalness: 0.1,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
     const incheonRunwayTex = this.createRunwayAsphaltTexture(200);
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: incheonRunwayTex ? 0xffffff : 0x1e293b, 
       map: incheonRunwayTex || null,
       roughness: 0.78, 
       polygonOffset: true, 
-      polygonOffsetFactor: -1, 
-      polygonOffsetUnits: -1 
+      polygonOffsetFactor: -2, 
+      polygonOffsetUnits: -2 
     });
     const whiteLineMat = new THREE.MeshBasicMaterial({ 
       color: 0xffffff, 
       polygonOffset: true, 
-      polygonOffsetFactor: -2, 
-      polygonOffsetUnits: -2 
+      polygonOffsetFactor: -4, 
+      polygonOffsetUnits: -4 
     });
     const yellowTaxiMat = new THREE.MeshBasicMaterial({ 
       color: 0xfacc15, 
       polygonOffset: true, 
-      polygonOffsetFactor: -2, 
-      polygonOffsetUnits: -2 
+      polygonOffsetFactor: -3, 
+      polygonOffsetUnits: -3 
     });
     const terminalGlassMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
@@ -842,9 +850,9 @@
     const roofMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.45 });
     const concreteMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.65 });
 
-    // 1. 거대한 인천공항 아스팔트 에이프런 바닥 (2,800m x 6,200m)
+    // 1. 거대한 인천공항 아스팔트 에이프런 바닥 (2,800m x 6,200m, 상단면 Y = 1.75)
     const apron = new THREE.Mesh(new THREE.BoxGeometry(2800, 4, 6200), groundMat);
-    apron.position.set(-150, 0, incheonZ);
+    apron.position.set(-150, -0.25, incheonZ);
     apron.receiveShadow = true;
     this.incheonAirportGroup.add(apron);
 
@@ -914,22 +922,22 @@
 
     // 3. 고속 탈출 유도로 & 평행 유도로 시스템
     [-60, 490].forEach(taxX => {
-      const taxLine = new THREE.Mesh(new THREE.PlaneGeometry(75, 4200), groundMat);
+      const taxLine = new THREE.Mesh(new THREE.PlaneGeometry(75, 4200), taxiwayMat);
       taxLine.rotation.x = -Math.PI / 2;
-      taxLine.position.set(taxX, 2.06, incheonZ);
+      taxLine.position.set(taxX, 1.92, incheonZ);
       this.incheonAirportGroup.add(taxLine);
 
       const yLine = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 4150), yellowTaxiMat);
       yLine.rotation.x = -Math.PI / 2;
-      yLine.position.set(taxX, 2.09, incheonZ);
+      yLine.position.set(taxX, 2.02, incheonZ);
       this.incheonAirportGroup.add(yLine);
     });
 
     // 유도로 연결선 8개소
     [-1500, -900, -300, 300, 900, 1500].forEach(zLink => {
-      const link = new THREE.Mesh(new THREE.PlaneGeometry(1100, 55), groundMat);
+      const link = new THREE.Mesh(new THREE.PlaneGeometry(1100, 55), taxiwayMat);
       link.rotation.x = -Math.PI / 2;
-      link.position.set(380, 2.06, incheonZ + zLink);
+      link.position.set(380, 1.96, incheonZ + zLink);
       this.incheonAirportGroup.add(link);
     });
 
@@ -2133,10 +2141,27 @@
     this.beachPeople = [];
     this.cityNightLights = [];
 
-    // 공용 재질들
-    const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85, metalness: 0.1 });
-    const roadLineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
-    const grassPlotMat = new THREE.MeshLambertMaterial({ color: 0x22543d });
+    // 공용 재질들 (polygonOffset 적용으로 대륙 지표면과 Z-Fighting 방지)
+    const roadMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.85,
+      metalness: 0.1,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    const roadLineMat = new THREE.MeshBasicMaterial({
+      color: 0xfacc15,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
+    const grassPlotMat = new THREE.MeshLambertMaterial({
+      color: 0x22543d,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
 
     // --------------------------------------------------------------
     // 1. 대륙 간선 도로망 (Highways & City Roadways)
@@ -2144,54 +2169,54 @@
     // 1) 동서 해안 메가 고속도로 (Coastal Expressway: Z = -28350, 폭 32m, 길이 12,000m)
     const coastalHwy = new THREE.Mesh(new THREE.PlaneGeometry(12000, 32), roadMat);
     coastalHwy.rotation.x = -Math.PI / 2;
-    coastalHwy.position.set(0, 0.08, -28350);
+    coastalHwy.position.set(0, 0.25, -28350);
     this.cityGroup.add(coastalHwy);
 
     // 중앙 황색 차선
     const coastalLine = new THREE.Mesh(new THREE.PlaneGeometry(12000, 0.8), roadLineMat);
     coastalLine.rotation.x = -Math.PI / 2;
-    coastalLine.position.set(0, 0.09, -28350);
+    coastalLine.position.set(0, 0.36, -28350);
     this.cityGroup.add(coastalLine);
 
     // 2) 대륙 공항 직통 대로 (Airport Grand Boulevard: X = -580, Z = -28350 ~ -46000, 폭 28m)
     const airportHwy = new THREE.Mesh(new THREE.PlaneGeometry(28, 17650), roadMat);
     airportHwy.rotation.x = -Math.PI / 2;
-    airportHwy.position.set(-580, 0.08, -37175);
+    airportHwy.position.set(-580, 0.30, -37175);
     this.cityGroup.add(airportHwy);
 
     const airportHwyLine = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 17650), roadLineMat);
     airportHwyLine.rotation.x = -Math.PI / 2;
-    airportHwyLine.position.set(-580, 0.09, -37175);
+    airportHwyLine.position.set(-580, 0.38, -37175);
     this.cityGroup.add(airportHwyLine);
 
     // 3) 도시 횡단 간선도로 5개 노선 (City Arterial Super-Avenues: 길이 14,000m 광활 확장)
     [-31000, -34500, -38000, -41500, -48000].forEach(zRoad => {
       const cityAve = new THREE.Mesh(new THREE.PlaneGeometry(14000, 26), roadMat);
       cityAve.rotation.x = -Math.PI / 2;
-      cityAve.position.set(0, 0.08, zRoad);
+      cityAve.position.set(0, 0.25, zRoad);
       this.cityGroup.add(cityAve);
 
       const aveLine = new THREE.Mesh(new THREE.PlaneGeometry(14000, 0.7), roadLineMat);
       aveLine.rotation.x = -Math.PI / 2;
-      aveLine.position.set(0, 0.09, zRoad);
+      aveLine.position.set(0, 0.36, zRoad);
       this.cityGroup.add(aveLine);
     });
 
     // 4) 동부 신도시 남북 간선대로 (East Metropolis Boulevard: X = 1600, Z = -28350 ~ -49000, 폭 26m)
     const eastHwy = new THREE.Mesh(new THREE.PlaneGeometry(26, 20650), roadMat);
     eastHwy.rotation.x = -Math.PI / 2;
-    eastHwy.position.set(1600, 0.08, -38675);
+    eastHwy.position.set(1600, 0.30, -38675);
     this.cityGroup.add(eastHwy);
 
     const eastHwyLine = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 20650), roadLineMat);
     eastHwyLine.rotation.x = -Math.PI / 2;
-    eastHwyLine.position.set(1600, 0.09, -38675);
+    eastHwyLine.position.set(1600, 0.38, -38675);
     this.cityGroup.add(eastHwyLine);
 
     // 5) 서부 해안 산업지구 남북 대로 (West Waterfront Boulevard: X = -2800, Z = -28350 ~ -46000, 폭 24m)
     const westHwy = new THREE.Mesh(new THREE.PlaneGeometry(24, 17650), roadMat);
     westHwy.rotation.x = -Math.PI / 2;
-    westHwy.position.set(-2800, 0.08, -37175);
+    westHwy.position.set(-2800, 0.30, -37175);
     this.cityGroup.add(westHwy);
 
     // --------------------------------------------------------------
@@ -2900,7 +2925,7 @@
       // 마당 잔디밭 구역
       const lawn = new THREE.Mesh(new THREE.PlaneGeometry(w + 10, d + 12), grassPlotMat);
       lawn.rotation.x = -Math.PI / 2;
-      lawn.position.set(0, 0.02, 0);
+      lawn.position.set(0, 0.16, 0);
       hGroup.add(lawn);
 
       // 진입로에 주차된 자가용
