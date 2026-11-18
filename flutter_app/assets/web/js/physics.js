@@ -420,7 +420,35 @@
   // ----------------------------------------------------------------
   toggleFlaps() {
     if (typeof triggerTouchHaptic === 'function') triggerTouchHaptic(14);
-    this.flapIndex = (this.flapIndex + 1) % this.flaps.length;
+    const iasKnots = this._flight3dCore?.telemetry?.iasKnots ?? (((this.speed || 0) * 280) / 1.852);
+    const flapLimits = this._flight3dConfig?.configurationLimits?.flap;
+    const currentIdx = this.flapIndex || 0;
+
+    if (!this.isOnGround && Array.isArray(flapLimits) && flapLimits.length > 1) {
+      if (currentIdx === 0 && flapLimits[1] > 0 && iasKnots > flapLimits[1]) {
+        if (typeof this.playCautionChime === 'function') this.playCautionChime();
+        this.showPopup(`⚠️ 현재 속도(${Math.round(iasKnots)} kt)가 플랩 제한 속도(${flapLimits[1]} kt)보다 빨라 플랩 전개 잠금(FLRS) 상태입니다!`);
+        return;
+      }
+      if (currentIdx > 0) {
+        const nextIdx = (currentIdx + 1) % this.flaps.length;
+        if (nextIdx > 0 && flapLimits[nextIdx] > 0 && iasKnots > flapLimits[nextIdx] - 5) {
+          this.flapIndex = 0;
+        } else {
+          this.flapIndex = nextIdx;
+        }
+      } else {
+        this.flapIndex = (currentIdx + 1) % this.flaps.length;
+      }
+    } else {
+      this.flapIndex = (currentIdx + 1) % this.flaps.length;
+    }
+
+    if (this.flapIndex === 0 && this._flight3dCore?.aero) {
+      this._flight3dCore.aero.resetFlapDamage?.();
+      this._flight3dCore.aero.setFlapPosition?.(0);
+    }
+
     const flapName = this.flaps[this.flapIndex];
     this.playFlapSound();
     this.updateFlapsUI();
@@ -504,6 +532,7 @@
     if (WarningsClass) {
       this._flightWarningsCore = new WarningsClass(config);
     }
+    this._flapOverspeedTimer = 0;
 
     return core;
   },
@@ -813,6 +842,46 @@
     this.buffetVibration = tel.buffetVibration || 0;
     this.currentFlapAngle = tel.flapDegree ?? 0;
     this.isOnGround = Boolean(tel.wow || core.gear.onGround || tel.onWater);
+
+    if (core.aero) {
+      core.aero.leftFlapDamage = Math.min(core.aero.leftFlapDamage || 0, 0.5);
+      core.aero.rightFlapDamage = Math.min(core.aero.rightFlapDamage || 0, 0.5);
+    }
+    if ((this.flapIndex || 0) === 0) {
+      core.aero?.resetFlapDamage?.();
+      if (tel.configurationOverspeed?.flap) {
+        tel.configurationOverspeed.flap = false;
+      }
+      this._flapOverspeedTimer = 0;
+    } else if (!this.isOnGround && (this.flapIndex || 0) > 0) {
+      const retractFlapsViaFlrs = (message) => {
+        this.flapIndex = 0;
+        core.aero?.setFlapPosition?.(0);
+        if (core.aero) core.aero.currentFlapAngle = 0;
+        core.aero?.resetFlapDamage?.();
+        tel.configurationOverspeed.flap = false;
+        this._flapOverspeedTimer = 0;
+        this.currentFlapAngle = 0;
+        this.updateFlapsUI?.();
+        this.showPopup?.(message);
+      };
+
+      if (this.flapIndex === 1 && tel.configurationOverspeed?.flap) {
+        retractFlapsViaFlrs('🪽 [FLRS 자동 수납] 상승 가속에 따라 이륙 플랩(FLAPS 1)이 자동 수납되었습니다.');
+      } else if (this.flapIndex >= 2 && tel.configurationOverspeed?.flap) {
+        const limitKt = this._flight3dConfig?.configurationLimits?.flap?.[this.flapIndex] || 180;
+        this._flapOverspeedTimer = (this._flapOverspeedTimer || 0) + dt;
+        if ((tel.iasKnots || 0) <= limitKt + 8 || this._flapOverspeedTimer < 0.6) {
+          tel.configurationOverspeed.flap = false;
+        } else if (this._flapOverspeedTimer >= 2.2) {
+          retractFlapsViaFlrs('🪽 [FLRS 자동 보호] 플랩 한계 속도 초과로 플랩이 자동 수납되었습니다.');
+        }
+      } else {
+        this._flapOverspeedTimer = 0;
+      }
+    } else {
+      this._flapOverspeedTimer = 0;
+    }
 
     const euler = this._f3dEuler || (this._f3dEuler = new THREE.Euler(0, 0, 0, 'YXZ'));
     euler.setFromQuaternion(result.quaternion, 'YXZ');

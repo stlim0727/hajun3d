@@ -608,4 +608,155 @@ test('Windshear emergency injects 3D downdraft and wind vector in flight environ
   assert.ok(Math.abs(out.x) > 0 || Math.abs(out.z) > 0, 'Microburst must have crosswind / headwind components');
 });
 
+test('FLRS auto-retracts takeoff flaps (FLAPS 1) on high-speed climb without triggering FLAP OVERSPEED', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.isPlaying = true;
+  game.isDestroyed = false;
+  game.currentPlaneType = 'a320';
+  game.groundY = 0;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 1500, 0),
+    rotation: new THREE.Euler(),
+    quaternion: new THREE.Quaternion(),
+  };
+  // ~262 kt TAS at 1500 m => ~243 kt IAS (above A320 Flaps 1 Vfe 230 kt)
+  game.velocity = new THREE.Vector3(0, 0, -135);
+  game.throttle = 0.9;
+  game.n1 = 90;
+  game.flaps = ['UP', '1', '2', 'FULL'];
+  game.flapIndex = 1;
+  game.gearExtended = false;
+  game.isOnGround = false;
+  game.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  game.isOverAirport = () => false;
+
+  const popups = [];
+  let gpwsTriggered = null;
+  let flapsUiCalls = 0;
+  game.showPopup = (msg) => { popups.push(msg); };
+  game.updateFlapsUI = () => { flapsUiCalls++; };
+  game.checkFlightMovementReactions = () => {};
+  game.triggerGPWS = (type, text, subtext) => { gpwsTriggered = { type, text, subtext }; };
+  game.speakGPWS = () => {};
+  game.playGPWSWhoopSiren = () => {};
+  game.playCautionChime = () => {};
+  game.clearGPWS = () => { gpwsTriggered = null; };
+
+  game.initFlight3dPhysics();
+  game.updateFlightPhysics(1 / 60);
+
+  assert.equal(game.flapIndex, 0, 'Takeoff flaps (FLAPS 1) must auto-retract to UP above Vfe');
+  assert.equal(game.currentFlapAngle, 0, 'Flap angle must reset to 0 after FLRS auto-retract');
+  assert.equal(game._flight3dCore.telemetry.configurationOverspeed.flap, false, 'Flap overspeed telemetry must be cleared');
+  assert.equal(gpwsTriggered, null, 'GPWS FLAP OVERSPEED banner must not trigger on FLAPS 1 auto-retract');
+  assert.ok(flapsUiCalls >= 1, 'updateFlapsUI must be called after FLRS auto-retract');
+  assert.ok(popups.some(msg => msg.includes('FLRS 자동 수납')), `Expected FLRS popup, got: ${JSON.stringify(popups)}`);
+});
+
+test('toggleFlaps retracts directly to UP at high speed instead of cycling through Flaps 2/FULL and locks deployment above Vfe', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentPlaneType = 'a320';
+  game.groundY = 0;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 1500, 0),
+    rotation: new THREE.Euler(),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.velocity = new THREE.Vector3(0, 0, -120);
+  game.flaps = ['UP', '1', '2', 'FULL'];
+  game.flapIndex = 1;
+  game.gearExtended = false;
+  game.isOnGround = false;
+
+  const popups = [];
+  let chimeCount = 0;
+  game.playFlapSound = () => {};
+  game.updateFlapsUI = () => {};
+  game.playCautionChime = () => { chimeCount++; };
+  game.showPopup = (msg) => { popups.push(msg); };
+
+  game.initFlight3dPhysics();
+
+  // 1. At 220 kt IAS (> A320 Flaps 2 limit 200 kt - 5), retracting from Flaps 1 goes directly to UP (0)
+  game._flight3dCore.telemetry = { iasKnots: 220 };
+  game.toggleFlaps();
+  assert.equal(game.flapIndex, 0, 'toggleFlaps must retract directly to UP (0) at 220 kt instead of stepping into Flaps 2');
+  assert.ok(popups.at(-1).includes('FLAPS UP'));
+
+  // 2. At 245 kt IAS (> A320 Flaps 1 limit 230 kt), attempting to extend from UP (0) is locked out
+  game._flight3dCore.telemetry = { iasKnots: 245 };
+  game.toggleFlaps();
+  assert.equal(game.flapIndex, 0, 'toggleFlaps must lock out flap extension from UP above Vfe');
+  assert.equal(chimeCount, 1, 'Lockout must play caution chime');
+  assert.ok(popups.at(-1).includes('플랩 전개 잠금(FLRS)'));
+});
+
+test('FLAPS >= 2 overspeed applies 8-kt hysteresis, 0.6s debounce, and 2.2s FLRS auto-retract without jamming', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { AirplaneGame, THREE } = sandbox;
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.isPlaying = true;
+  game.isDestroyed = false;
+  game.currentPlaneType = 'a320';
+  game.groundY = 0;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 1500, 0),
+    rotation: new THREE.Euler(),
+    quaternion: new THREE.Quaternion(),
+  };
+  // ~242 kt TAS at 1500 m => ~225 kt IAS (above A320 Flaps 2 limit 200 + 8 kt)
+  game.velocity = new THREE.Vector3(0, 0, -124.5);
+  game.throttle = 0.85;
+  game.n1 = 85;
+  game.flaps = ['UP', '1', '2', 'FULL'];
+  game.flapIndex = 2;
+  game.gearExtended = false;
+  game.isOnGround = false;
+  game.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  game.isOverAirport = () => false;
+
+  const popups = [];
+  let gpwsTriggered = null;
+  game.showPopup = (msg) => { popups.push(msg); };
+  game.updateFlapsUI = () => {};
+  game.checkFlightMovementReactions = () => {};
+  game.triggerGPWS = (type, text, subtext) => { gpwsTriggered = { type, text, subtext }; };
+  game.speakGPWS = () => {};
+  game.playGPWSWhoopSiren = () => {};
+  game.playCautionChime = () => {};
+  game.clearGPWS = () => { gpwsTriggered = null; };
+
+  game.initFlight3dPhysics();
+
+  // First 0.5s: debounced, no FLAP OVERSPEED yet
+  for (let i = 0; i < 10; i++) {
+    game.updateFlightPhysics(0.05);
+  }
+  assert.equal(game.flapIndex, 2);
+  assert.equal(gpwsTriggered, null, 'Overspeed below 0.6s debounce must not trigger GPWS');
+
+  // At 0.7s: warning appears, flaps still at 2
+  for (let i = 0; i < 4; i++) {
+    game.updateFlightPhysics(0.05);
+  }
+  assert.equal(game.flapIndex, 2);
+  assert.ok(gpwsTriggered && gpwsTriggered.text.includes('FLAP OVERSPEED'), 'Sustained overspeed (0.6s..2.2s) must warn pilot');
+
+  // Past 2.2s: FLRS auto-retracts flaps to UP and clears damage
+  for (let i = 0; i < 35; i++) {
+    game.updateFlightPhysics(0.05);
+  }
+  assert.equal(game.flapIndex, 0, 'Sustained overspeed >= 2.2s must trigger FLRS auto-retract');
+  assert.equal(game._flight3dCore.aero.leftFlapDamage, 0, 'Flap damage must be reset on FLRS auto-retract');
+  assert.ok(popups.some(msg => msg.includes('FLRS 자동 보호')));
+});
+
+
 
