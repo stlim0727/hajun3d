@@ -7,7 +7,7 @@
   'use strict';
 
   Object.assign(AirplaneGame.prototype, {
-  createRunwayAsphaltTexture(repeatY = 190) {
+  createRunwayAsphaltTexture(repeatY = 380) {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -20,16 +20,16 @@
 
     // 세로 방향 포장 레인 명암 (60m 폭 기준 6레인)
     for (let i = 0; i < 6; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.025)' : 'rgba(15, 23, 42, 0.08)';
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.10)';
       ctx.fillRect(i * (512 / 6), 0, 512 / 6, 512);
     }
 
     // 중앙선 주변 타이어 고무 스키드 마크
     const tireGrad = ctx.createLinearGradient(196, 0, 316, 0);
     tireGrad.addColorStop(0.0, 'rgba(10, 15, 25, 0.0)');
-    tireGrad.addColorStop(0.3, 'rgba(10, 15, 25, 0.28)');
-    tireGrad.addColorStop(0.5, 'rgba(10, 15, 25, 0.10)');
-    tireGrad.addColorStop(0.7, 'rgba(10, 15, 25, 0.28)');
+    tireGrad.addColorStop(0.3, 'rgba(10, 15, 25, 0.36)');
+    tireGrad.addColorStop(0.5, 'rgba(10, 15, 25, 0.12)');
+    tireGrad.addColorStop(0.7, 'rgba(10, 15, 25, 0.36)');
     tireGrad.addColorStop(1.0, 'rgba(10, 15, 25, 0.0)');
     ctx.fillStyle = tireGrad;
     ctx.fillRect(196, 0, 120, 512);
@@ -45,16 +45,16 @@
       const y = nextRand() * 512;
       const bright = nextRand() > 0.5;
       const sz = nextRand() > 0.7 ? 3 : 2;
-      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.14)' : 'rgba(10, 15, 28, 0.24)';
+      ctx.fillStyle = bright ? 'rgba(226, 232, 240, 0.20)' : 'rgba(10, 15, 28, 0.34)';
       ctx.fillRect(x, y, sz, sz);
     }
 
-    // 10m / 20m 간격 횡방향 포장 이음새 (광학 흐름 기준선 - 밉맵에서도 선명하게 유지)
-    [0, 256].forEach((seamY, idx) => {
-      ctx.fillStyle = idx === 0 ? 'rgba(10, 15, 28, 0.65)' : 'rgba(10, 15, 28, 0.40)';
-      ctx.fillRect(0, seamY, 512, 8);
-      ctx.fillStyle = idx === 0 ? 'rgba(148, 163, 184, 0.24)' : 'rgba(148, 163, 184, 0.14)';
-      ctx.fillRect(0, seamY + 8, 512, 4);
+    // 2.5m / 5m 간격 횡방향 포장 이음새 (고주파 광학 흐름 기준선 - 밉맵에서도 선명하게 유지)
+    [0, 128, 256, 384].forEach((seamY, idx) => {
+      ctx.fillStyle = idx === 0 ? 'rgba(8, 12, 24, 0.72)' : 'rgba(10, 15, 28, 0.48)';
+      ctx.fillRect(0, seamY, 512, idx === 0 ? 8 : 6);
+      ctx.fillStyle = idx === 0 ? 'rgba(148, 163, 184, 0.28)' : 'rgba(148, 163, 184, 0.16)';
+      ctx.fillRect(0, seamY + (idx === 0 ? 8 : 6), 512, 4);
     });
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -66,38 +66,129 @@
   },
 
   addRunwayVisualDetails(group, xCenter, zCenter, length, whiteMat) {
-    // 1. 활주로 양측 백색 측선 (Side Edge Stripes - 폭 0.9m)
+    const halfLen = length / 2;
+
+    // 0. 고주파 아스팔트 텍스처가 입혀진 46m 활성 활주로 오버레이 및 갓길 (GLB 평면/대형 점선 대체)
+    const overlayTex = this.createRunwayAsphaltTexture(Math.max(100, Math.round(length / 10)));
+    const activeRunwayMat = new THREE.MeshStandardMaterial({
+      color: overlayTex ? 0xffffff : 0x1e293b,
+      map: overlayTex || null,
+      roughness: 0.78,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    const activeRunway = new THREE.Mesh(new THREE.PlaneGeometry(46, length), activeRunwayMat);
+    activeRunway.rotation.x = -Math.PI / 2;
+    activeRunway.position.set(xCenter, 2.148, zCenter);
+    activeRunway.receiveShadow = true;
+    group.add(activeRunway);
+
+    const shoulderMat = new THREE.MeshStandardMaterial({
+      color: 0x161f2e,
+      roughness: 0.88,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
+    const shoulderGeo = new THREE.PlaneGeometry(27, length);
+    [-36.5, 36.5].forEach(xOff => {
+      const shoulder = new THREE.Mesh(shoulderGeo, shoulderMat);
+      shoulder.rotation.x = -Math.PI / 2;
+      shoulder.position.set(xCenter + xOff, 2.144, zCenter);
+      shoulder.receiveShadow = true;
+      group.add(shoulder);
+    });
+
+    // 0-B. 고밀도 활주로 중앙선 점선 (폭 0.75m, 길이 9.0m, 주기 16.0m - 속도감 광학 흐름 극대화)
+    const dashGeo = new THREE.PlaneGeometry(0.75, 9.0);
+    const studGeo = new THREE.PlaneGeometry(0.45, 1.4);
+    const studMat = new THREE.MeshBasicMaterial({
+      color: 0xfef08a,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
+    for (let z = -halfLen + 90; z <= halfLen - 90; z += 16) {
+      const dash = new THREE.Mesh(dashGeo, whiteMat);
+      dash.rotation.x = -Math.PI / 2;
+      dash.position.set(xCenter, 2.165, zCenter + z);
+      group.add(dash);
+
+      if (z + 8 <= halfLen - 90) {
+        const stud = new THREE.Mesh(studGeo, studMat);
+        stud.rotation.x = -Math.PI / 2;
+        stud.position.set(xCenter, 2.166, zCenter + z + 8);
+        group.add(stud);
+      }
+    }
+
+    // 1. 활주로 양측 백색 측선 (Side Edge Stripes - 폭 0.9m) & 측선 유도등 마커 (30m 간격)
     const sideLen = length - 120;
-    [-28.5, 28.5].forEach(xOff => {
-      const edgeStripe = new THREE.Mesh(new THREE.PlaneGeometry(0.9, sideLen), whiteMat);
+    const edgeStripeGeo = new THREE.PlaneGeometry(0.9, sideLen);
+    [-22.0, 22.0].forEach(xOff => {
+      const edgeStripe = new THREE.Mesh(edgeStripeGeo, whiteMat);
       edgeStripe.rotation.x = -Math.PI / 2;
-      edgeStripe.position.set(xCenter + xOff, 2.14, zCenter);
+      edgeStripe.position.set(xCenter + xOff, 2.165, zCenter);
       group.add(edgeStripe);
     });
 
-    // 2. 접지대 마킹 (Touchdown Zone Bars - 양단 시단 안쪽)
-    const halfLen = length / 2;
+    const edgeMarkerGeo = new THREE.BoxGeometry(0.5, 0.45, 0.5);
+    const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc });
+    for (let z = -halfLen + 60; z <= halfLen - 60; z += 30) {
+      [-23.2, 23.2].forEach(xOff => {
+        const marker = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
+        marker.position.set(xCenter + xOff, 2.35, zCenter + z);
+        group.add(marker);
+      });
+    }
+
+    // 1-B. 활주로 시단 피아노 건반 (Threshold Piano Keys) 및 착륙 목표 지점 (Aiming Point)
+    const pianoGeo = new THREE.PlaneGeometry(1.4, 28);
     [-1, 1].forEach(dir => {
-      [250, 400, 650].forEach((distFromEnd, idx) => {
+      const zBase = zCenter + dir * (halfLen - 100);
+      for (let k = -20; k <= 20; k += 2.5) {
+        const bar = new THREE.Mesh(pianoGeo, whiteMat);
+        bar.rotation.x = -Math.PI / 2;
+        bar.position.set(xCenter + k, 2.165, zBase);
+        group.add(bar);
+      }
+    });
+
+    const aimGeo = new THREE.PlaneGeometry(4.5, 45);
+    [-1, 1].forEach(dir => {
+      const zAim = zCenter + dir * (halfLen - 400);
+      [-9.5, 9.5].forEach(xOff => {
+        const aim = new THREE.Mesh(aimGeo, whiteMat);
+        aim.rotation.x = -Math.PI / 2;
+        aim.position.set(xCenter + xOff, 2.165, zAim);
+        group.add(aim);
+      });
+    });
+
+    // 2. 접지대 마킹 (Touchdown Zone Bars - 양단 시단 안쪽 6쌍)
+    const tdzGeo = new THREE.PlaneGeometry(1.4, 22);
+    [-1, 1].forEach(dir => {
+      [180, 300, 450, 600, 750, 900].forEach((distFromEnd, idx) => {
         const zPos = zCenter + dir * (halfLen - distFromEnd);
-        const barCount = 3 - idx;
+        const barCount = Math.max(1, 3 - Math.floor(idx / 2));
         for (let b = 0; b < barCount; b++) {
-          [-16 - b * 2.6, 16 + b * 2.6].forEach(xOff => {
-            const tdz = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 22), whiteMat);
+          [-11 - b * 2.2, 11 + b * 2.2].forEach(xOff => {
+            const tdz = new THREE.Mesh(tdzGeo, whiteMat);
             tdz.rotation.x = -Math.PI / 2;
-            tdz.position.set(xCenter + xOff, 2.14, zPos);
+            tdz.position.set(xCenter + xOff, 2.165, zPos);
             group.add(tdz);
           });
         }
       });
     });
 
-    // 3. 활주로 좌측 잔여 거리 표지판 (Distance-Remaining Signs - 300m 간격)
+    // 3. 활주로 좌측 잔여 거리 표지판 (Distance-Remaining Signs - 200m 간격)
     if (typeof document === 'undefined') return;
     if (!this._distSignMatCache) this._distSignMatCache = {};
     const postMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
-    const signStep = 300;
+    const signStep = 200;
     const totalSteps = Math.floor((length - 400) / signStep);
     for (let i = 1; i <= totalSteps; i++) {
       const zPos = zCenter + halfLen - 200 - i * signStep;
@@ -124,12 +215,12 @@
         new THREE.BoxGeometry(0.45, 1.8, 2.6),
         [frameMat, frameMat, frameMat, frameMat, this._distSignMatCache[remKmLabel], this._distSignMatCache[remKmLabel]]
       );
-      signBoard.position.set(xCenter - 35.0, 3.15, zPos);
+      signBoard.position.set(xCenter - 26.5, 3.15, zPos);
       signBoard.rotation.y = Math.PI / 2;
       group.add(signBoard);
 
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.1, 0.25), postMat);
-      post.position.set(xCenter - 35.0, 2.1, zPos);
+      post.position.set(xCenter - 26.5, 2.1, zPos);
       group.add(post);
     }
   },
@@ -153,7 +244,7 @@
     // 36L 정밀 활주로 (60m x 3800m ICAO 4F 규격 런웨이, Y = 2.10)
     // --------------------------------------------------------------
     const runwayGeo = new THREE.PlaneGeometry(60, 3800);
-    const runwayTex = this.createRunwayAsphaltTexture(190);
+    const runwayTex = this.createRunwayAsphaltTexture(380);
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: runwayTex ? 0xffffff : 0x1e293b,
       map: runwayTex || null,
@@ -184,11 +275,12 @@
       }
     });
 
-    // 활주로 중앙선 (Centerline Stripes - ICAO 규격: 폭 0.9m, 길이 30m, 주기 50m, Y = 2.14)
-    for (let z = -1750; z <= 1750; z += 50) {
-      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 30), whiteMat);
+    // 활주로 중앙선 (Centerline Stripes - 폭 0.75m, 길이 9.0m, 주기 16m, Y = 2.165)
+    const depDashGeo = new THREE.PlaneGeometry(0.75, 9.0);
+    for (let z = -1810; z <= 1810; z += 16) {
+      const stripe = new THREE.Mesh(depDashGeo, whiteMat);
       stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(160, 2.14, z);
+      stripe.position.set(160, 2.165, z);
       this.airportGroup.add(stripe);
     }
 
@@ -819,7 +911,7 @@
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1
     });
-    const incheonRunwayTex = this.createRunwayAsphaltTexture(200);
+    const incheonRunwayTex = this.createRunwayAsphaltTexture(400);
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: incheonRunwayTex ? 0xffffff : 0x1e293b, 
       map: incheonRunwayTex || null,
@@ -875,11 +967,12 @@
         }
       });
 
-      // 중앙선 (ICAO 규격: 폭 0.9m, 길이 30m, 주기 50m)
-      for (let z = -1850; z <= 1850; z += 50) {
-        const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 30), whiteLineMat);
+      // 중앙선 (폭 0.75m, 길이 9.0m, 주기 16m, Y = 2.165)
+      const incDashGeo = new THREE.PlaneGeometry(0.75, 9.0);
+      for (let z = -1910; z <= 1910; z += 16) {
+        const stripe = new THREE.Mesh(incDashGeo, whiteLineMat);
         stripe.rotation.x = -Math.PI / 2;
-        stripe.position.set(rX, 2.14, incheonZ + z);
+        stripe.position.set(rX, 2.165, incheonZ + z);
         this.incheonAirportGroup.add(stripe);
       }
 

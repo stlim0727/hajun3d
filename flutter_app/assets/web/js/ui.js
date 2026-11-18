@@ -288,11 +288,11 @@
     this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
     this.planeGroup.visible = true;
 
-    // 즉시 출력을 85%로 올려 가속 및 플랩 1(이륙 플랩) 설정
-    this.throttle = 0.85;
-    this.n1 = 85.0;
-    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.85);
-    this.targetN1 = 85.0;
+    // 즉시 TOGA 100% 이륙 출력으로 올려 최대 가속 및 플랩 1(이륙 플랩) 설정
+    this.throttle = 1.0;
+    this.n1 = 92.0;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(1.0);
+    this.targetN1 = 100.0;
     this.flapIndex = 1; // 이륙 기본 플랩 1 (Takeoff Flaps 1)
     this.spoilerExtended = false;
     this.reverseThrustActive = false;

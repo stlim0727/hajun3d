@@ -246,14 +246,14 @@
     // 호환성 참조 유지
     this.jetNoiseSrc = this.engineNoise;
 
-    // 2. 터빈 회전 코어 중저음 (Triangle 파형 54Hz ~ 102Hz)
+    // 2. 터빈 회전 코어 중저음 (Triangle 파형 58Hz ~ 120Hz)
     this.jetRumble = this.audioCtx.createOscillator();
     this.jetRumble.type = 'triangle';
     this.jetRumble.frequency.setValueAtTime(56, this.audioCtx.currentTime);
 
     const rumbleFilter = this.audioCtx.createBiquadFilter();
     rumbleFilter.type = 'lowpass';
-    rumbleFilter.frequency.setValueAtTime(160, this.audioCtx.currentTime);
+    rumbleFilter.frequency.setValueAtTime(260, this.audioCtx.currentTime);
 
     this.rumbleGainNode = this.audioCtx.createGain();
     this.rumbleGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
@@ -286,6 +286,42 @@
     this.turbineWhine2.connect(this.turbineGainNode2);
     this.turbineGainNode2.connect(this.masterGain);
     this.turbineWhine2.start();
+
+    // 5. 고속 배기 제트 블라스트 (Broadband High-Velocity Exhaust Blast: 680Hz ~ 2430Hz)
+    this.jetBlastSrc = this.audioCtx.createBufferSource();
+    this.jetBlastSrc.buffer = this.engineNoiseBuffer;
+    this.jetBlastSrc.loop = true;
+
+    this.jetBlastFilter = this.audioCtx.createBiquadFilter();
+    this.jetBlastFilter.type = 'bandpass';
+    this.jetBlastFilter.frequency.setValueAtTime(750, this.audioCtx.currentTime);
+    this.jetBlastFilter.Q.setValueAtTime(0.65, this.audioCtx.currentTime);
+
+    this.jetBlastGain = this.audioCtx.createGain();
+    this.jetBlastGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+
+    this.jetBlastSrc.connect(this.jetBlastFilter);
+    this.jetBlastFilter.connect(this.jetBlastGain);
+    this.jetBlastGain.connect(this.masterGain);
+    this.jetBlastSrc.start();
+
+    // 6. 고출력 이륙 팬 팁 초음속 버즈쏘(Buzzsaw) 하모닉 레이어
+    this.jetBuzzsaw = this.audioCtx.createOscillator();
+    this.jetBuzzsaw.type = 'sawtooth';
+    this.jetBuzzsaw.frequency.setValueAtTime(120, this.audioCtx.currentTime);
+
+    this.buzzsawFilter = this.audioCtx.createBiquadFilter();
+    this.buzzsawFilter.type = 'bandpass';
+    this.buzzsawFilter.frequency.setValueAtTime(520, this.audioCtx.currentTime);
+    this.buzzsawFilter.Q.setValueAtTime(1.35, this.audioCtx.currentTime);
+
+    this.buzzsawGain = this.audioCtx.createGain();
+    this.buzzsawGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+
+    this.jetBuzzsaw.connect(this.buzzsawFilter);
+    this.buzzsawFilter.connect(this.buzzsawGain);
+    this.buzzsawGain.connect(this.masterGain);
+    this.jetBuzzsaw.start();
   },
 
   // ----------------------------------------------------------------
@@ -389,11 +425,17 @@
   initGroundSynth() {
     if (!this.audioCtx) return;
 
-    const bufferSize = Math.floor(this.audioCtx.sampleRate * 2.0);
-    const rumbleBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
-    const rData = rumbleBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      rData[i] = (Math.random() * 2 - 1) * 0.6;
+    let rumbleBuffer = this.engineNoiseBuffer;
+    if (!rumbleBuffer) {
+      const bufferSize = Math.floor(this.audioCtx.sampleRate * 2.0);
+      rumbleBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+      const rData = rumbleBuffer.getChannelData(0);
+      let lastOut = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        lastOut = (lastOut + 0.04 * white) / 1.04;
+        rData[i] = Math.max(-0.9, Math.min(0.9, lastOut * 3.5));
+      }
     }
 
     this.groundRumbleSrc = this.audioCtx.createBufferSource();
@@ -402,7 +444,7 @@
 
     this.groundRumbleFilter = this.audioCtx.createBiquadFilter();
     this.groundRumbleFilter.type = 'lowpass';
-    this.groundRumbleFilter.frequency.setValueAtTime(220, this.audioCtx.currentTime);
+    this.groundRumbleFilter.frequency.setValueAtTime(240, this.audioCtx.currentTime);
     this.groundRumbleFilter.Q.setValueAtTime(1.5, this.audioCtx.currentTime);
 
     this.groundRumbleGain = this.audioCtx.createGain();
@@ -444,7 +486,8 @@
       const currentKmh = (this.speed || 0) * 280;
       const iasKnots = currentKmh / 1.852;
       const spoilerTurbulence = this.spoilerExtended ? 0.14 : 0.0;
-      const baseWind = Math.min(0.68, Math.pow(iasKnots / 300.0, 1.5) * 0.58);
+      const takeoffWindBoost = iasKnots > 35 ? Math.min(0.30, ((iasKnots - 35) / 135.0) * 0.28) : 0.0;
+      const baseWind = Math.min(0.76, Math.pow(iasKnots / 300.0, 1.5) * 0.58 + takeoffWindBoost);
       const targetWindVol = (this.soundEnabled && !this.isDestroyed && this.jetSoundActive)
         ? Math.min(0.85, baseWind + spoilerTurbulence)
         : 0.0;
@@ -457,9 +500,9 @@
     if (this.groundRumbleFilter && this.groundRumbleGain) {
       const groundSpeedKmh = this.groundSpeed ? Math.abs(this.groundSpeed * 3.6) : ((this.speed || 0) * 280);
       if (this.isOnGround && groundSpeedKmh > 3 && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
-        const rumbleRatio = Math.min(1.0, groundSpeedKmh / 180.0);
-        const targetRumbleVol = Math.min(0.55, rumbleRatio * 0.50);
-        const targetRumbleCutoff = 180 + rumbleRatio * 140;
+        const rumbleRatio = Math.min(1.0, groundSpeedKmh / 220.0);
+        const targetRumbleVol = Math.min(0.85, 0.12 + Math.pow(rumbleRatio, 0.85) * 0.68);
+        const targetRumbleCutoff = 190 + rumbleRatio * 280;
         this.groundRumbleFilter.frequency.setTargetAtTime(targetRumbleCutoff, now, 0.08);
         this.groundRumbleGain.gain.setTargetAtTime(targetRumbleVol, now, 0.08);
       } else if (!this.isOnGround && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
@@ -491,19 +534,19 @@
     const n1 = Math.max(20, Math.min(100, this.n1 || 20));
     const n1Ratio = Math.max(0.0, Math.min(1.0, (n1 - 20) / 80.0)); // 0.0 ~ 1.0
 
-    // 1. 제트 연소 핑크 노이즈 굉음 (280Hz ~ 1030Hz, 게인 0.35 ~ 1.15)
+    // 1. 제트 연소 핑크 노이즈 굉음 (300Hz ~ 1650Hz, 게인 0.42 ~ 1.62)
     if (this.jetNoiseFilter && this.jetNoiseGain) {
-      const engineCutoff = 280 + n1Ratio * 750;
+      const engineCutoff = 300 + n1Ratio * 1350;
       const reverseBoost = this.reverseThrustActive ? 0.25 : 0.0;
-      const engineVol = 0.35 + Math.pow(n1Ratio, 1.3) * 0.75 + reverseBoost;
+      const engineVol = 0.42 + Math.pow(n1Ratio, 1.15) * 0.95 + reverseBoost;
       this.jetNoiseFilter.frequency.setTargetAtTime(engineCutoff, now, 0.08);
       this.jetNoiseGain.gain.setTargetAtTime(engineVol, now, 0.08);
     }
 
-    // 2. 터빈 회전 코어 중저음 (54Hz ~ 102Hz)
+    // 2. 터빈 회전 코어 중저음 (58Hz ~ 120Hz)
     if (this.jetRumble && this.rumbleGainNode) {
-      const rumbleFreq = 54 + n1Ratio * 48;
-      const rumbleVol = 0.10 + n1Ratio * 0.12;
+      const rumbleFreq = 58 + n1Ratio * 62;
+      const rumbleVol = 0.18 + n1Ratio * 0.34;
       this.jetRumble.frequency.setTargetAtTime(rumbleFreq, now, 0.08);
       this.rumbleGainNode.gain.setTargetAtTime(rumbleVol, now, 0.08);
     }
@@ -511,7 +554,7 @@
     // 3. Primary N1 저압 팬 스풀업 휘파람 (420Hz ~ 1800Hz)
     if (this.turbineWhine && this.turbineGainNode) {
       const turbineFreq = 420 + Math.pow(n1Ratio, 1.2) * 1380;
-      const turbineVol = 0.08 + n1Ratio * 0.22;
+      const turbineVol = 0.12 + n1Ratio * 0.30;
       this.turbineWhine.frequency.setTargetAtTime(turbineFreq, now, 0.08);
       this.turbineGainNode.gain.setTargetAtTime(turbineVol, now, 0.08);
     }
@@ -519,9 +562,27 @@
     // 4. Secondary N2 고압 코어 트윈 스풀 휘파람 & 고조파 (840Hz ~ 3200Hz)
     if (this.turbineWhine2 && this.turbineGainNode2) {
       const turbineFreq2 = 840 + Math.pow(n1Ratio, 1.1) * 2360;
-      const turbineVol2 = 0.04 + n1Ratio * 0.12;
+      const turbineVol2 = 0.06 + n1Ratio * 0.20;
       this.turbineWhine2.frequency.setTargetAtTime(turbineFreq2, now, 0.08);
       this.turbineGainNode2.gain.setTargetAtTime(turbineVol2, now, 0.08);
+    }
+
+    // 5. 고속 배기 제트 블라스트 (680Hz ~ 2430Hz)
+    if (this.jetBlastFilter && this.jetBlastGain) {
+      const blastFreq = 680 + n1Ratio * 1750;
+      const blastVol = 0.16 + Math.pow(n1Ratio, 1.1) * 0.68 + (this.reverseThrustActive ? 0.30 : 0.0);
+      this.jetBlastFilter.frequency.setTargetAtTime(blastFreq, now, 0.08);
+      this.jetBlastGain.gain.setTargetAtTime(blastVol, now, 0.08);
+    }
+
+    // 6. 고출력 이륙 팬 팁 초음속 버즈쏘(Buzzsaw) 하모닉 (N1 > ~44% 에서 급증)
+    if (this.jetBuzzsaw && this.buzzsawFilter && this.buzzsawGain) {
+      const buzzFreq = 118 + n1Ratio * 124;
+      const buzzCutoff = 480 + n1Ratio * 1250;
+      const buzzVol = Math.pow(Math.max(0, (n1Ratio - 0.30) / 0.70), 1.25) * 0.38;
+      this.jetBuzzsaw.frequency.setTargetAtTime(buzzFreq, now, 0.08);
+      this.buzzsawFilter.frequency.setTargetAtTime(buzzCutoff, now, 0.08);
+      this.buzzsawGain.gain.setTargetAtTime(buzzVol, now, 0.08);
     }
   },
 
@@ -580,6 +641,8 @@
     if (this.rumbleGainNode) this.rumbleGainNode.gain.setTargetAtTime(0.0, t, 0.06);
     if (this.turbineGainNode) this.turbineGainNode.gain.setTargetAtTime(0.0, t, 0.06);
     if (this.turbineGainNode2) this.turbineGainNode2.gain.setTargetAtTime(0.0, t, 0.06);
+    if (this.jetBlastGain) this.jetBlastGain.gain.setTargetAtTime(0.0, t, 0.06);
+    if (this.buzzsawGain) this.buzzsawGain.gain.setTargetAtTime(0.0, t, 0.06);
   },
 
   silencePistonEngines(now) {

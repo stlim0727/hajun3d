@@ -409,8 +409,8 @@
       ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
       : DEFAULT_SPEED_EFFECT_INTENSITY;
 
-    // 시속 240 km/h 이상부터 스트림 라인 점진 등장, 800 km/h에서 최고조
-    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 220) / 580)); // 0.0 ~ 1.0
+    // 시속 135 km/h 이상부터 스트림 라인 점진 등장 (이륙 활주 체감 강화), 800 km/h에서 최고조
+    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 135) / 665)); // 0.0 ~ 1.0
 
     const rawTargetOpacity = speedRatio > 0.04 ? (0.06 + speedRatio * 0.62) : 0.0;
     const targetOpacity = rawTargetOpacity * intensity;
@@ -424,7 +424,7 @@
     if (this.speedLinesGroup.visible && this.speedLineMaterial.opacity > 0.01) {
       const posAttr = this.speedLinesGroup.geometry.attributes.position;
       const posArr = posAttr.array;
-      const moveSpeed = (28.0 + speedRatio * 110.0) * dt * 60;
+      const moveSpeed = (42.0 + speedRatio * 145.0) * dt * 60;
 
       for (let i = 0; i < this.speedLineData.length; i++) {
         const item = this.speedLineData[i];

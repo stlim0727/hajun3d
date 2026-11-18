@@ -913,7 +913,9 @@
     }
     cs.wasOnGround = Boolean(this.isOnGround);
 
-    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 120) / 720));
+    const takeoffRatio = Math.min(1.0, Math.max(0, (currentKmh - 45) / 270));
+    const highSpeedRatio = Math.min(1.0, Math.max(0, (currentKmh - 315) / 525));
+    const speedRatio = takeoffRatio * 0.62 + highSpeedRatio * 0.38;
     let targetFov = 60 + speedRatio * 18;
     if (this.cameraMode === '1st' || this.cameraMode === 'hud') {
       targetFov = 64 + speedRatio * 20;
@@ -1135,9 +1137,14 @@
 
       case '3rd':
       default: {
-        // 3인칭 후방 추격 시점 (360° Orbit + Speed Lag + Ground Clamp)
-        const camDistZ = (isAncestor ? 18.0 : 42.0) + speedRatio * 7.5;
-        const camHeight = (isAncestor ? 4.5 : 9.5) + speedRatio * 1.5;
+        // 3인칭 후방 추격 시점 (360° Orbit + 이륙 활주 저고도 원근감 + Speed Lag + Ground Clamp)
+        const onGroundFactor = this.isOnGround
+          ? 1.0
+          : Math.max(0.0, 1.0 - Math.max(0, planePos.y - (this.groundY || 6.84)) / 18.0);
+        const baseCamDist = isAncestor ? 18.0 : (42.0 - onGroundFactor * 7.5);
+        const baseCamHeight = isAncestor ? 4.5 : (9.5 - onGroundFactor * 2.8);
+        const camDistZ = baseCamDist + speedRatio * 9.5;
+        const camHeight = baseCamHeight + speedRatio * 1.8;
         const clampedPitch = THREE.MathUtils.clamp(cs.chasePitch, -1.1, 1.0);
 
         const behindLocal = new THREE.Vector3(0, camHeight, camDistZ);
@@ -1163,6 +1170,17 @@
         this.camera.lookAt(lookTarget);
         break;
       }
+    }
+
+    // 활주로 이착륙 활주 노면 진동 & 포장 이음새 통과 충격 (Ground-Roll Pavement Vibration)
+    if (this.isOnGround && currentKmh > 25 && (this.cameraMode === '3rd' || this.cameraMode === '1st' || this.cameraMode === 'wing' || this.cameraMode === 'gear')) {
+      const rollFactor = Math.min(1.0, (currentKmh - 25) / 260);
+      const seamPulse = Math.pow(Math.abs(Math.sin((planePos.z || 0) * (Math.PI / 10.0))), 6);
+      const amp = this.cameraMode === '1st' ? 0.045 : (this.cameraMode === 'gear' ? 0.065 : 0.032);
+      const seamAmp = this.cameraMode === '1st' ? 0.032 : (this.cameraMode === 'gear' ? 0.048 : 0.024);
+      this.camera.position.x += (Math.random() - 0.5) * rollFactor * amp;
+      this.camera.position.y += (Math.random() - 0.5) * rollFactor * amp + seamPulse * rollFactor * seamAmp;
+      this.camera.position.y = Math.max(2.6, this.camera.position.y);
     }
 
     if (currentKmh > 580 && (this.cameraMode === '3rd' || this.cameraMode === '1st' || this.cameraMode === 'wing' || this.cameraMode === 'gear')) {

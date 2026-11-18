@@ -225,6 +225,8 @@ test('audio subsystem: jet engine synthesizes pink noise roar + N1/N2 twin spool
   assert.ok(game.turbineWhine2, 'N2 high-pressure core twin spool oscillator must exist');
   assert.equal(game.turbineWhine2.type, 'triangle', 'N2 twin spool whine must be triangle');
   assert.ok(game.jetRumble, 'Core low rumble oscillator must exist');
+  assert.ok(game.jetBlastGain, 'Broadband exhaust blast gain node must exist');
+  assert.ok(game.buzzsawGain, 'Takeoff fan-tip buzzsaw gain node must exist');
 
   // Test Idle (N1 = 20%)
   game.n1 = 20;
@@ -233,6 +235,7 @@ test('audio subsystem: jet engine synthesizes pink noise roar + N1/N2 twin spool
   assert.ok(game.jetNoiseGain.gain.value >= 0.35, 'Idle combustion volume should be >= 0.35');
   assert.ok(game.turbineWhine.frequency.value >= 420, 'N1 idle whine should be >= 420 Hz');
   assert.ok(game.turbineWhine2.frequency.value >= 840, 'N2 idle whine should be >= 840 Hz');
+  assert.equal(game.buzzsawGain.gain.value, 0.0, 'Buzzsaw harmonic should remain silent at idle');
 
   // Test TOGA Takeoff (N1 = 100%)
   game.n1 = 100;
@@ -241,6 +244,14 @@ test('audio subsystem: jet engine synthesizes pink noise roar + N1/N2 twin spool
   assert.ok(game.jetNoiseGain.gain.value >= 1.0, 'TOGA combustion volume should be >= 1.0');
   assert.ok(game.turbineWhine.frequency.value > 1600, 'N1 TOGA whine should rise above 1600 Hz');
   assert.ok(game.turbineWhine2.frequency.value > 3000, 'N2 TOGA whine should rise above 3000 Hz');
+  assert.ok(game.jetBlastGain.gain.value > 0.7, 'TOGA exhaust blast gain should be > 0.7');
+  assert.ok(game.buzzsawGain.gain.value > 0.25, 'TOGA fan-tip buzzsaw gain should be > 0.25');
+
+  // Engine shutdown silences blast and buzzsaw layers
+  game.isEngineOff = true;
+  game.updateAudio(0.016);
+  assert.equal(game.jetBlastGain.gain.value, 0.0, 'Exhaust blast must silence when engine off');
+  assert.equal(game.buzzsawGain.gain.value, 0.0, 'Buzzsaw must silence when engine off');
 });
 
 test('audio subsystem: aerodynamic wind slipstream modulates with airspeed and spoilers', () => {
