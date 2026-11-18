@@ -299,6 +299,7 @@
       a320: 'A320',
       b747: 'B747',
       dc10: 'DC10',
+      dc10_decimated: 'DC10',
       dc10_lowpoly: 'DC10',
       dc10_faceted: 'DC10',
       a380: 'B747',

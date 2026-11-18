@@ -12,6 +12,7 @@
     { id: 'a320', name: 'Airbus A320', category: 'aircraft', icon: '✈️', desc: '쌍발 협동체 제트 여객기 (기본 기체)', file: 'a320.glb' },
     { id: 'b747', name: 'Boeing 747-400', category: 'aircraft', icon: '🛫', desc: '4발 점보 광동체 여객기', file: 'b747.glb' },
     { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기 (고품질 원본)', file: 'dc10.glb' },
+    { id: 'dc10_decimated', name: 'DC-10 실물 기반 로우폴리 (Decimated)', category: 'aircraft', icon: '🛩️', desc: '고품질 DC-10 원본 GLB를 입력으로 받아 97% 폴리곤 축소한 실물 비례 로우폴리', file: 'dc10_decimated.glb' },
     { id: 'a380_lowpoly', name: 'Airbus A380 슈퍼점보 (Low-Poly)', category: 'aircraft', icon: '✈️', desc: '더블데크 2층 동체와 4발 엔진의 스타일라이즈드 에어버스 초대형기 (Faceted Low-Poly)', file: 'a380_lowpoly.glb' },
     { id: 'dc10_lowpoly', name: 'McDonnell Douglas DC-10 (Chunky Low-Poly)', category: 'aircraft', icon: '🛩️', desc: '10각 단면과 각진 3발 엔진의 경량 레트로 로우폴리 모델', file: 'dc10_lowpoly.glb' },
     { id: 'dc10_faceted', name: 'McDonnell Douglas DC-10 (Faceted Gem)', category: 'aircraft', icon: '💎', desc: '고품질 형상을 다면체 플랫 셰이딩으로 최적화한 하이브리드 모델', file: 'dc10_faceted.glb' },
@@ -103,22 +104,27 @@
     }
 
     unpackBundle() {
-      if (typeof window !== 'undefined' && window.GLB_BUNDLE) {
-        for (const key of Object.keys(window.GLB_BUNDLE)) {
-          try {
-            const b64 = window.GLB_BUNDLE[key];
-            const binStr = atob(b64);
-            const len = binStr.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              bytes[i] = binStr.charCodeAt(i);
-            }
-            this.glbBuffers[key] = bytes.buffer;
-          } catch (err) {
-            console.warn('Failed to unpack GLB bundle key:', key, err);
+      // Lazy unpack on-demand to prevent main-thread freeze with multi-megabyte GLB bundles
+    }
+
+    getGLBBuffer(key) {
+      if (this.glbBuffers[key]) return this.glbBuffers[key];
+      if (typeof window !== 'undefined' && window.GLB_BUNDLE && window.GLB_BUNDLE[key]) {
+        try {
+          const b64 = window.GLB_BUNDLE[key];
+          const binStr = atob(b64);
+          const len = binStr.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binStr.charCodeAt(i);
           }
+          this.glbBuffers[key] = bytes.buffer;
+          return this.glbBuffers[key];
+        } catch (err) {
+          console.warn('Failed to unpack GLB bundle key:', key, err);
         }
       }
+      return null;
     }
 
     setupThree() {
@@ -414,7 +420,7 @@
       }
 
       filtered.forEach((item) => {
-        const isBundled = Boolean(this.glbBuffers[item.id]);
+        const isBundled = Boolean((typeof window !== 'undefined' && window.GLB_BUNDLE && window.GLB_BUNDLE[item.id]) || this.glbBuffers[item.id]);
         const card = document.createElement('button');
         card.type = 'button';
         card.className = 'viewer-model-card' + (this.activeModelId === item.id ? ' active' : '');
@@ -529,9 +535,10 @@
       this.showLoading(true);
 
       // 1. Offline memory bundle (0ms latency, works on file://)
-      if (this.glbBuffers[id]) {
+      const bundledBuf = this.getGLBBuffer(id);
+      if (bundledBuf) {
         try {
-          this.loader.parse(this.glbBuffers[id].slice(0), '', (gltf) => {
+          this.loader.parse(bundledBuf.slice(0), '', (gltf) => {
             this.mountGLTF(gltf, meta, '내장 GLB 번들');
           }, (err) => {
             this.showLoading(false);

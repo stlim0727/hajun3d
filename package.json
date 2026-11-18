@@ -15,7 +15,8 @@
     "screens:capture:all": "node scripts/capture-all-ui-screens.mjs --all-viewports",
     "screens:capture:portrait": "node scripts/capture-all-ui-screens.mjs --viewport mobile-portrait",
     "screens:capture:landscape": "node scripts/capture-all-ui-screens.mjs --viewport mobile-landscape",
-    "test:ui-screens": "node scripts/capture-all-ui-screens.mjs --tier core --verify"
+    "test:ui-screens": "node scripts/capture-all-ui-screens.mjs --tier core --verify",
+    "glb:simplify": "node scripts/simplify_glb.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
