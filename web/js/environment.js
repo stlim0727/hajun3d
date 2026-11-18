@@ -19,17 +19,17 @@
     this.sunLightOffset = new THREE.Vector3(500, 900, 400);
     this.sunLight.position.copy(this.sunLightOffset);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 1024;
-    this.sunLight.shadow.mapSize.height = 1024;
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
     this.sunLight.shadow.camera.near = 10;
     this.sunLight.shadow.camera.far = 3200;
-    const d = 420;
+    const d = 110;
     this.sunLight.shadow.camera.left = -d;
     this.sunLight.shadow.camera.right = d;
     this.sunLight.shadow.camera.top = d;
     this.sunLight.shadow.camera.bottom = -d;
-    this.sunLight.shadow.bias = -0.0005;
-    this.sunLight.shadow.normalBias = 0.04;
+    this.sunLight.shadow.bias = -0.0001;
+    this.sunLight.shadow.normalBias = 0.02;
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
 
@@ -41,8 +41,8 @@
 
   updateSunShadowTarget() {
     if (!this.sunLight || !this.planeGroup) return;
-    const frustumSize = 840;
-    const texelSize = frustumSize / 1024;
+    const frustumSize = 220;
+    const texelSize = frustumSize / 2048;
     const px = Math.round(this.planeGroup.position.x / texelSize) * texelSize;
     const pz = Math.round(this.planeGroup.position.z / texelSize) * texelSize;
     this.sunLight.target.position.set(px, 0, pz);

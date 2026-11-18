@@ -306,16 +306,16 @@
     this._surfaceClearance = clearance;
     this._isOverWaterSurface = isWater;
 
-    // 1. 근접 투영 그림자 업데이트 (고도 180m 이하에서 선명해짐)
+    // 1. 근접 투영 그림자 업데이트 (수면 초저고도에서는 부드러운 수면 투영 그림자 유지, 활주로/육상에서는 정밀 2048 섀도우 맵의 선명한 실루엣을 위해 원형 블러 메쉬 숨김)
     if (this.proximityShadowMesh) {
-      if (clearance < 180) {
+      if (isWater && clearance < 180) {
         const prox = 1.0 - clearance / 180;
         const span = this.currentPlaneType === 'dc10' ? 48 : (this.currentPlaneType === 'a380' ? 68 : 34);
         const spread = span * (0.85 + (clearance / 180) * 1.45);
         this.proximityShadowMesh.visible = true;
         this.proximityShadowMesh.position.set(pos.x, surfaceY + 0.08, pos.z);
         this.proximityShadowMesh.scale.set(spread, spread * 1.15, 1);
-        this.proximityShadowMesh.material.opacity = (isWater ? 0.38 : 0.48) * Math.pow(prox, 1.35);
+        this.proximityShadowMesh.material.opacity = 0.38 * Math.pow(prox, 1.35);
       } else {
         this.proximityShadowMesh.visible = false;
       }
