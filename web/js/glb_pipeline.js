@@ -32,6 +32,7 @@
       this.fans = [];
       this.landingGears = [];
       this.gearNodes = [];
+      this.builtInGear = [];
       this.gearMaterials = [];
       this.mixer = null;
       this.gearAction = null;
@@ -47,36 +48,27 @@
     }
 
     static get AIRCRAFT_DEFS() {
-      // Trailing-edge hinges in normalized aircraft coordinates (meters).
-      const a320Wing = {
-        wingParams: [2.6, 8.5, 16.4, 6.55],
-        wingProfile: [0.27, 0.31, -1.85, 0.9]
+      // The three A320 GLBs share one airframe and material layout.
+      const a320 = {
+        rudderParams: [21.7, 24.6, 1.42, 0.30],
+        elevParams:   [21.5, 24.5, 0.62, 0.40],
+        wingParams:   [2.6, 13.05, 16.1, 7.55],
+        wingProfile:  [0.255, 0.22, -1.85, 0.9],
+        sweptTailHinges: true,
+        surfaceMaterials: {
+          rudder: /^Material\.033$/,
+          elevator: /^Material\.033$/,
+          wing: /^Material\.(016|019|051|052)$/
+        },
+        hasBuiltInGear: true,
+        gearMaterialRegex: /^Material\.(034|036|037|040|042|044|045|049|050|056)$/,
+        sharedGearMaterials: /^(Material\.016|material_0)$/,
+        fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
       };
       return {
-        a320: {
-          rudderParams: [16.2, 25.0, 2.0, 1.35],
-          elevParams:   [15.2, 25.0, 1.2, 2.10],
-          ...a320Wing,
-          hasBuiltInGear: true,
-          gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
-          fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
-        },
-        a320_simplified: {
-          rudderParams: [16.2, 25.0, 2.0, 1.35],
-          elevParams:   [15.2, 25.0, 1.2, 2.10],
-          ...a320Wing,
-          hasBuiltInGear: true,
-          gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
-          fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
-        },
-        a320_detailed: {
-          rudderParams: [16.2, 25.0, 2.0, 1.35],
-          elevParams:   [15.2, 25.0, 1.2, 2.10],
-          ...a320Wing,
-          hasBuiltInGear: true,
-          gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
-          fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
-        },
+        a320,
+        a320_simplified: a320,
+        a320_detailed: a320,
         a350: {
           rudderParams: [22.0, 33.5, 5.0, 1.29],
           elevParams:   [26.5, 33.5, 1.8, 0.65],
@@ -95,7 +87,7 @@
           elevParams:   [20.0, 26.0, 2.0, 0.43],
           wingParams:   [2.7, 12.7, 25.4, 7.1],
           wingProfile:  [0.34, 0.46, -3.5, 0.0],
-          surfaceMaterials: { rudder: 'Body_Purple', elevator: 'Metal_Rear_Wings', wing: 'Metal_Wings' },
+          surfaceMaterials: { rudder: /^Body_Purple$/, elevator: /^Metal_Rear_Wings$/, wing: /^Metal_Wings$/ },
           hasBuiltInGear: true,
           hasRiggedAnimation: true
         },
@@ -326,21 +318,7 @@
         }
       });
 
-      // 2. 내장 랜딩기어 서브메시 및 머티리얼 탐지 (A320 등)
-      if (def && def.gearMaterialRegex) {
-        this.scene.traverse((node) => {
-          if (node.isMesh && node.material) {
-            const mats = Array.isArray(node.material) ? node.material : [node.material];
-            mats.forEach((m) => {
-              if (def.gearMaterialRegex.test(m.name || '')) {
-                this.gearMaterials.push(m);
-                this.gearNodes.push(node);
-                this.hasMovingParts = true;
-              }
-            });
-          }
-        });
-      }
+      if (def?.gearMaterialRegex) this.setupBuiltInGear(def);
 
       // 3. 엔진 터보팬 블레이드 장착 (A320, A350)
       if (def && def.fans && Array.isArray(def.fans)) {
@@ -389,6 +367,68 @@
       }
     }
 
+    setupBuiltInGear(def) {
+      this.planeGroup.updateMatrixWorld(true);
+      const planeInverse = this.planeGroup.matrixWorld.clone().invert();
+      const point = new THREE.Vector3();
+      this.scene.traverse(node => {
+        if (!node.isMesh || !node.material || Array.isArray(node.material) || node.userData.builtInGear) return;
+        const name = node.material.name;
+        let gear = node;
+        let restoreGeometry;
+        if (def.sharedGearMaterials.test(name)) {
+          const geometry = node.geometry;
+          const index = geometry.index;
+          if (!index) return;
+          const position = geometry.attributes.position;
+          const meshToPlane = new THREE.Matrix4().multiplyMatrices(planeInverse, node.matrixWorld);
+          const gearVertices = new Uint8Array(position.count);
+          for (let i = 0; i < position.count; i++) {
+            point.fromBufferAttribute(position, i).applyMatrix4(meshToPlane);
+            const x = Math.abs(point.x);
+            const nose = x < 0.65 && point.z > -8.1 && point.z < -6.7;
+            const main = x > 2.25 && x < 4.7 && point.z > 4.1 && point.z < 6.2;
+            gearVertices[i] = point.y < -1.0 && (nose || main);
+          }
+          const gearIndices = [];
+          const fixedIndices = [];
+          for (let i = 0; i < index.count; i += 3) {
+            const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+            const indices = gearVertices[a] && gearVertices[b] && gearVertices[c] ? gearIndices : fixedIndices;
+            indices.push(a, b, c);
+          }
+          if (!gearIndices.length) return;
+
+          // Keep the shared wing and engine triangles on the original mesh.
+          const gearGeometry = new THREE.BufferGeometry();
+          for (const [attribute, buffer] of Object.entries(geometry.attributes)) {
+            gearGeometry.setAttribute(attribute, buffer);
+          }
+          gearGeometry.setIndex(gearIndices);
+          geometry.setIndex(fixedIndices);
+          gear = new THREE.Mesh(gearGeometry, node.material.clone());
+          gear.userData.builtInGear = true;
+          gear.castShadow = node.castShadow;
+          gear.receiveShadow = node.receiveShadow;
+          node.add(gear);
+          restoreGeometry = () => {
+            geometry.setIndex(index);
+            node.remove(gear);
+            gearGeometry.dispose();
+            gear.material.dispose();
+          };
+        } else if (!def.gearMaterialRegex.test(name)) {
+          return;
+        }
+
+        const planeToParent = gear.parent.matrixWorld.clone().invert().multiply(this.planeGroup.matrixWorld);
+        const retractOffset = new THREE.Vector3().setFromMatrixColumn(planeToParent, 1).multiplyScalar(2.4);
+        this.builtInGear.push({ node: gear, deployed: gear.position.clone(), retractOffset, restoreGeometry });
+        this.gearNodes.push(gear);
+        this.hasMovingParts = true;
+      });
+    }
+
     setupShaders(def) {
       if (this.planeGroup) {
         this.planeGroup.updateMatrixWorld(true);
@@ -409,7 +449,8 @@
         uRudderParams: { value: new THREE.Vector4(...def.rudderParams) },
         uElevParams:   { value: new THREE.Vector4(...def.elevParams) },
         uWingParams:   { value: new THREE.Vector4(...def.wingParams) },
-        uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) }
+        uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) },
+        uSweptTailHinges: { value: !!def.sweptTailHinges }
       };
 
       const meshToPlaneMat = new THREE.Matrix4();
@@ -417,7 +458,7 @@
       const self = this;
 
       this.scene.traverse((node) => {
-        if (!node.isMesh || !node.material) return;
+        if (!node.isMesh || !node.material || node.userData.builtInGear) return;
         const mats = Array.isArray(node.material) ? node.material : [node.material];
 
         // 0번 프레임 사전 연산 (렌더링 시작 전 유효한 행렬 보장)
@@ -452,9 +493,9 @@
 
           const surfaces = def.surfaceMaterials;
           const surfaceMask = new THREE.Vector3(
-            Number(!surfaces || m.name === surfaces.rudder),
-            Number(!surfaces || m.name === surfaces.elevator),
-            Number(!surfaces || m.name === surfaces.wing)
+            Number(!surfaces || surfaces.rudder.test(m.name)),
+            Number(!surfaces || surfaces.elevator.test(m.name)),
+            Number(!surfaces || surfaces.wing.test(m.name))
           );
           if (surfaceMask.lengthSq() === 0) return;
 
@@ -477,6 +518,12 @@
               uniform vec4 uWingParams;
               uniform vec4 uWingProfile;
               uniform vec3 uSurfaceMask;
+              uniform bool uSweptTailHinges;
+
+              vec3 rotateControlArm(vec3 arm, vec3 axis, float angle) {
+                return arm * cos(angle) + cross(axis, arm) * sin(angle)
+                  + axis * dot(axis, arm) * (1.0 - cos(angle));
+              }
               `
             );
 
@@ -501,8 +548,14 @@
                 float weight = smoothstep(0.0, 0.12, dist);
                 float angle = uRudder * weight;
                 float arm = dist;
-                _planeP.x += arm * sin(angle);
-                _planeP.z = _zRudderHinge + arm * cos(angle);
+                if (uSweptTailHinges) {
+                  vec3 hinge = vec3(0.0, _planeP.y, _zRudderHinge);
+                  vec3 axis = normalize(vec3(0.0, 1.0, _rSweep));
+                  _planeP.xyz = hinge + rotateControlArm(_planeP.xyz - hinge, axis, angle);
+                } else {
+                  _planeP.x += arm * sin(angle);
+                  _planeP.z = _zRudderHinge + arm * cos(angle);
+                }
                 _deflected = true;
               }
 
@@ -522,8 +575,14 @@
                 float weight = smoothstep(0.0, 0.12, dist);
                 float angle = uElevator * weight;
                 float arm = dist;
-                _planeP.y += arm * sin(angle);
-                _planeP.z = _zElevHinge + arm * cos(angle);
+                if (uSweptTailHinges) {
+                  vec3 hinge = vec3(_planeP.x, 0.85, _zElevHinge);
+                  vec3 axis = normalize(vec3(1.0, 0.0, sign(_planeP.x) * _eSweep));
+                  _planeP.xyz = hinge + rotateControlArm(_planeP.xyz - hinge, axis, angle);
+                } else {
+                  _planeP.y += arm * sin(angle);
+                  _planeP.z = _zElevHinge + arm * cos(angle);
+                }
                 _deflected = true;
               }
 
@@ -563,11 +622,9 @@
       this.gearProgress = Math.max(0.0, Math.min(1.0, progress));
       this.gearState = phase || (progress >= 0.99 ? 'DOWN' : (progress <= 0.01 ? 'UP' : 'TRANSIT'));
 
-      // A320 내장 기어 노드/머티리얼 표시 제어
-      if (this.gearNodes.length > 0) {
-        const isVis = progress > 0.25;
-        this.gearNodes.forEach(n => { n.visible = isVis; });
-        this.gearMaterials.forEach(m => { m.visible = isVis; });
+      for (const { node, deployed, retractOffset } of this.builtInGear) {
+        node.position.copy(deployed).addScaledVector(retractOffset, 1 - this.gearProgress);
+        node.visible = this.gearProgress > 0.25;
       }
 
       // A350 정밀 착륙장치 스트럿/도어 회전
@@ -729,7 +786,13 @@
         });
       });
       this.landingGears = [];
+      for (const { node, deployed, restoreGeometry } of this.builtInGear) {
+        node.position.copy(deployed);
+        node.visible = true;
+        restoreGeometry?.();
+      }
       this.gearNodes = [];
+      this.builtInGear = [];
       this.gearMaterials = [];
       this.parts = { fans: [], rudder: null, flaps: [], landingGear: null };
     }
