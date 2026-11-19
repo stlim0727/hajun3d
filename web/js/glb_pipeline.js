@@ -319,9 +319,19 @@
 
     // ★ 중심점 X=0 완벽 정렬 & 회전 영점화 (기우뚱 및 쏠림 100% 원천 차단)
     scene.position.x = 0;
-    scene.position.y = (this.currentPlaneType === 'amphibian')
-      ? (-box.min.y * scale - 4.05)
-      : (-center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2));
+    if (this.currentPlaneType === 'amphibian') {
+      scene.position.y = -box.min.y * scale - 4.72;
+    } else if (this.currentPlaneType === 'a320' || this.currentPlaneType === 'a320_simplified' || this.currentPlaneType === 'a320_detailed') {
+      scene.position.y = -center.y * scale + 1.83;
+    } else if (this.currentPlaneType === 'a350') {
+      scene.position.y = -center.y * scale + 5.26;
+    } else if (this.currentPlaneType === 'dc10') {
+      scene.position.y = -center.y * scale + 3.69;
+    } else if (this.currentPlaneType === 'ancestor') {
+      scene.position.y = -center.y * scale + 0.35;
+    } else {
+      scene.position.y = -center.y * scale + 1.2;
+    }
     scene.position.z = -center.z * scale;
     if (this.currentPlaneType === 'a320' || this.currentPlaneType === 'a320_simplified' || this.currentPlaneType === 'a320_detailed' || this.currentPlaneType === 'a350') {
       scene.rotation.set(0, Math.PI, 0);
@@ -373,14 +383,18 @@
     });
 
     this.glbGearMaterials = [];
-    if (this.currentPlaneType === 'a320' || this.currentPlaneType === 'a320_simplified') {
+    this.glbGearNodes = [];
+    if (this.currentPlaneType === 'a320' || this.currentPlaneType === 'a320_simplified' || this.currentPlaneType === 'a320_detailed') {
       scene.traverse((node) => {
         if (node.isMesh && node.material) {
           const mats = Array.isArray(node.material) ? node.material : [node.material];
           mats.forEach((m) => {
-            if (/Material\.(034|036|037|040|042|044|045|049|050)$/i.test(m.name || '')) {
+            if (/Material\.(034|036|037|040|042|044|045|049|050|056)$/i.test(m.name || '')) {
               this.glbGearMaterials.push(m);
-              m.visible = (this.gearExtended !== false);
+              this.glbGearNodes.push(node);
+              const isVis = (this.gearExtended !== false);
+              m.visible = isVis;
+              node.visible = isVis;
             }
           });
         }
@@ -408,6 +422,9 @@
     if (typeof this.attachGLBMovingParts === 'function') {
       this.attachGLBMovingParts(this.currentPlaneType || 'a320');
     }
+
+    // ★ GLB 에어로다이내믹 제어평면 버텍스 셰이더 디포메이션 (A320, A350, DC-10, CL-215)
+    this.setupGLBControlSurfaceShaders(scene, this.currentPlaneType);
 
     this.planeGroup.updateMatrixWorld(true);
     const fanExhaustPoints = [];
@@ -446,6 +463,158 @@
     }
 
     this.showPopup(`🎉 GLB 3D 기체 [${cleanName}] 장착 완료!`);
+  },
+
+  // ----------------------------------------------------------------
+  // GLB 기체 에어로다이내믹 제어평면 버텍스 셰이더 디포메이션 (A320, A350, DC-10, CL-215)
+  // 외형 훼손이나 분리 단면의 구멍 없이 GPU 상에서 날개 뒷전과 러더를 유려하게 실시간 굴절
+  // ----------------------------------------------------------------
+  setupGLBControlSurfaceShaders(scene, planeType) {
+    if (!scene) return;
+    const type = (planeType || '').toLowerCase();
+    const supported = ['a320', 'a320_simplified', 'a320_detailed', 'a350', 'dc10', 'amphibian'];
+    if (!supported.includes(type)) return;
+
+    this.glbShaderUniforms = {
+      uMeshToPlane: { value: new THREE.Matrix4() },
+      uPlaneToMesh: { value: new THREE.Matrix4() },
+      uAileronL: { value: 0.0 },
+      uAileronR: { value: 0.0 },
+      uElevator: { value: 0.0 },
+      uRudder:   { value: 0.0 },
+      uFlap:     { value: 0.0 },
+      uRudderParams: { value: new THREE.Vector4() },
+      uElevParams:   { value: new THREE.Vector4() },
+      uWingParams:   { value: new THREE.Vector4() }
+    };
+
+    if (type.startsWith('a320')) {
+      this.glbShaderUniforms.uRudderParams.value.set(13.5, 24.5, 2.5, 12.5);
+      this.glbShaderUniforms.uElevParams.value.set(15.0, 24.5, 2.2, 7.8);
+      this.glbShaderUniforms.uWingParams.value.set(8.5, 17.5, 1.2, 0.42);
+    } else if (type === 'a350') {
+      this.glbShaderUniforms.uRudderParams.value.set(23.0, 33.5, 3.5, 16.0);
+      this.glbShaderUniforms.uElevParams.value.set(25.0, 33.5, 3.0, 12.5);
+      this.glbShaderUniforms.uWingParams.value.set(15.0, 32.0, 2.0, 0.52);
+    } else if (type === 'dc10') {
+      this.glbShaderUniforms.uRudderParams.value.set(18.0, 27.8, 3.0, 17.0);
+      this.glbShaderUniforms.uElevParams.value.set(21.0, 27.8, 1.5, 11.0);
+      this.glbShaderUniforms.uWingParams.value.set(13.0, 25.0, 6.0, 0.42);
+    } else if (type === 'amphibian') {
+      this.glbShaderUniforms.uRudderParams.value.set(5.5, 9.8, 2.0, 9.8);
+      this.glbShaderUniforms.uElevParams.value.set(6.5, 9.8, 5.5, 5.8);
+      this.glbShaderUniforms.uWingParams.value.set(6.5, 14.0, -1.0, 0.12);
+    }
+
+    const meshToPlaneMat = new THREE.Matrix4();
+    const planeToMeshMat = new THREE.Matrix4();
+    const self = this;
+
+    scene.traverse((node) => {
+      if (!node.isMesh || !node.material) return;
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+
+      const origOnBeforeRender = node.onBeforeRender;
+      node.onBeforeRender = function(renderer, renderScene, camera, geometry, material, group) {
+        if (origOnBeforeRender) {
+          origOnBeforeRender.call(this, renderer, renderScene, camera, geometry, material, group);
+        }
+        if (self.planeGroup && self.glbShaderUniforms) {
+          meshToPlaneMat.multiplyMatrices(self.planeGroup.matrixWorldInverse, node.matrixWorld);
+          planeToMeshMat.copy(meshToPlaneMat).invert();
+          self.glbShaderUniforms.uMeshToPlane.value.copy(meshToPlaneMat);
+          self.glbShaderUniforms.uPlaneToMesh.value.copy(planeToMeshMat);
+        }
+      };
+
+      mats.forEach((m) => {
+        if (/Material\.(034|036|037|040|042|044|045|049|050|056)$/i.test(m.name || '')) return;
+
+        m.onBeforeCompile = (shader) => {
+          Object.assign(shader.uniforms, self.glbShaderUniforms);
+
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <common>',
+            `#include <common>
+            uniform mat4 uMeshToPlane;
+            uniform mat4 uPlaneToMesh;
+            uniform float uAileronL;
+            uniform float uAileronR;
+            uniform float uElevator;
+            uniform float uRudder;
+            uniform float uFlap;
+            uniform vec4 uRudderParams;
+            uniform vec4 uElevParams;
+            uniform vec4 uWingParams;
+            `
+          );
+
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+            vec4 _planeP = uMeshToPlane * vec4( position, 1.0 );
+            bool _deflected = false;
+
+            if (_planeP.z > uRudderParams.x && _planeP.z <= uRudderParams.y &&
+                _planeP.y >= uRudderParams.z && _planeP.y <= uRudderParams.w &&
+                abs(_planeP.x) < 0.95) {
+              float chordFraction = clamp((_planeP.z - uRudderParams.x) / max(0.1, uRudderParams.y - uRudderParams.x), 0.0, 1.0);
+              float weight = chordFraction * chordFraction;
+              float angle = uRudder * weight;
+              float arm = _planeP.z - uRudderParams.x;
+              _planeP.x += arm * sin(angle);
+              _planeP.z = uRudderParams.x + arm * cos(angle);
+              _deflected = true;
+            }
+
+            if (!_deflected && _planeP.z > uElevParams.x && _planeP.z <= uElevParams.y &&
+                abs(_planeP.y - uElevParams.z) < 2.5 &&
+                abs(_planeP.x) > 1.2 && abs(_planeP.x) <= uElevParams.w) {
+              float chordFraction = clamp((_planeP.z - uElevParams.x) / max(0.1, uElevParams.y - uElevParams.x), 0.0, 1.0);
+              float weight = chordFraction * chordFraction;
+              float angle = uElevator * weight;
+              float arm = _planeP.z - uElevParams.x;
+              _planeP.y += arm * sin(angle);
+              _planeP.z = uElevParams.x + arm * cos(angle);
+              _deflected = true;
+            }
+
+            float _absX = abs(_planeP.x);
+            if (!_deflected && _absX >= uWingParams.x && _absX <= uWingParams.y) {
+              float zSpar = uWingParams.z + (_absX - uWingParams.x) * uWingParams.w;
+              if (_planeP.z > zSpar && _planeP.z < zSpar + 4.5 && _planeP.y < 4.0 && _planeP.y > -3.0) {
+                float chordFraction = clamp((_planeP.z - zSpar) / 2.5, 0.0, 1.0);
+                float weight = chordFraction * chordFraction;
+                float ailDef = (_planeP.x < 0.0) ? uAileronL : uAileronR;
+                float angle = ailDef * weight;
+                float arm = _planeP.z - zSpar;
+                _planeP.y += arm * sin(angle);
+                _planeP.z = zSpar + arm * cos(angle);
+                _deflected = true;
+              }
+            }
+
+            if (!_deflected && _absX >= 1.8 && _absX < uWingParams.x && uFlap > 0.001) {
+              float zFlapSpar = uWingParams.z + (_absX - 1.8) * (uWingParams.w * 0.85);
+              if (_planeP.z > zFlapSpar && _planeP.z < zFlapSpar + 5.0 && _planeP.y < 4.0 && _planeP.y > -3.0) {
+                float chordFraction = clamp((_planeP.z - zFlapSpar) / 3.2, 0.0, 1.0);
+                float weight = chordFraction * chordFraction;
+                float angle = uFlap * weight;
+                float arm = _planeP.z - zFlapSpar;
+                _planeP.y -= arm * sin(angle);
+                _planeP.z = zFlapSpar + arm * cos(angle);
+                _deflected = true;
+              }
+            }
+
+            if (_deflected) {
+              transformed = (uPlaneToMesh * _planeP).xyz;
+            }
+            `
+          );
+        };
+      });
+    });
   },
 
   applyGLBBackground(scene, fileName) {

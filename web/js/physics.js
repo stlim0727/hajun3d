@@ -228,6 +228,11 @@
       gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
     }
 
+    if (this.glbGearNodes && this.glbGearNodes.length > 0) {
+      const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
+      this.glbGearNodes.forEach(n => { n.visible = isVis; });
+    }
+
     if (this.glbGearMaterials && this.glbGearMaterials.length > 0) {
       const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
       this.glbGearMaterials.forEach(m => { m.visible = isVis; });
@@ -238,6 +243,9 @@
       if (isExtending) {
         this.gearPhase = 'DOWN';
         this.gearExtended = true;
+        if (this.glbGearNodes) {
+          this.glbGearNodes.forEach(n => { n.visible = true; });
+        }
         if (this.glbGearMaterials) {
           this.glbGearMaterials.forEach(m => { m.visible = true; });
         }
@@ -269,6 +277,9 @@
       } else {
         this.gearPhase = 'UP';
         this.gearExtended = false;
+        if (this.glbGearNodes) {
+          this.glbGearNodes.forEach(n => { n.visible = false; });
+        }
         if (this.glbGearMaterials) {
           this.glbGearMaterials.forEach(m => { m.visible = false; });
         }
@@ -397,7 +408,38 @@
       );
     }
 
-    // 4. GLB 가동 파츠 (러더, 플랩, 3발 터보팬 블레이드 회전)
+    // 4. GLB 셰이더 디포메이션 가동 제어면 (A320, A350, DC-10, CL-215)
+    if (this.glbShaderUniforms) {
+      this.glbShaderUniforms.uAileronL.value = THREE.MathUtils.lerp(
+        this.glbShaderUniforms.uAileronL.value,
+        -targetAileron,
+        0.20
+      );
+      this.glbShaderUniforms.uAileronR.value = THREE.MathUtils.lerp(
+        this.glbShaderUniforms.uAileronR.value,
+        targetAileron,
+        0.20
+      );
+      this.glbShaderUniforms.uElevator.value = THREE.MathUtils.lerp(
+        this.glbShaderUniforms.uElevator.value,
+        targetElevator,
+        0.20
+      );
+      this.glbShaderUniforms.uRudder.value = THREE.MathUtils.lerp(
+        this.glbShaderUniforms.uRudder.value,
+        targetRudder,
+        0.22
+      );
+      const flapAngles = [0, 0.16, 0.34, 0.56];
+      const targetFlap = flapAngles[this.flapIndex || 0] || 0;
+      this.glbShaderUniforms.uFlap.value = THREE.MathUtils.lerp(
+        this.glbShaderUniforms.uFlap.value,
+        targetFlap,
+        0.15
+      );
+    }
+
+    // 5. GLB 가동 파츠 (러더, 플랩, 3발 터보팬 블레이드 회전)
     if (this.glbMovingParts) {
       if (this.glbMovingParts.rudder) {
         const baseY = this.glbMovingParts.rudder.userData.baseRotY || 0;

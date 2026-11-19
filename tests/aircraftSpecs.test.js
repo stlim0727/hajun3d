@@ -97,4 +97,10 @@ test('validates in-game A320 uses simplified GLB binary and moving parts are att
   const pipelineCode = readFileSync('web/js/glb_pipeline.js', 'utf8');
   assert.ok(pipelineCode.includes('this.attachGLBMovingParts'), 'applyGLBScene must attach moving parts');
   assert.ok(pipelineCode.includes("scene.rotation.set(0, Math.PI, 0)"), 'applyGLBScene must orient A320/A350 forward');
+  assert.ok(pipelineCode.includes('this.setupGLBControlSurfaceShaders'), 'applyGLBScene must setup control surface shaders');
+  assert.ok(pipelineCode.includes('this.glbGearNodes'), 'applyGLBScene must track GLB landing gear nodes');
+
+  const physicsCode = readFileSync('web/js/physics.js', 'utf8');
+  assert.ok(physicsCode.includes('this.glbShaderUniforms'), 'physics must update glbShaderUniforms for deflections');
+  assert.ok(physicsCode.includes('this.glbGearNodes'), 'physics must update glbGearNodes visibility');
 });

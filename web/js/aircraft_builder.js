@@ -2478,7 +2478,8 @@
   },
 
   // ----------------------------------------------------------------
-  // A320 및 A350 GLB 기체 가동 파츠 장착 (터보팬 블레이드, 러더, 엘리베이터, 에일러론, 플랩, 기어)
+  // A320 및 A350 GLB 기체 가동 파츠 장착 (엔진 내부 터보팬 블레이드 및 A350 기어)
+  // 제어평면(에일러론/승강타/방향타/플랩)은 GLB 고유 외형 100% 보존을 위해 GPU 버텍스 셰이더로 정밀 가동
   // ----------------------------------------------------------------
   attachGLBMovingParts(type) {
     if (type !== 'a320' && type !== 'a350') return;
@@ -2493,18 +2494,13 @@
 
     const isA350 = (type === 'a350');
     const chromeMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.95, roughness: 0.15 });
-    const surfaceMat = new THREE.MeshStandardMaterial({
-      color: isA350 ? 0xf8fafc : 0xf1f5f9,
-      metalness: 0.25,
-      roughness: 0.35,
-      side: THREE.DoubleSide
-    });
     const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9, metalness: 0.1 });
 
     // 1. 실제 회전 티타늄 터보팬 블레이드 & 중앙 스파이럴 콘 (Twin Turbofans)
+    // 엔진 카울 안쪽에만 깊숙이 위치시켜 흡입구 전면에서만 블레이드가 회전하도록 안착
     const engineDefs = isA350
-      ? { radius: 1.45, blades: 22, leftX: -9.8, rightX: 9.8, y: -2.1, z: -1.2 }
-      : { radius: 0.85, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 };
+      ? { radius: 1.35, blades: 22, leftX: -9.8, rightX: 9.8, y: -2.3, z: -1.2 }
+      : { radius: 0.80, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 };
 
     [engineDefs.leftX, engineDefs.rightX].forEach(x => {
       const fan = this.createTurbofanFan(engineDefs.radius, engineDefs.blades, chromeMat);
@@ -2514,114 +2510,23 @@
       this.glbMovingParts.fans.push(fan);
     });
 
-    // 2. 가동 방향타 (Movable Rudder on Vertical Fin)
-    const rudderDefs = isA350
-      ? { x: 0, y: 7.2, z: 24.8, sweep: -0.34, h: 8.8, w: 0.42, chord: 2.2 }
-      : { x: 0, y: 5.4, z: 14.8, sweep: -0.34, h: 5.8, w: 0.32, chord: 1.6 };
+    // 2. 착륙장치 (Landing Gear)
+    // A350은 원본 GLB에 랜딩기어가 없으므로 정밀 착륙장치 장착
+    // A320은 GLB 자체 랜딩기어가 내장되어 있으므로 중복 생성하지 않고 GLB 기어 메시를 직접 제어함
+    if (isA350) {
+      const gearDefs = {
+        nose: { x: 0, y: -1.34, z: -21.0, isNose: true, is4Wheel: false },
+        mainL: { x: -5.8, y: -1.34, z: 2.2, isNose: false, is4Wheel: true },
+        mainR: { x: 5.8, y: -1.34, z: 2.2, isNose: false, is4Wheel: true }
+      };
 
-    const rudderPivot = new THREE.Group();
-    rudderPivot.position.set(rudderDefs.x, rudderDefs.y, rudderDefs.z);
-    rudderPivot.rotation.x = rudderDefs.sweep;
-
-    const rudderMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(rudderDefs.w, rudderDefs.h, rudderDefs.chord),
-      surfaceMat
-    );
-    rudderMesh.position.set(0, 0, rudderDefs.chord * 0.5);
-    rudderMesh.castShadow = true;
-    rudderPivot.add(rudderMesh);
-    rudderPivot.userData.baseRotY = 0;
-
-    this.planeGroup.add(rudderPivot);
-    this.controlSurfaces.rudder = rudderPivot;
-    this.glbMovingParts.rudder = rudderPivot;
-
-    // 3. 가동 승강타 (Movable Elevators on Horizontal Stabilizer)
-    const elevDefs = isA350
-      ? { span: 8.2, xOff: 9.0, y: 3.5, z: 27.5, chord: 1.5, thickness: 0.28 }
-      : { span: 5.2, xOff: 4.6, y: 2.4, z: 15.6, chord: 1.1, thickness: 0.22 };
-
-    [-1, 1].forEach(sign => {
-      const elevPivot = new THREE.Group();
-      elevPivot.position.set(sign * elevDefs.xOff, elevDefs.y, elevDefs.z);
-
-      const elevMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(elevDefs.span, elevDefs.thickness, elevDefs.chord),
-        surfaceMat
-      );
-      elevMesh.position.set(0, 0, elevDefs.chord * 0.5);
-      elevMesh.castShadow = true;
-      elevPivot.add(elevMesh);
-
-      this.planeGroup.add(elevPivot);
-      if (sign < 0) this.controlSurfaces.leftElevator = elevPivot;
-      else this.controlSurfaces.rightElevator = elevPivot;
-    });
-
-    // 4. 가동 에일러론 (Movable Ailerons on Outboard Wings)
-    const aileronDefs = isA350
-      ? { span: 7.8, xOff: 24.5, y: 1.2, z: 3.6, chord: 1.2, thickness: 0.22, sweepY: -0.36 }
-      : { span: 4.8, xOff: 13.2, y: 0.5, z: 2.2, chord: 0.85, thickness: 0.18, sweepY: -0.34 };
-
-    [-1, 1].forEach(sign => {
-      const aileronPivot = new THREE.Group();
-      aileronPivot.position.set(sign * aileronDefs.xOff, aileronDefs.y, aileronDefs.z);
-
-      const aileronMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(aileronDefs.span, aileronDefs.thickness, aileronDefs.chord),
-        surfaceMat
-      );
-      aileronMesh.position.set(0, 0, aileronDefs.chord * 0.5);
-      aileronMesh.rotation.y = -sign * aileronDefs.sweepY;
-      aileronMesh.castShadow = true;
-      aileronPivot.add(aileronMesh);
-
-      this.planeGroup.add(aileronPivot);
-      if (sign < 0) this.controlSurfaces.leftAileron = aileronPivot;
-      else this.controlSurfaces.rightAileron = aileronPivot;
-    });
-
-    // 5. 가동 플랩 (Movable Flaps on Inboard Wings)
-    const flapDefs = isA350
-      ? { span: 10.5, xOff: 12.0, y: 0.4, z: 4.8, chord: 1.8, thickness: 0.26 }
-      : { span: 5.8, xOff: 6.8, y: 0.2, z: 2.8, chord: 1.2, thickness: 0.20 };
-
-    [-1, 1].forEach(sign => {
-      const flapPivot = new THREE.Group();
-      flapPivot.position.set(sign * flapDefs.xOff, flapDefs.y, flapDefs.z);
-
-      const flapMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(flapDefs.span, flapDefs.thickness, flapDefs.chord),
-        surfaceMat
-      );
-      flapMesh.position.set(0, -flapDefs.thickness * 0.5, flapDefs.chord * 0.5);
-      flapMesh.castShadow = true;
-      flapPivot.add(flapMesh);
-      flapPivot.userData.baseRotX = 0;
-
-      this.planeGroup.add(flapPivot);
-      this.glbMovingParts.flaps.push(flapPivot);
-    });
-
-    // 6. 착륙장치 (Landing Gear & Steerable Wheels)
-    const gearDefs = isA350
-      ? {
-          nose: { x: 0, y: -2.4, z: -22.5, isNose: true, is4Wheel: false },
-          mainL: { x: -5.8, y: -2.6, z: 2.2, isNose: false, is4Wheel: true },
-          mainR: { x: 5.8, y: -2.6, z: 2.2, isNose: false, is4Wheel: true }
-        }
-      : {
-          nose: { x: 0, y: -1.6, z: -12.5, isNose: true, is4Wheel: false },
-          mainL: { x: -3.8, y: -1.8, z: 1.0, isNose: false, is4Wheel: false },
-          mainR: { x: 3.8, y: -1.8, z: 1.0, isNose: false, is4Wheel: false }
-        };
-
-    const gearAssemblies = [gearDefs.nose, gearDefs.mainL, gearDefs.mainR];
-    gearAssemblies.forEach(g => {
-      const gearObj = this.createGLBLandingGear(g.x, g.y, g.z, g.isNose, g.is4Wheel, chromeMat, tireMat);
-      this.planeGroup.add(gearObj);
-      this.landingGears.push(gearObj);
-    });
+      const gearAssemblies = [gearDefs.nose, gearDefs.mainL, gearDefs.mainR];
+      gearAssemblies.forEach(g => {
+        const gearObj = this.createGLBLandingGear(g.x, g.y, g.z, g.isNose, g.is4Wheel, chromeMat, tireMat);
+        this.planeGroup.add(gearObj);
+        this.landingGears.push(gearObj);
+      });
+    }
   }
 
   });
