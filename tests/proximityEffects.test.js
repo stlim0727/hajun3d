@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 function loadProximityHarness() {
+  class Vector2 {
+    constructor(x = 0, y = 0) {
+      this.x = x; this.y = y;
+    }
+    set(x, y) { this.x = x; this.y = y; return this; }
+  }
+
   class Vector3 {
     constructor(x = 0, y = 0, z = 0) {
       this.x = x; this.y = y; this.z = z;
@@ -22,6 +29,7 @@ function loadProximityHarness() {
   }
 
   const THREE = {
+    Vector2,
     Vector3,
     Quaternion,
     AdditiveBlending: 2,
@@ -123,7 +131,13 @@ function loadProximityHarness() {
           moveTo: () => {},
           lineTo: () => {},
           createLinearGradient: () => ({ addColorStop: () => {} }),
-          createRadialGradient: () => ({ addColorStop: () => {} })
+          createRadialGradient: () => ({ addColorStop: () => {} }),
+          createImageData: (w, h) => ({
+            width: w,
+            height: h,
+            data: new Uint8ClampedArray(w * h * 4)
+          }),
+          putImageData: () => {}
         })
       })
     },
@@ -273,7 +287,7 @@ test('createJetExhaustParticles does not emit flame or exhaust cubes at full tak
   assert.equal(game.particles.length, 0);
 });
 
-test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white base color to GLB ground/ocean meshes', () => {
+test('applyEnvironmentTexturesToGLB assigns UVs, textures, displacement maps, and white base color to GLB ground/ocean meshes', () => {
   const { game, THREE } = loadProximityHarness();
 
   const makeMat = (name, hex = 0x1e293b) => {
@@ -361,7 +375,7 @@ test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white b
     assert.equal(uv.itemSize, 2);
     assert.equal(uv.array.length, (pos.array.length / 3) * 2);
     assert.ok(m.material.map, `${m.material.name} must receive diffuse map`);
-    assert.ok(m.material.bumpMap, `${m.material.name} must receive bumpMap`);
+    assert.ok(m.material.normalMap || m.material.bumpMap, `${m.material.name} must receive terrain displacement map (normal or bump)`);
     assert.equal(m.material.color._hex, 0xffffff, `${m.material.name} base color must reset to white`);
   }
 
@@ -374,8 +388,8 @@ test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white b
   assert.equal(runwayMesh.geometry.attributes.uv.array[0], 0);
   assert.equal(runwayMesh.geometry.attributes.uv.array[2], 1);
 
-  assert.ok(mountainMesh.geometry.attributes.uv, 'Mountain terrain must receive uv attribute for bump mapping');
+  assert.ok(mountainMesh.geometry.attributes.uv, 'Mountain terrain must receive uv attribute for normal mapping');
   assert.equal(mountainMesh.material.vertexColors, true);
-  assert.equal(mountainMesh.material.bumpMap, game.continentTexture);
+  assert.equal(mountainMesh.material.normalMap, game.terrainNormalTexture);
   assert.equal(mountainMesh.material.map, null);
 });
