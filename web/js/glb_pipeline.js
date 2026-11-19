@@ -75,8 +75,22 @@
         a320_simplified: a320,
         a320_detailed: a320,
         a350: {
-          rudderParams: [22.0, 33.5, 5.0, 1.29],
-          elevParams:   [26.5, 33.5, 1.8, 0.65],
+          // The A350 GLB shares one material across the fixed and moving tail.
+          tailPanels: [
+            {
+              control: 'rudder', material: /^07___Default$/,
+              pivot: [0, 5.78, 24.8], axis: [0, 1, 0.84],
+              planes: [[0, 1, 0, -5.78], [0, -1, 0, 13.23],
+                [0, -0.84, 1, 5.78 * 0.84 - 24.8], [1, 0, 0, 0.95], [-1, 0, 0, 0.95]]
+            },
+            ...[-1, 1].map(side => ({
+              control: 'elevator', material: /^07___Default$/,
+              pivot: [side * 2.5, 3.08, 27.7], axis: [-1, -side * 0.11, -side * 0.66],
+              planes: [[side, 0, 0, -2.5], [-side, 0, 0, 9.39],
+                [-side * 0.66, 0, 1, 2.5 * 0.66 - 27.7],
+                [-side * 0.11, 1, 0, -2.35], [side * 0.11, -1, 0, 3.20]]
+            }))
+          ],
           wingParams:   [4.0, 16.0, 32.0, 5.15],
           wingProfile:  [0.34, 0.31, -1.5, 5.0],
           hasBuiltInGear: false,
@@ -370,7 +384,7 @@
       }
 
       // 6. 버텍스 셰이더 디포메이션 셋업 (제어평면)
-      if (def && def.rudderParams && def.elevParams && def.wingParams) {
+      if (def?.wingParams && (def.tailPanels || (def.rudderParams && def.elevParams))) {
         this.setupShaders(def);
         this.hasMovingParts = true;
       }
@@ -475,7 +489,7 @@
       }
     }
 
-    setupRigidControlPanels(def) {
+    getRigidControlPanels(def) {
       // Planes use aircraft coordinates and are positive inside a movable panel.
       const panels = [];
       for (const side of [-1, 1]) {
@@ -508,6 +522,10 @@
         planes: [[0, 1, 0, -root], [0, -slope, 1, root * slope - z], [0, 0, -1, zMax]]
       });
 
+      return panels;
+    }
+
+    setupRigidControlPanels(panels) {
       this.planeGroup.updateMatrixWorld(true);
       const planeInverse = this.planeGroup.matrixWorld.clone().invert();
       this.scene.traverse(node => {
@@ -596,7 +614,7 @@
         moving.forEach((vertices, index) => {
           if (!vertices.length) return;
           const { control, pivot, axis } = candidates[index];
-          const panel = new THREE.Mesh(makeGeometry(vertices), node.material);
+          const panel = new THREE.Mesh(makeGeometry(vertices), node.material.clone());
           panel.userData.controlPanel = control;
           panel.matrixAutoUpdate = false;
           panel.castShadow = node.castShadow;
@@ -615,6 +633,7 @@
           for (const panel of meshes) {
             node.remove(panel);
             panel.geometry.dispose();
+            panel.material.dispose();
           }
         });
       });
@@ -651,23 +670,25 @@
         uElevator: { value: 0.0 },
         uRudder:   { value: 0.0 },
         uFlap:     { value: 0.0 },
-        uRudderParams: { value: new THREE.Vector4(...def.rudderParams) },
-        uElevParams:   { value: new THREE.Vector4(...def.elevParams) },
+        uRudderParams: { value: new THREE.Vector4(...(def.rudderParams || [])) },
+        uElevParams:   { value: new THREE.Vector4(...(def.elevParams || [])) },
         uWingParams:   { value: new THREE.Vector4(...def.wingParams) },
         uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) }
       };
 
       if (def.rigidPanels) {
-        this.setupRigidControlPanels(def);
+        this.setupRigidControlPanels(this.getRigidControlPanels(def));
         if (this.controlPanels.length) return;
       }
+
+      if (def.tailPanels) this.setupRigidControlPanels(def.tailPanels);
 
       const meshToPlaneMat = new THREE.Matrix4();
       const planeToMeshMat = new THREE.Matrix4();
       const self = this;
 
       this.scene.traverse((node) => {
-        if (!node.isMesh || !node.material || node.userData.builtInGear) return;
+        if (!node.isMesh || !node.material || node.userData.builtInGear || node.userData.controlPanel) return;
         const mats = Array.isArray(node.material) ? node.material : [node.material];
 
         // 0번 프레임 사전 연산 (렌더링 시작 전 유효한 행렬 보장)
@@ -702,8 +723,8 @@
 
           const surfaces = def.surfaceMaterials;
           const surfaceMask = new THREE.Vector3(
-            Number(!surfaces || surfaces.rudder.test(m.name)),
-            Number(!surfaces || surfaces.elevator.test(m.name)),
+            Number(!def.tailPanels && (!surfaces || surfaces.rudder.test(m.name))),
+            Number(!def.tailPanels && (!surfaces || surfaces.elevator.test(m.name))),
             Number(!surfaces || surfaces.wing.test(m.name))
           );
           if (surfaceMask.lengthSq() === 0) return;
