@@ -82,9 +82,10 @@
           hasBuiltInGear: false,
           fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
           gearDefs: {
-            nose: { x: 0, y: -1.17, z: -22.0, isNose: true, is4Wheel: false },
-            mainL: { x: -5.4, y: -0.66, z: 2.1, isNose: false, is4Wheel: true },
-            mainR: { x: 5.4, y: -0.66, z: 2.1, isNose: false, is4Wheel: true }
+            // Attach just inside the belly and wing roots of the normalized GLB.
+            nose: { x: 0, y: -1.0, z: -22.0, isNose: true, is4Wheel: false, strutLength: 2.77 },
+            mainL: { x: -5.4, y: 0.72, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.98 },
+            mainR: { x: 5.4, y: 0.72, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.98 }
           }
         },
         dc10: {
@@ -196,7 +197,7 @@
       return fanGroup;
     }
 
-    static createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat) {
+    static createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat, strutLength = 2.6) {
       if (typeof THREE === 'undefined') return null;
       const gearAssembly = new THREE.Group();
       gearAssembly.position.set(x, y, z);
@@ -209,8 +210,8 @@
       const strutPivot = new THREE.Group();
       strutPivot.position.set(0, 0, 0);
 
-      const mainStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2.6, 12), chromeMat);
-      mainStrut.position.set(0, -1.3, 0);
+      const mainStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, strutLength, 12), chromeMat);
+      mainStrut.position.y = -strutLength / 2;
       mainStrut.castShadow = true;
       strutPivot.add(mainStrut);
 
@@ -218,7 +219,7 @@
 
       if (is4WheelBogie) {
         bogieBeamGroup = new THREE.Group();
-        bogieBeamGroup.position.set(0, -2.6, 0);
+        bogieBeamGroup.position.y = -strutLength;
 
         const beam = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.35, 2.2), chromeMat);
         beam.castShadow = true;
@@ -250,7 +251,7 @@
         strutPivot.add(bogieBeamGroup);
       } else {
         const axleGroup = new THREE.Group();
-        axleGroup.position.set(0, -2.6, 0);
+        axleGroup.position.y = -strutLength;
 
         const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, isNose ? 1.4 : 1.8, 10), chromeMat);
         axle.rotation.z = Math.PI / 2;
@@ -348,7 +349,7 @@
           const gearObj = GLBMovingPartsController.createGLBLandingGear(
             gearSpec.x, gearSpec.y, gearSpec.z,
             gearSpec.isNose, gearSpec.is4Wheel,
-            chromeMat, tireMat
+            chromeMat, tireMat, gearSpec.strutLength
           );
           this.planeGroup.add(gearObj);
           this.landingGears.push(gearObj);

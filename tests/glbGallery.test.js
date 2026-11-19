@@ -111,5 +111,5 @@ test('GLBMovingPartsController enforces swept-hinge rigid planar rotation and ca
   // Verify A320 & A350 calibrated nacelle positions
   assert.ok(pipelineJs.includes('leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25'), 'A320 fans must be calibrated inside engine nacelles');
   assert.ok(pipelineJs.includes('leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0'), 'A350 fans must be calibrated inside engine nacelles');
-  assert.ok(pipelineJs.includes('nose: { x: 0, y: -1.17, z: -22.0'), 'A350 nose gear must be anchored to forward belly');
+  assert.ok(pipelineJs.includes('nose: { x: 0, y: -1.0, z: -22.0'), 'A350 nose gear must be anchored to forward belly');
 });
