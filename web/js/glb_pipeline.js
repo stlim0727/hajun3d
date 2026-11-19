@@ -96,10 +96,10 @@
           hasBuiltInGear: false,
           fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
           gearDefs: {
-            // Attach just inside the belly and wing roots of the normalized GLB.
+            // Main gear pivots sit below the thin wing skin, with fixed mounts reaching into it.
             nose: { x: 0, y: -1.0, z: -22.0, isNose: true, is4Wheel: false, strutLength: 2.77 },
-            mainL: { x: -5.4, y: 0.72, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.98 },
-            mainR: { x: 5.4, y: 0.72, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.98 }
+            mainL: { x: -5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 },
+            mainR: { x: 5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 }
           }
         },
         dc10: {
@@ -211,7 +211,7 @@
       return fanGroup;
     }
 
-    static createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat, strutLength = 2.6) {
+    static createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat, strutLength = 2.6, mountHeight = 0) {
       if (typeof THREE === 'undefined') return null;
       const gearAssembly = new THREE.Group();
       gearAssembly.position.set(x, y, z);
@@ -228,6 +228,15 @@
       mainStrut.position.y = -strutLength / 2;
       mainStrut.castShadow = true;
       strutPivot.add(mainStrut);
+
+      let fixedMount = null;
+      if (mountHeight > 0) {
+        const pivotOverlap = 0.06;
+        fixedMount = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, mountHeight + pivotOverlap, 12), chromeMat);
+        fixedMount.position.y = (mountHeight - pivotOverlap) / 2;
+        fixedMount.castShadow = true;
+        gearAssembly.add(fixedMount);
+      }
 
       let bogieBeamGroup = null;
 
@@ -299,6 +308,7 @@
       gearAssembly.userData = {
         gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
         strutPivot,
+        fixedMount,
         doorL: doorLGroup,
         doorR: doorRGroup,
         bogieBeam: bogieBeamGroup,
@@ -363,7 +373,7 @@
           const gearObj = GLBMovingPartsController.createGLBLandingGear(
             gearSpec.x, gearSpec.y, gearSpec.z,
             gearSpec.isNose, gearSpec.is4Wheel,
-            chromeMat, tireMat, gearSpec.strutLength
+            chromeMat, tireMat, gearSpec.strutLength, gearSpec.mountHeight
           );
           this.planeGroup.add(gearObj);
           this.landingGears.push(gearObj);
@@ -857,6 +867,7 @@
             u.strutPivot.rotation.x = -(1.0 - progress) * (Math.PI / 2);
             u.strutPivot.visible = isVis;
           }
+          if (u.fixedMount) u.fixedMount.visible = isVis;
           if (u.doorL) u.doorL.rotation.z = (1.0 - progress) * 0.8;
           if (u.doorR) u.doorR.rotation.z = -(1.0 - progress) * 0.8;
           if (u.bogieBeam) u.bogieBeam.rotation.x = -(1.0 - progress) * 0.45;
