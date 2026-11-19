@@ -700,6 +700,7 @@
       const wrapper = new THREE.Group();
       wrapper.add(root);
       this.scene.add(wrapper);
+      wrapper.updateMatrixWorld(true);
       this.currentObject = wrapper;
 
       // ★ 통합 무빙 파츠 컨트롤러 연결 (갤러리 연속 가동 데모 루프 모드)

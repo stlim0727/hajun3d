@@ -387,6 +387,14 @@
     }
 
     setupShaders(def) {
+      if (this.planeGroup) {
+        this.planeGroup.updateMatrixWorld(true);
+      }
+      const planeGroupInv = new THREE.Matrix4();
+      if (this.planeGroup && this.planeGroup.matrixWorld) {
+        planeGroupInv.copy(this.planeGroup.matrixWorld).invert();
+      }
+
       this.shaderUniforms = {
         uMeshToPlane: { value: new THREE.Matrix4() },
         uPlaneToMesh: { value: new THREE.Matrix4() },
@@ -408,16 +416,30 @@
         if (!node.isMesh || !node.material) return;
         const mats = Array.isArray(node.material) ? node.material : [node.material];
 
+        // 0번 프레임 사전 연산 (렌더링 시작 전 유효한 행렬 보장)
+        if (self.planeGroup && self.planeGroup.matrixWorld) {
+          node.updateMatrixWorld(true);
+          meshToPlaneMat.multiplyMatrices(planeGroupInv, node.matrixWorld);
+          planeToMeshMat.copy(meshToPlaneMat).invert();
+          self.shaderUniforms.uMeshToPlane.value.copy(meshToPlaneMat);
+          self.shaderUniforms.uPlaneToMesh.value.copy(planeToMeshMat);
+        }
+
         const origOnBeforeRender = node.onBeforeRender;
         node.onBeforeRender = function(renderer, renderScene, camera, geometry, material, group) {
           if (origOnBeforeRender) {
-            origOnBeforeRender.call(this, renderer, renderScene, camera, geometry, material, group);
+            try {
+              origOnBeforeRender.call(this, renderer, renderScene, camera, geometry, material, group);
+            } catch (e) {}
           }
-          if (self.planeGroup && self.shaderUniforms) {
-            meshToPlaneMat.multiplyMatrices(self.planeGroup.matrixWorldInverse, node.matrixWorld);
-            planeToMeshMat.copy(meshToPlaneMat).invert();
-            self.shaderUniforms.uMeshToPlane.value.copy(meshToPlaneMat);
-            self.shaderUniforms.uPlaneToMesh.value.copy(planeToMeshMat);
+          if (self.planeGroup && self.planeGroup.matrixWorld && self.shaderUniforms) {
+            try {
+              planeGroupInv.copy(self.planeGroup.matrixWorld).invert();
+              meshToPlaneMat.multiplyMatrices(planeGroupInv, node.matrixWorld);
+              planeToMeshMat.copy(meshToPlaneMat).invert();
+              self.shaderUniforms.uMeshToPlane.value.copy(meshToPlaneMat);
+              self.shaderUniforms.uPlaneToMesh.value.copy(planeToMeshMat);
+            } catch (e) {}
           }
         };
 
@@ -511,6 +533,7 @@
               `
             );
           };
+          m.needsUpdate = true;
         });
       });
     }
@@ -1014,6 +1037,7 @@
 
     this.customGLBModel = scene;
     this.planeGroup.add(scene);
+    this.planeGroup.updateMatrixWorld(true);
 
     // ★ 통합 무빙 파츠 컨트롤러 장착 (제어평면 셰이더, 기어 수납/전개, 터보팬 팬 회전)
     this.glbMovingPartsController = new GLBMovingPartsController({
