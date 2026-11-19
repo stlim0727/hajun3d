@@ -1,8 +1,11 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
 
 const files = [
   'a320.glb',
+  'a320_detailed.glb',
+  'a320_simplified.glb',
   'b747.glb',
   'dc10.glb',
   'md80.glb',

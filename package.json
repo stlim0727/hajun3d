@@ -16,7 +16,9 @@
     "screens:capture:portrait": "node scripts/capture-all-ui-screens.mjs --viewport mobile-portrait",
     "screens:capture:landscape": "node scripts/capture-all-ui-screens.mjs --viewport mobile-landscape",
     "test:ui-screens": "node scripts/capture-all-ui-screens.mjs --tier core --verify",
-    "glb:simplify": "node scripts/simplify_glb.mjs"
+    "glb:simplify": "node scripts/simplify_glb.mjs",
+    "glb:verify": "node scripts/verify_glb.js",
+    "build:a320": "node scripts/build_a320_models.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

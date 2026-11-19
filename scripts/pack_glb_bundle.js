@@ -9,6 +9,7 @@ const modelsDir = path.join(__dirname, '..', 'web', 'models');
 const modelKeys = {
   // Aircraft
   a320: 'a320.glb',
+  a320_simplified: 'a320_simplified.glb',
   b747: 'b747.glb',
   dc10: 'dc10.glb',
   md80: 'md80.glb',

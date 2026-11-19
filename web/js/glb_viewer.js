@@ -9,7 +9,9 @@
 
   const MODEL_CATALOG = [
     // Aircraft
-    { id: 'a320', name: 'Airbus A320', category: 'aircraft', icon: '✈️', desc: '쌍발 협동체 제트 여객기 (기본 기체)', file: 'a320.glb' },
+    { id: 'a320', name: 'Airbus A320 (표준형)', category: 'aircraft', icon: '✈️', desc: '쌍발 협동체 제트 여객기 (기본 기체)', file: 'a320.glb' },
+    { id: 'a320_detailed', name: 'Airbus A320-200 (고정밀 실물)', category: 'aircraft', icon: '✈️', desc: '고정밀 실물 스케일 정밀 3D CAD/PBR 모델 (73.2만 폴리곤, 16.5MB)', file: 'a320_detailed.glb' },
+    { id: 'a320_simplified', name: 'Airbus A320-200 (경량 최적화)', category: 'aircraft', icon: '✈️', desc: 'Meshoptimizer QEM 데시메이션 경량 실물 모델 (2.1만 폴리곤, 599KB)', file: 'a320_simplified.glb' },
     { id: 'b747', name: 'Boeing 747-400', category: 'aircraft', icon: '🛫', desc: '4발 점보 광동체 여객기', file: 'b747.glb' },
     { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기 (실물 비례 로우폴리 최적화 모델)', file: 'dc10.glb' },
     { id: 'md80', name: 'McDonnell Douglas MD-80', category: 'aircraft', icon: '✈️', desc: '리어 엔진 T-테일 쌍발 제트기', file: 'md80.glb' },
