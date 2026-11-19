@@ -138,7 +138,7 @@
     });
 
     // 모든 기종 백그라운드 프리페치 유지 (기종 변경 즉시 반응)
-    ['a320', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'].forEach(m => {
+    ['a320', 'a350', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'].forEach(m => {
       if (!this.glbBuffers[m]) {
         fetch(`models/${m}.glb`)
           .then(r => r.ok ? r.arrayBuffer() : null)
@@ -301,7 +301,19 @@
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
-    const targetLength = (this.currentPlaneType === 'ancestor') ? 14.0 : 38.0;
+    const targetLengths = {
+      a320: 37.6,
+      a320_detailed: 37.6,
+      a320_simplified: 37.6,
+      a350: 66.8,
+      b747: 70.6,
+      dc10: 55.5,
+      md80: 45.1,
+      concorde: 61.7,
+      amphibian: 19.8,
+      ancestor: 12.3
+    };
+    const targetLength = targetLengths[this.currentPlaneType] || (this.currentPlaneType === 'ancestor' ? 14.0 : 38.0);
     const scale = targetLength / (maxDim || 1.0);
     scene.scale.set(scale, scale, scale);
 
@@ -311,7 +323,11 @@
       ? (-box.min.y * scale - 4.05)
       : (-center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2));
     scene.position.z = -center.z * scale;
-    scene.rotation.set(0, 0, 0);
+    if (this.currentPlaneType === 'a320' || this.currentPlaneType === 'a320_simplified' || this.currentPlaneType === 'a320_detailed' || this.currentPlaneType === 'a350') {
+      scene.rotation.set(0, Math.PI, 0);
+    } else {
+      scene.rotation.set(0, 0, 0);
+    }
 
     scene.traverse((node) => {
       if (node.name) {
@@ -356,6 +372,21 @@
       }
     });
 
+    this.glbGearMaterials = [];
+    if (this.currentPlaneType === 'a320' || this.currentPlaneType === 'a320_simplified') {
+      scene.traverse((node) => {
+        if (node.isMesh && node.material) {
+          const mats = Array.isArray(node.material) ? node.material : [node.material];
+          mats.forEach((m) => {
+            if (/Material\.(034|036|037|040|042|044|045|049|050)$/i.test(m.name || '')) {
+              this.glbGearMaterials.push(m);
+              m.visible = (this.gearExtended !== false);
+            }
+          });
+        }
+      });
+    }
+
     if (animations && animations.length > 0 && typeof THREE.AnimationMixer !== 'undefined') {
       this.glbMixer = new THREE.AnimationMixer(scene);
       this.glbGearAction = this.glbMixer.clipAction(animations[0]);
@@ -372,6 +403,10 @@
 
     if (typeof this.attachAircraftNavLights === 'function') {
       this.attachAircraftNavLights(this.currentPlaneType || 'dc10');
+    }
+
+    if (typeof this.attachGLBMovingParts === 'function') {
+      this.attachGLBMovingParts(this.currentPlaneType || 'a320');
     }
 
     this.planeGroup.updateMatrixWorld(true);
@@ -392,6 +427,7 @@
     } else {
       const fallbackByType = {
         a320: [[-5.06, -1.5, 1.8], [5.06, -1.5, 1.8]],
+        a350: [[-9.8, -2.1, 2.8], [9.8, -2.1, 2.8]],
         b747: [[-11.5, -1.4, -0.5], [-6.2, -1.8, 2.2], [6.2, -1.8, 2.2], [11.5, -1.4, -0.5]],
         dc10: [[-6.8, -1.8, 2.2], [0, 3.6, 13.5], [6.8, -1.8, 2.2]],
         md80: [[-2.6, 0.5, 13.0], [2.6, 0.5, 13.0]],
@@ -440,6 +476,7 @@
       a320: 'A320 제트기',
       a320_detailed: 'A320-200 실물 고정밀',
       a320_simplified: 'A320-200 경량 최적화',
+      a350: 'A350-900 XWB',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
       amphibian: 'CL-215 수륙양용기',

@@ -14,7 +14,7 @@ test('validates aircraft aerodynamic specs from config.js', () => {
   const getSpecs = sandbox.AirplaneGame.prototype.getAircraftSpecs;
   assert.equal(typeof getSpecs, 'function', 'getAircraftSpecs should be attached to AirplaneGame.prototype');
 
-  const requiredTypes = ['a320', 'b737', 'b738', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'];
+  const requiredTypes = ['a320', 'a350', 'b737', 'b738', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'];
 
   for (const type of requiredTypes) {
     const spec = getSpecs(type);
@@ -50,4 +50,51 @@ test('validates DC-10 and airliner rudder hinge rotation axis alignment in aircr
 
   assert.ok(Math.abs(pivotPos[1] - expectedPivotY) < 0.05, `DC-10 rudderPivot Y (${pivotPos[1]}) must match trailing edge Y (${expectedPivotY.toFixed(2)})`);
   assert.ok(Math.abs(pivotPos[2] - expectedPivotZ) < 0.05, `DC-10 rudderPivot Z (${pivotPos[2]}) must match trailing edge Z (${expectedPivotZ.toFixed(2)})`);
+});
+
+test('validates A350 specifications and in-game placement directly after A320', () => {
+  const configCode = readFileSync('web/js/config.js', 'utf8');
+  const indexHtml = readFileSync('web/index.html', 'utf8');
+  const gameJs = readFileSync('web/game.js', 'utf8');
+
+  const sandbox = { AirplaneGame: { prototype: {} } };
+  vm.createContext(sandbox);
+  vm.runInContext(configCode, sandbox);
+
+  const spec = sandbox.AirplaneGame.prototype.getAircraftSpecs('a350');
+  assert.ok(spec, 'A350 spec must exist');
+  assert.equal(spec.name, 'Airbus A350-900 XWB');
+  assert.equal(spec.mtowKg, 280000, 'A350 MTOW should be 280,000 kg');
+  assert.equal(spec.wingSpan, 64.75, 'A350 wingspan should be 64.75 m');
+  assert.equal(spec.wingArea, 442.0, 'A350 wing area should be 442 m²');
+  assert.equal(spec.numEngines, 2, 'A350 is twin-engine');
+  assert.equal(spec.maxThrust, 749000, 'A350 twin Trent XWB total thrust should be 749 kN');
+
+  // Verify UI selector order: select-a350 must be right after select-a320
+  const a320Idx = indexHtml.indexOf('id="select-a320"');
+  const a350Idx = indexHtml.indexOf('id="select-a350"');
+  const b747Idx = indexHtml.indexOf('id="select-b747"');
+
+  assert.ok(a320Idx !== -1, 'select-a320 button must exist');
+  assert.ok(a350Idx !== -1, 'select-a350 button must exist');
+  assert.ok(a350Idx > a320Idx && a350Idx < b747Idx, 'select-a350 button must be immediately after select-a320');
+
+  // Verify nextPlane cycle array has a350 right after a320
+  assert.ok(gameJs.includes("'a320', 'a350'"), 'window.nextPlane must place a350 directly after a320');
+});
+
+test('validates in-game A320 uses simplified GLB binary and moving parts are attached', () => {
+  const a320Buf = readFileSync('web/models/a320.glb');
+  const simplifiedBuf = readFileSync('web/models/a320_simplified.glb');
+
+  assert.equal(a320Buf.length, simplifiedBuf.length, 'In-game web/models/a320.glb must be replaced with a320_simplified.glb');
+  assert.ok(a320Buf.length > 2000 * 1024, 'a320.glb must be the full manifold simplified CAD model (>2MB)');
+
+  const builderCode = readFileSync('web/js/aircraft_builder.js', 'utf8');
+  assert.ok(builderCode.includes('attachGLBMovingParts'), 'aircraft_builder must define attachGLBMovingParts');
+  assert.ok(builderCode.includes('createGLBLandingGear'), 'aircraft_builder must define createGLBLandingGear');
+
+  const pipelineCode = readFileSync('web/js/glb_pipeline.js', 'utf8');
+  assert.ok(pipelineCode.includes('this.attachGLBMovingParts'), 'applyGLBScene must attach moving parts');
+  assert.ok(pipelineCode.includes("scene.rotation.set(0, Math.PI, 0)"), 'applyGLBScene must orient A320/A350 forward');
 });

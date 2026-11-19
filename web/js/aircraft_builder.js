@@ -334,8 +334,8 @@
     });
 
     // 4. 항공사 정식 브랜드 레터링 & 등록 부호 (Airline Titles & Tail Number)
-    const regCode = (type === 'b747') ? 'HL7472' : (type === 'dc10' ? 'HL7310' : (type === 'md80' ? 'HL7204' : (type === 'a320' ? 'HL8031' : (type === 'concorde' ? 'F-BTSC' : 'RESCUE-01'))));
-    const modelTitle = (type === 'b747') ? 'BOEING 747-400' : (type === 'dc10' ? 'McDONNELL DOUGLAS DC-10' : (type === 'md80' ? 'MD-80 TWIN JET' : (type === 'a320' ? 'AIRBUS A320' : (type === 'concorde' ? 'CONCORDE SST' : 'CANADAIR CL-215'))));
+    const regCode = (type === 'b747') ? 'HL7472' : (type === 'dc10' ? 'HL7310' : (type === 'md80' ? 'HL7204' : (type === 'a320' ? 'HL8031' : (type === 'a350' ? 'HL8500' : (type === 'concorde' ? 'F-BTSC' : 'RESCUE-01')))));
+    const modelTitle = (type === 'b747') ? 'BOEING 747-400' : (type === 'dc10' ? 'McDONNELL DOUGLAS DC-10' : (type === 'md80' ? 'MD-80 TWIN JET' : (type === 'a320' ? 'AIRBUS A320' : (type === 'a350' ? 'AIRBUS A350-900 XWB' : (type === 'concorde' ? 'CONCORDE SST' : 'CANADAIR CL-215')))));
 
     // 좌현(Port, X=1536) 텍스트
     ctx.save();
@@ -2311,6 +2311,7 @@
       dc10: { span: 22.0, wingY: -0.2, wingZ: 0.5, tailY: 7.5, tailZ: 16.5, topY: 3.2, topZ: -2, btmY: -3.1, btmZ: -1 },
       md80: { span: 16.5, wingY: -0.2, wingZ: 0.2, tailY: 6.8, tailZ: 18.5, topY: 2.4, topZ: -2, btmY: -2.4, btmZ: -1 },
       a320: { span: 17.8, wingY: 0.2, wingZ: 0.2, tailY: 6.5, tailZ: 15.5, topY: 2.6, topZ: -2, btmY: -2.6, btmZ: -1 },
+      a350: { span: 32.4, wingY: 0.8, wingZ: -1.0, tailY: 8.8, tailZ: 26.5, topY: 4.2, topZ: -4, btmY: -3.8, btmZ: -2 },
       b747: { span: 32.0, wingY: -0.2, wingZ: 1.0, tailY: 10.5, tailZ: 29.5, topY: 5.2, topZ: -5, btmY: -4.5, btmZ: -2 },
       concorde: { span: 13.5, wingY: -0.2, wingZ: 8.5, tailY: 6.2, tailZ: 26.5, topY: 2.4, topZ: -4, btmY: -2.4, btmZ: -2 },
       amphibian: { span: 16.5, wingY: 3.2, wingZ: 0.5, tailY: 5.8, tailZ: 12.5, topY: 4.2, topZ: -1, btmY: -1.8, btmZ: -1 },
@@ -2357,6 +2358,270 @@
 
     // 초기 표시 여부 (야간에만 켜짐)
     this.aircraftNavLights.forEach(l => l.visible = isNight);
+  },
+
+  // ----------------------------------------------------------------
+  // GLB 기체 전용 랜딩 기어 어셈블리 생성 (수납/전개/조향 피벗 통합)
+  // ----------------------------------------------------------------
+  createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat) {
+    const gearAssembly = new THREE.Group();
+    gearAssembly.position.set(x, y, z);
+
+    const doorLGroup = new THREE.Group();
+    const doorRGroup = new THREE.Group();
+    gearAssembly.add(doorLGroup);
+    gearAssembly.add(doorRGroup);
+
+    const strutPivot = new THREE.Group();
+    strutPivot.position.set(0, 0, 0);
+
+    const mainStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2.6, 12), chromeMat);
+    mainStrut.position.set(0, -1.3, 0);
+    mainStrut.castShadow = true;
+    strutPivot.add(mainStrut);
+
+    let bogieBeamGroup = null;
+
+    if (is4WheelBogie) {
+      bogieBeamGroup = new THREE.Group();
+      bogieBeamGroup.position.set(0, -2.6, 0);
+
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.35, 2.2), chromeMat);
+      beam.castShadow = true;
+      bogieBeamGroup.add(beam);
+
+      [-0.85, 0.85].forEach(axleZ => {
+        const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.0, 10), chromeMat);
+        axle.rotation.z = Math.PI / 2;
+        axle.position.set(0, 0, axleZ);
+        bogieBeamGroup.add(axle);
+
+        [-0.85, 0.85].forEach(wheelX => {
+          const wheelGroup = new THREE.Group();
+          wheelGroup.position.set(wheelX, 0, axleZ);
+
+          const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.48, 16), tireMat);
+          tire.rotation.z = Math.PI / 2;
+          tire.castShadow = true;
+          wheelGroup.add(tire);
+
+          const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.50, 12), chromeMat);
+          hub.rotation.z = Math.PI / 2;
+          wheelGroup.add(hub);
+
+          bogieBeamGroup.add(wheelGroup);
+          this.wheels.push(tire);
+        });
+      });
+
+      strutPivot.add(bogieBeamGroup);
+    } else {
+      const axleGroup = new THREE.Group();
+      axleGroup.position.set(0, -2.6, 0);
+
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, isNose ? 1.4 : 1.8, 10), chromeMat);
+      axle.rotation.z = Math.PI / 2;
+      axleGroup.add(axle);
+
+      const wheelOffset = isNose ? 0.55 : 0.75;
+      [-wheelOffset, wheelOffset].forEach(wheelX => {
+        const wheel = new THREE.Mesh(
+          new THREE.CylinderGeometry(isNose ? 0.65 : 0.78, isNose ? 0.65 : 0.78, isNose ? 0.40 : 0.48, 16),
+          tireMat
+        );
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wheelX, 0, 0);
+        wheel.castShadow = true;
+        axleGroup.add(wheel);
+
+        const hub = new THREE.Mesh(
+          new THREE.CylinderGeometry(isNose ? 0.35 : 0.42, isNose ? 0.35 : 0.42, isNose ? 0.42 : 0.50, 12),
+          chromeMat
+        );
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(wheelX, 0, 0);
+        axleGroup.add(hub);
+
+        this.wheels.push(wheel);
+      });
+
+      strutPivot.add(axleGroup);
+      if (isNose) {
+        this.controlSurfaces.noseWheelGroup = axleGroup;
+      }
+    }
+
+    gearAssembly.add(strutPivot);
+
+    const isDown = (this.gearPhase === 'DOWN' || (this.gearPhase !== 'UP' && this.gearExtended));
+    if (isDown) {
+      strutPivot.rotation.x = 0;
+      strutPivot.visible = true;
+    } else {
+      strutPivot.rotation.x = -Math.PI / 2;
+      strutPivot.visible = false;
+    }
+
+    gearAssembly.userData = {
+      gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
+      damageState: 'normal',
+      strutPivot,
+      doorL: doorLGroup,
+      doorR: doorRGroup,
+      bogieBeam: bogieBeamGroup,
+      isNose,
+      is4WheelBogie,
+      origPos: new THREE.Vector3(x, y, z)
+    };
+
+    return gearAssembly;
+  },
+
+  // ----------------------------------------------------------------
+  // A320 및 A350 GLB 기체 가동 파츠 장착 (터보팬 블레이드, 러더, 엘리베이터, 에일러론, 플랩, 기어)
+  // ----------------------------------------------------------------
+  attachGLBMovingParts(type) {
+    if (type !== 'a320' && type !== 'a350') return;
+
+    this.turbofans = this.turbofans || [];
+    this.wheels = this.wheels || [];
+    this.landingGears = this.landingGears || [];
+    this.glbMovingParts = this.glbMovingParts || { fans: [], rudder: null, flaps: [] };
+    this.glbMovingParts.fans = this.glbMovingParts.fans || [];
+    this.glbMovingParts.flaps = this.glbMovingParts.flaps || [];
+    this.controlSurfaces = this.controlSurfaces || {};
+
+    const isA350 = (type === 'a350');
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.95, roughness: 0.15 });
+    const surfaceMat = new THREE.MeshStandardMaterial({
+      color: isA350 ? 0xf8fafc : 0xf1f5f9,
+      metalness: 0.25,
+      roughness: 0.35,
+      side: THREE.DoubleSide
+    });
+    const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9, metalness: 0.1 });
+
+    // 1. 실제 회전 티타늄 터보팬 블레이드 & 중앙 스파이럴 콘 (Twin Turbofans)
+    const engineDefs = isA350
+      ? { radius: 1.45, blades: 22, leftX: -9.8, rightX: 9.8, y: -2.1, z: -1.2 }
+      : { radius: 0.85, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 };
+
+    [engineDefs.leftX, engineDefs.rightX].forEach(x => {
+      const fan = this.createTurbofanFan(engineDefs.radius, engineDefs.blades, chromeMat);
+      fan.position.set(x, engineDefs.y, engineDefs.z);
+      this.planeGroup.add(fan);
+      this.turbofans.push(fan);
+      this.glbMovingParts.fans.push(fan);
+    });
+
+    // 2. 가동 방향타 (Movable Rudder on Vertical Fin)
+    const rudderDefs = isA350
+      ? { x: 0, y: 7.2, z: 24.8, sweep: -0.34, h: 8.8, w: 0.42, chord: 2.2 }
+      : { x: 0, y: 5.4, z: 14.8, sweep: -0.34, h: 5.8, w: 0.32, chord: 1.6 };
+
+    const rudderPivot = new THREE.Group();
+    rudderPivot.position.set(rudderDefs.x, rudderDefs.y, rudderDefs.z);
+    rudderPivot.rotation.x = rudderDefs.sweep;
+
+    const rudderMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(rudderDefs.w, rudderDefs.h, rudderDefs.chord),
+      surfaceMat
+    );
+    rudderMesh.position.set(0, 0, rudderDefs.chord * 0.5);
+    rudderMesh.castShadow = true;
+    rudderPivot.add(rudderMesh);
+    rudderPivot.userData.baseRotY = 0;
+
+    this.planeGroup.add(rudderPivot);
+    this.controlSurfaces.rudder = rudderPivot;
+    this.glbMovingParts.rudder = rudderPivot;
+
+    // 3. 가동 승강타 (Movable Elevators on Horizontal Stabilizer)
+    const elevDefs = isA350
+      ? { span: 8.2, xOff: 9.0, y: 3.5, z: 27.5, chord: 1.5, thickness: 0.28 }
+      : { span: 5.2, xOff: 4.6, y: 2.4, z: 15.6, chord: 1.1, thickness: 0.22 };
+
+    [-1, 1].forEach(sign => {
+      const elevPivot = new THREE.Group();
+      elevPivot.position.set(sign * elevDefs.xOff, elevDefs.y, elevDefs.z);
+
+      const elevMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(elevDefs.span, elevDefs.thickness, elevDefs.chord),
+        surfaceMat
+      );
+      elevMesh.position.set(0, 0, elevDefs.chord * 0.5);
+      elevMesh.castShadow = true;
+      elevPivot.add(elevMesh);
+
+      this.planeGroup.add(elevPivot);
+      if (sign < 0) this.controlSurfaces.leftElevator = elevPivot;
+      else this.controlSurfaces.rightElevator = elevPivot;
+    });
+
+    // 4. 가동 에일러론 (Movable Ailerons on Outboard Wings)
+    const aileronDefs = isA350
+      ? { span: 7.8, xOff: 24.5, y: 1.2, z: 3.6, chord: 1.2, thickness: 0.22, sweepY: -0.36 }
+      : { span: 4.8, xOff: 13.2, y: 0.5, z: 2.2, chord: 0.85, thickness: 0.18, sweepY: -0.34 };
+
+    [-1, 1].forEach(sign => {
+      const aileronPivot = new THREE.Group();
+      aileronPivot.position.set(sign * aileronDefs.xOff, aileronDefs.y, aileronDefs.z);
+
+      const aileronMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(aileronDefs.span, aileronDefs.thickness, aileronDefs.chord),
+        surfaceMat
+      );
+      aileronMesh.position.set(0, 0, aileronDefs.chord * 0.5);
+      aileronMesh.rotation.y = -sign * aileronDefs.sweepY;
+      aileronMesh.castShadow = true;
+      aileronPivot.add(aileronMesh);
+
+      this.planeGroup.add(aileronPivot);
+      if (sign < 0) this.controlSurfaces.leftAileron = aileronPivot;
+      else this.controlSurfaces.rightAileron = aileronPivot;
+    });
+
+    // 5. 가동 플랩 (Movable Flaps on Inboard Wings)
+    const flapDefs = isA350
+      ? { span: 10.5, xOff: 12.0, y: 0.4, z: 4.8, chord: 1.8, thickness: 0.26 }
+      : { span: 5.8, xOff: 6.8, y: 0.2, z: 2.8, chord: 1.2, thickness: 0.20 };
+
+    [-1, 1].forEach(sign => {
+      const flapPivot = new THREE.Group();
+      flapPivot.position.set(sign * flapDefs.xOff, flapDefs.y, flapDefs.z);
+
+      const flapMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(flapDefs.span, flapDefs.thickness, flapDefs.chord),
+        surfaceMat
+      );
+      flapMesh.position.set(0, -flapDefs.thickness * 0.5, flapDefs.chord * 0.5);
+      flapMesh.castShadow = true;
+      flapPivot.add(flapMesh);
+      flapPivot.userData.baseRotX = 0;
+
+      this.planeGroup.add(flapPivot);
+      this.glbMovingParts.flaps.push(flapPivot);
+    });
+
+    // 6. 착륙장치 (Landing Gear & Steerable Wheels)
+    const gearDefs = isA350
+      ? {
+          nose: { x: 0, y: -2.4, z: -22.5, isNose: true, is4Wheel: false },
+          mainL: { x: -5.8, y: -2.6, z: 2.2, isNose: false, is4Wheel: true },
+          mainR: { x: 5.8, y: -2.6, z: 2.2, isNose: false, is4Wheel: true }
+        }
+      : {
+          nose: { x: 0, y: -1.6, z: -12.5, isNose: true, is4Wheel: false },
+          mainL: { x: -3.8, y: -1.8, z: 1.0, isNose: false, is4Wheel: false },
+          mainR: { x: 3.8, y: -1.8, z: 1.0, isNose: false, is4Wheel: false }
+        };
+
+    const gearAssemblies = [gearDefs.nose, gearDefs.mainL, gearDefs.mainR];
+    gearAssemblies.forEach(g => {
+      const gearObj = this.createGLBLandingGear(g.x, g.y, g.z, g.isNose, g.is4Wheel, chromeMat, tireMat);
+      this.planeGroup.add(gearObj);
+      this.landingGears.push(gearObj);
+    });
   }
 
   });

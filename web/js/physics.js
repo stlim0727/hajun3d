@@ -228,11 +228,19 @@
       gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
     }
 
+    if (this.glbGearMaterials && this.glbGearMaterials.length > 0) {
+      const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
+      this.glbGearMaterials.forEach(m => { m.visible = isVis; });
+    }
+
     // 시퀀스 완료 처리
     if (progress >= 1.0) {
       if (isExtending) {
         this.gearPhase = 'DOWN';
         this.gearExtended = true;
+        if (this.glbGearMaterials) {
+          this.glbGearMaterials.forEach(m => { m.visible = true; });
+        }
         if (this.glbMixer && this.glbGearAction) {
           this.glbGearAction.time = this.glbGearDuration || 1.0;
           this.glbMixer.update(0);
@@ -261,6 +269,9 @@
       } else {
         this.gearPhase = 'UP';
         this.gearExtended = false;
+        if (this.glbGearMaterials) {
+          this.glbGearMaterials.forEach(m => { m.visible = false; });
+        }
         if (this.glbMixer && this.glbGearAction) {
           this.glbGearAction.time = 0;
           this.glbMixer.update(0);

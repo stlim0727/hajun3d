@@ -35,7 +35,7 @@ window.nextPlane = function() {
   if (!debounceAction('nextPlane', 200)) return;
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame) {
-    const aircraftTypes = ['dc10', 'md80', 'a320', 'b747', 'concorde', 'amphibian', 'ancestor'];
+    const aircraftTypes = ['dc10', 'md80', 'a320', 'a350', 'b747', 'concorde', 'amphibian', 'ancestor'];
     const curIdx = aircraftTypes.indexOf(window.airplaneGame.currentPlaneType);
     const nextIdx = (curIdx + 1) % aircraftTypes.length;
     window.airplaneGame.switchAircraft(aircraftTypes[nextIdx]);
