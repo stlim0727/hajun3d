@@ -47,11 +47,16 @@
     }
 
     static get AIRCRAFT_DEFS() {
+      // Trailing-edge hinges in normalized aircraft coordinates (meters).
+      const a320Wing = {
+        wingParams: [2.6, 8.5, 16.4, 6.55],
+        wingProfile: [0.27, 0.31, -1.85, 0.9]
+      };
       return {
         a320: {
           rudderParams: [16.2, 25.0, 2.0, 1.35],
           elevParams:   [15.2, 25.0, 1.2, 2.10],
-          wingParams:   [8.5, 17.5, 1.2, 0.42],
+          ...a320Wing,
           hasBuiltInGear: true,
           gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
           fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
@@ -59,7 +64,7 @@
         a320_simplified: {
           rudderParams: [16.2, 25.0, 2.0, 1.35],
           elevParams:   [15.2, 25.0, 1.2, 2.10],
-          wingParams:   [8.5, 17.5, 1.2, 0.42],
+          ...a320Wing,
           hasBuiltInGear: true,
           gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
           fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
@@ -67,7 +72,7 @@
         a320_detailed: {
           rudderParams: [16.2, 25.0, 2.0, 1.35],
           elevParams:   [15.2, 25.0, 1.2, 2.10],
-          wingParams:   [8.5, 17.5, 1.2, 0.42],
+          ...a320Wing,
           hasBuiltInGear: true,
           gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
           fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
@@ -75,7 +80,8 @@
         a350: {
           rudderParams: [22.0, 33.5, 5.0, 1.29],
           elevParams:   [26.5, 33.5, 1.8, 0.65],
-          wingParams:   [16.0, 32.0, 3.5, 0.55],
+          wingParams:   [4.0, 16.0, 32.0, 5.15],
+          wingProfile:  [0.34, 0.31, -1.5, 5.0],
           hasBuiltInGear: false,
           fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
           gearDefs: {
@@ -85,16 +91,19 @@
           }
         },
         dc10: {
-          rudderParams: [22.5, 27.8, 5.0, 0.45],
-          elevParams:   [23.0, 27.8, 2.0, 0.85],
-          wingParams:   [13.0, 25.0, 6.0, 0.42],
+          rudderParams: [22.45, 26.6, 6.05, 0.43],
+          elevParams:   [20.0, 26.0, 2.0, 0.43],
+          wingParams:   [2.7, 12.7, 25.4, 7.1],
+          wingProfile:  [0.34, 0.46, -3.5, 0.0],
+          surfaceMaterials: { rudder: 'Body_Purple', elevator: 'Metal_Rear_Wings', wing: 'Metal_Wings' },
           hasBuiltInGear: true,
           hasRiggedAnimation: true
         },
         amphibian: {
           rudderParams: [5.3, 6.6, -4.5, 0.10],
           elevParams:   [5.8, 6.6, 2.0, 0.15],
-          wingParams:   [6.5, 14.0, -1.0, 0.12],
+          wingParams:   [2.8, 6.3, 9.95, -0.76],
+          wingProfile:  [0.0, 0.19, -2.1, -1.55],
           hasBuiltInGear: true
         }
       };
@@ -399,7 +408,8 @@
         uFlap:     { value: 0.0 },
         uRudderParams: { value: new THREE.Vector4(...def.rudderParams) },
         uElevParams:   { value: new THREE.Vector4(...def.elevParams) },
-        uWingParams:   { value: new THREE.Vector4(...def.wingParams) }
+        uWingParams:   { value: new THREE.Vector4(...def.wingParams) },
+        uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) }
       };
 
       const meshToPlaneMat = new THREE.Matrix4();
@@ -440,8 +450,17 @@
         mats.forEach((m) => {
           if (def.gearMaterialRegex && def.gearMaterialRegex.test(m.name || '')) return;
 
+          const surfaces = def.surfaceMaterials;
+          const surfaceMask = new THREE.Vector3(
+            Number(!surfaces || m.name === surfaces.rudder),
+            Number(!surfaces || m.name === surfaces.elevator),
+            Number(!surfaces || m.name === surfaces.wing)
+          );
+          if (surfaceMask.lengthSq() === 0) return;
+
           m.onBeforeCompile = (shader) => {
             Object.assign(shader.uniforms, self.shaderUniforms);
+            shader.uniforms.uSurfaceMask = { value: surfaceMask };
 
             shader.vertexShader = shader.vertexShader.replace(
               '#include <common>',
@@ -456,6 +475,8 @@
               uniform vec4 uRudderParams;
               uniform vec4 uElevParams;
               uniform vec4 uWingParams;
+              uniform vec4 uWingProfile;
+              uniform vec3 uSurfaceMask;
               `
             );
 
@@ -473,7 +494,7 @@
               float _rSweep = uRudderParams.w;
               float _zRudderHinge = _rZBase + max(0.0, _planeP.y - _rYBase) * _rSweep;
 
-              if (_planeP.z > _zRudderHinge && _planeP.z <= _rZMax &&
+              if (uSurfaceMask.x > 0.5 && _planeP.z > _zRudderHinge && _planeP.z <= _rZMax &&
                   _planeP.y >= _rYBase && abs(_planeP.x) < 0.95) {
                 float dist = _planeP.z - _zRudderHinge;
                 // Narrow blend across hinge line to prevent skin tearing; rigid rotation across panel
@@ -494,7 +515,7 @@
               float _absX = abs(_planeP.x);
               float _zElevHinge = _eZBase + max(0.0, _absX - _eXBase) * _eSweep;
 
-              if (!_deflected && _planeP.z > _zElevHinge && _planeP.z <= _eZMax &&
+              if (!_deflected && uSurfaceMask.y > 0.5 && _planeP.z > _zElevHinge && _planeP.z <= _eZMax &&
                   _absX >= _eXBase && _absX <= (_eXBase + 8.5) &&
                   _planeP.y < 8.0 && _planeP.y > -3.5) {
                 float dist = _planeP.z - _zElevHinge;
@@ -506,32 +527,23 @@
                 _deflected = true;
               }
 
-              // 3. Aileron Deflection (Rear Spar Rigid Planar Rotation)
-              // uWingParams: [xMin, xMax, zRootSpar, sweepSlope]
-              if (!_deflected && _absX >= uWingParams.x && _absX <= uWingParams.y) {
-                float zSpar = uWingParams.z + (_absX - uWingParams.x) * uWingParams.w;
-                float dist = _planeP.z - zSpar;
-                if (dist > 0.0 && dist < 4.2 && _planeP.y < 5.0 && _planeP.y > -3.5) {
-                  float weight = smoothstep(0.0, 0.12, dist);
-                  float ailDef = (_planeP.x < 0.0) ? uAileronL : uAileronR;
-                  float angle = ailDef * weight;
-                  float arm = dist;
-                  _planeP.y += arm * sin(angle);
-                  _planeP.z = zSpar + arm * cos(angle);
-                  _deflected = true;
-                }
-              }
-
-              // 4. Flap Deflection (Inboard Wing Trailing Edge Rigid Extension)
-              if (!_deflected && _absX >= 1.8 && _absX < uWingParams.x && uFlap > 0.001) {
-                float zFlapSpar = uWingParams.z + (_absX - 1.8) * (uWingParams.w * 0.85);
-                float dist = _planeP.z - zFlapSpar;
-                if (dist > 0.0 && dist < 5.0 && _planeP.y < 5.0 && _planeP.y > -3.5) {
-                  float weight = smoothstep(0.0, 0.12, dist);
-                  float angle = uFlap * weight;
-                  float arm = dist;
-                  _planeP.y -= arm * sin(angle);
-                  _planeP.z = zFlapSpar + arm * cos(angle);
+              // 3. Wing trailing edge: [flapStart, split, aileronEnd, zAtSplit]
+              // Profile: [inboardSweep, outboardSweep, yMin, yMax]
+              if (!_deflected && uSurfaceMask.z > 0.5 &&
+                  _absX >= uWingParams.x && _absX <= uWingParams.z &&
+                  _planeP.y > uWingProfile.z && _planeP.y < uWingProfile.w) {
+                float fromSplit = _absX - uWingParams.y;
+                float sweep = fromSplit < 0.0 ? uWingProfile.x : uWingProfile.y;
+                float zHinge = uWingParams.w + fromSplit * sweep;
+                float chord = _planeP.z - zHinge;
+                if (chord > 0.0 && chord < 3.0) {
+                  // Keep a 0.4 m neutral strip and taper both panels into the shared skin.
+                  float spanWeight = smoothstep(0.20, 0.75, abs(fromSplit));
+                  float deflection = fromSplit < 0.0 ? -uFlap :
+                    (_planeP.x < 0.0 ? uAileronL : uAileronR);
+                  float angle = deflection * spanWeight * smoothstep(0.0, 0.12, chord);
+                  _planeP.y += chord * sin(angle);
+                  _planeP.z = zHinge + chord * cos(angle);
                   _deflected = true;
                 }
               }
@@ -624,12 +636,13 @@
         const t = this.demoTime;
 
         // 1. 연속 제어평면 시험 가동 (에일러론 롤, 승강타 피치, 방향타 요)
-        const ail = 0.35 * Math.sin(1.8 * t);
         const elev = 0.32 * Math.sin(1.4 * t + 0.8);
         const rud = 0.30 * Math.sin(1.1 * t + 1.5);
 
         // 플랩 전개 주기 (16초 주기: 전개 -> 풀 플랩 유지 -> 수납)
-        const flapPhase = (t % 16.0);
+        const flapPhase = t % 16.0;
+        // Complete one roll cycle before the flaps begin to extend.
+        const ail = flapPhase < 4.0 ? 0.35 * Math.sin(flapPhase * Math.PI / 2) : 0.0;
         let flap = 0.0;
         if (flapPhase >= 4.0 && flapPhase < 8.0) {
           flap = ((flapPhase - 4.0) / 4.0) * 0.56;
