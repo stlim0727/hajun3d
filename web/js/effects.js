@@ -768,10 +768,13 @@
         this.speedVignetteEl.style.opacity = '0';
       }
     }
-
     // 4. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
     if (this.oceanTexture) {
       this.oceanTexture.offset.y -= dt * 0.035;
+    }
+    if (this.oceanNormalTexture) {
+      this.oceanNormalTexture.offset.x -= dt * 0.018;
+      this.oceanNormalTexture.offset.y += dt * 0.01;
     }
   },
 

@@ -340,6 +340,16 @@ class AirplaneGame {
 
     this.container.appendChild(this.renderer.domElement);
 
+    // PMREM sky environment map for realistic water/sky reflections
+    const skyScene = new THREE.Scene();
+    const skyGeo = new THREE.SphereGeometry(500, 32, 15);
+    const skyMat = new THREE.MeshBasicMaterial({ color: 0x7ec8e3, side: THREE.BackSide });
+    skyScene.add(new THREE.Mesh(skyGeo, skyMat));
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const envTex = pmrem.fromScene(skyScene, 0, 0.1, 1000, { size: 256 }).texture;
+    pmrem.dispose();
+    this.scene.environment = envTex;
+
     // 비행기 최상위 3D 그룹 초기화 & 씬 추가
     this.planeGroup = new THREE.Group();
     this.scene.add(this.planeGroup);

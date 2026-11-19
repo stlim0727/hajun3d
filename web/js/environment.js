@@ -230,6 +230,60 @@
     tex.anisotropy = 8;
     return tex;
   },
+  createOceanNormalTexture() {
+    // Tangent-space normal map for water surface micro-relief (Bump Mapping).
+    const W = 1024, H = 1024;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Height field (single pass, ~1M sin calls) then central-difference normals.
+    const height = new Float32Array(W * H);
+    const kx1 = 0.018, ky1 = 0.0075;
+    const kx2 = 0.011, ky2 = -0.014;
+    const kx3 = 0.005, ky3 = 0.021;
+    const amp = 0.85;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        height[y * W + x] = amp * (
+          Math.sin(x * kx1 + y * ky1) +
+          Math.sin(x * kx2 + y * ky2) +
+          Math.sin(x * kx3 + y * ky3)
+        );
+      }
+    }
+
+    const img = ctx.createImageData(W, H);
+    const data = img.data;
+    for (let y = 0; y < H; y++) {
+      const ym = (y - 1 + H) % H;
+      const yp = (y + 1) % H;
+      for (let x = 0; x < W; x++) {
+        const xm = (x - 1 + W) % W;
+        const xp = (x + 1) % W;
+        const dx = height[y * W + xp] - height[y * W + xm];
+        const dz = height[yp * W + x] - height[ym * W + x];
+        const len = Math.hypot(dx, dz, 2.0);
+        const nx = -dx / len;
+        const nz = -dz / len;
+        const idx = (y * W + x) * 4;
+        data[idx]     = (nx * 0.5 + 0.5) * 255;
+        data[idx + 1] = 128;
+        data[idx + 2] = (nz * 0.5 + 0.5) * 255;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1200, 1200);
+    tex.anisotropy = 4;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  },
 
   createTerrainCanvasTexture() {
     if (typeof document === 'undefined') return null;
@@ -316,6 +370,7 @@
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(500, 400); // ~100m x 100m 타일
     tex.anisotropy = 8;
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   },
 
@@ -674,6 +729,7 @@
 
     // 모든 공항, 인천공항, 지형/대양/산맥, 해운대 메트로폴리스를 GLB 모델로 즉각 마운트
     this.loadAllRealGLBModels();
+    this.enhanceWaterMaterials();
   },
 
   initCollisionBoxes() {
@@ -1201,16 +1257,71 @@
     return geo;
   },
 
+  // ----------------------------------------------------------------
+  // ----------------------------------------------------------------
+  // 2-D. GLB 해양/수면 재질 업그레이드 (Upgrade GLB water meshes to MeshPhysicalMaterial)
+  // ----------------------------------------------------------------
+  enhanceWaterMaterials() {
+    if (!this.scene) return;
+    const normalTex = this.createOceanNormalTexture();
+    this.waterMaterials = [];
+    this.scene.traverse(obj => {
+      if (!obj.isMesh || !obj.material) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      let changed = false;
+      for (let i = 0; i < mats.length; i++) {
+        const old = mats[i];
+        if (!old) continue;
+        const name = ((old && old.name) || '') + ' ' + (obj.name || '');
+        if (/ocean|sea|water/i.test(name)) {
+          const enhanced = new THREE.MeshPhysicalMaterial({
+            color: old.color ? old.color.clone() : new THREE.Color(0x0284c7),
+            map: old.map || null,
+            normalMap: normalTex,
+            normalScale: new THREE.Vector2(0.9, 0.9),
+            roughness: 0.06,
+            metalness: 0.0,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.05,
+            specular: 0x66ccff,
+            specularIntensity: 1.15,
+            ior: 1.33,
+            transmission: 0.0,
+            envMapIntensity: 0.55,
+            reflectivity: 0.55,
+            polygonOffset: true,
+            polygonOffsetFactor: 2,
+            polygonOffsetUnits: 2
+          });
+          mats[i] = enhanced;
+          this.waterMaterials.push(enhanced);
+          changed = true;
+        }
+      }
+      if (changed) {
+        obj.material = Array.isArray(obj.material) ? mats : mats[0];
+      }
+    });
+    if (this.waterMaterials.length > 0) this.oceanMaterial = this.waterMaterials[0];
+  },
+
   initTerrainAndSky() {
     // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5, 대륙 영역[-25000..25000, -68000..-28000]과 비중첩 분할로 원거리 Z-Fighting 원천 차단)
     this.oceanTexture = this.createOceanCanvasTexture();
-    this.oceanMaterial = new THREE.MeshStandardMaterial({
+    this.oceanNormalTexture = this.createOceanNormalTexture();
+    this.oceanMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       map: this.oceanTexture,
-      bumpMap: this.oceanTexture,
-      bumpScale: 0.45,
-      roughness: 0.20,
-      metalness: 0.25,
+      normalMap: this.oceanNormalTexture,
+      normalScale: new THREE.Vector2(0.9, 0.9),
+      roughness: 0.06,
+      metalness: 0.0,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05,
+      specular: 0x66ccff,
+      specularIntensity: 1.15,
+      ior: 1.33,
+      transmission: 0.0,
       polygonOffset: true,
       polygonOffsetFactor: 2,
       polygonOffsetUnits: 2
