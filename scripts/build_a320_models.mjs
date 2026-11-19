@@ -65,9 +65,9 @@ try {
   applyA320Transform(detailedRaw, detailedFinal);
   console.log(`✅ A320 Detailed Model created: ${detailedFinal} (${(readFileSync(detailedFinal).length / 1024).toFixed(1)} KB)`);
 
-  // 2. Simplified Model: Meshoptimizer QEM decimation (-r 0.03, ~21k tris)
-  console.log('📦 Generating A320 Simplified Model (QEM decimation -r 0.03)...');
-  execSync(`npx -y gltfpack -i "${inputPath}" -o "${simplifiedRaw}" -si 0.03 -sa -noq -mm`, { stdio: 'inherit' });
+  // 2. Simplified Model: Meshoptimizer QEM decimation with border locking (-slb), manifold protection (no -sa)
+  console.log('📦 Generating A320 Simplified Model (QEM decimation -si 0.05 -slb)...');
+  execSync(`npx -y gltfpack -i "${inputPath}" -o "${simplifiedRaw}" -si 0.05 -slb -noq -mm`, { stdio: 'inherit' });
   applyA320Transform(simplifiedRaw, simplifiedFinal);
   console.log(`✅ A320 Simplified Model created: ${simplifiedFinal} (${(readFileSync(simplifiedFinal).length / 1024).toFixed(1)} KB)`);
 

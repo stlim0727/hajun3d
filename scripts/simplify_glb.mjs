@@ -63,7 +63,9 @@ export function simplifyGLB({
   outputPath,
   ratio = 0.025,
   mergeMeshes = true,
-  faceted = false
+  faceted = false,
+  aggressive = false,
+  lockBorders = true
 }) {
   const inResolved = resolve(inputPath);
   const outResolved = resolve(outputPath);
@@ -76,12 +78,13 @@ export function simplifyGLB({
   console.log(`📦 Input Model: ${basename(inResolved)}`);
   console.log(`   • Size: ${before.fileSizeKB} KB | Triangles: ${before.triangles.toLocaleString()} | Vertices: ${before.vertices.toLocaleString()} | Draw Calls: ${before.primitives}`);
 
-  // Construct gltfpack options
+  // Construct gltfpack options with border locking to prevent gaps/holes
   const flags = [
     `-i "${inResolved}"`,
     `-o "${outResolved}"`,
     `-si ${ratio}`,
-    '-sa',   // Aggressive reach to target ratio for low-poly styling
+    lockBorders ? '-slb' : '', // Lock border vertices to avoid holes on thin aerodynamic surfaces
+    aggressive ? '-sa' : '',   // Only allow aggressive tearing if explicitly requested
     '-noq',  // Standard non-quantized glTF binary for 100% Three.js compatibility
     mergeMeshes ? '-mm' : '', // Merge primitives sharing same material
     faceted ? '-gn 0' : ''    // Crease angle 0 for faceted flat shading

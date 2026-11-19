@@ -340,6 +340,14 @@
             m.roughness = Math.max(0.15, Math.min(0.35, m.roughness || 0.28));
             m.metalness = Math.min(0.85, m.metalness || 0.25);
             m.side = THREE.DoubleSide;
+            const nameLower = (m.name || '').toLowerCase();
+            const isWindowOrDecal = /window|glass|cockpit|windshield|decal|strip/i.test(nameLower) ||
+              /Material\.(005|007|008|010|016|027|051|052)$/i.test(m.name || '');
+            if (isWindowOrDecal) {
+              m.polygonOffset = true;
+              m.polygonOffsetFactor = -2.0;
+              m.polygonOffsetUnits = -4.0;
+            }
             if (m.transparent) m.depthWrite = true;
             if (m.transmission > 0) m.transmission = 0;
             m.needsUpdate = true;

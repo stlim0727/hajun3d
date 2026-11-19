@@ -57,8 +57,14 @@ test('a320_detailed and a320_simplified are valid GLB 2.0 binaries with realisti
   }
 
   assert.ok(detailedTris > 700000, `Detailed model should preserve >700k tris (got ${detailedTris})`);
-  assert.ok(simplifiedTris > 15000 && simplifiedTris < 30000, `Simplified model should be 15k-30k tris (got ${simplifiedTris})`);
-  assert.ok(simplified.fileSize < 1000 * 1024, `Simplified model should be under 1MB (got ${(simplified.fileSize / 1024).toFixed(1)} KB)`);
+  assert.ok(simplifiedTris > 50000 && simplifiedTris < 150000, `Simplified model should be 50k-150k tris (got ${simplifiedTris})`);
+  assert.ok(simplified.fileSize < 4000 * 1024, `Simplified model should be under 4MB (got ${(simplified.fileSize / 1024).toFixed(1)} KB)`);
+});
+
+test('glb_viewer enables logarithmicDepthBuffer and polygonOffset to prevent window flickering', () => {
+  const viewerJs = readFileSync('web/js/glb_viewer.js', 'utf8');
+  assert.ok(viewerJs.includes('logarithmicDepthBuffer: true'), 'Viewer must enable logarithmicDepthBuffer for sub-millimeter depth accuracy');
+  assert.ok(viewerJs.includes('polygonOffset = true'), 'Viewer must apply polygonOffset to eliminate window flickering');
 });
 
 test('a320_simplified is packed into offline GLB_BUNDLE for instant loading', () => {

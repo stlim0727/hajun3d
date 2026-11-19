@@ -11,7 +11,7 @@
     // Aircraft
     { id: 'a320', name: 'Airbus A320 (표준형)', category: 'aircraft', icon: '✈️', desc: '쌍발 협동체 제트 여객기 (기본 기체)', file: 'a320.glb' },
     { id: 'a320_detailed', name: 'Airbus A320-200 (고정밀 실물)', category: 'aircraft', icon: '✈️', desc: '고정밀 실물 스케일 정밀 3D CAD/PBR 모델 (73.2만 폴리곤, 16.5MB)', file: 'a320_detailed.glb' },
-    { id: 'a320_simplified', name: 'Airbus A320-200 (경량 최적화)', category: 'aircraft', icon: '✈️', desc: 'Meshoptimizer QEM 데시메이션 경량 실물 모델 (2.1만 폴리곤, 599KB)', file: 'a320_simplified.glb' },
+    { id: 'a320_simplified', name: 'Airbus A320-200 (경량 최적화)', category: 'aircraft', icon: '✈️', desc: 'Meshoptimizer QEM 데시메이션 경량 실물 모델 (9.8만 폴리곤, 3.0MB)', file: 'a320_simplified.glb' },
     { id: 'b747', name: 'Boeing 747-400', category: 'aircraft', icon: '🛫', desc: '4발 점보 광동체 여객기', file: 'b747.glb' },
     { id: 'dc10', name: 'McDonnell Douglas DC-10', category: 'aircraft', icon: '🛩️', desc: '3발 광동체 장거리 여객기 (실물 비례 로우폴리 최적화 모델)', file: 'dc10.glb' },
     { id: 'md80', name: 'McDonnell Douglas MD-80', category: 'aircraft', icon: '✈️', desc: '리어 엔진 T-테일 쌍발 제트기', file: 'md80.glb' },
@@ -132,7 +132,11 @@
       this.scene = new THREE.Scene();
       this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 10000);
 
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        logarithmicDepthBuffer: true
+      });
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       this.renderer.setSize(width, height);
       this.renderer.outputEncoding = THREE.sRGBEncoding;
@@ -651,6 +655,14 @@
             mats.forEach((m) => {
               materials.add(m);
               m.wireframe = this.wireframe;
+              const nameLower = (m.name || '').toLowerCase();
+              const isWindowOrDecal = /window|glass|cockpit|windshield|decal|strip/i.test(nameLower) ||
+                /Material\.(005|007|008|010|016|027|051|052)$/i.test(m.name || '');
+              if (isWindowOrDecal) {
+                m.polygonOffset = true;
+                m.polygonOffsetFactor = -2.0;
+                m.polygonOffsetUnits = -4.0;
+              }
               if (m.transparent) {
                 m.depthWrite = true;
                 m.side = THREE.DoubleSide;
@@ -701,8 +713,8 @@
       this.orbit.minRadius = Math.max(0.2, this.modelRadius * 0.25);
       this.orbit.maxRadius = Math.max(100, this.modelRadius * 14);
 
-      this.camera.near = Math.max(0.05, this.modelRadius * 0.005);
-      this.camera.far = Math.max(5000, this.modelRadius * 60);
+      this.camera.near = Math.max(0.1, this.modelRadius * 0.01);
+      this.camera.far = Math.max(2000, this.modelRadius * 40);
       this.camera.updateProjectionMatrix();
 
       this.orbit.target.copy(this.orbit.defaultTarget);
