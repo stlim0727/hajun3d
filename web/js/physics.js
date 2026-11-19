@@ -362,7 +362,7 @@
       );
     }
 
-    // 2. 엘리베이터: 기수 상승 시 후연이 위로 꺾임 (-X 회전)
+    // 2. 엘리베이터: 기수 상승 시 후연이 위로 꺾임 (음의 각도 = 후연 상승)
     const targetElevator = -pitchInput * 0.45;
     if (this.controlSurfaces.leftElevator) {
       this.controlSurfaces.leftElevator.rotation.x = THREE.MathUtils.lerp(
@@ -390,9 +390,9 @@
 
     let targetRudder = 0;
     if (Math.abs(rudderInput) > 0.01) {
-      targetRudder = -rudderInput * 0.55;
+      targetRudder = rudderInput * 0.55;
     } else if (Math.abs(rollInput) > 0.06) {
-      targetRudder = -rollInput * 0.35;
+      targetRudder = rollInput * 0.35;
     }
 
     if (this.controlSurfaces.rudder) {

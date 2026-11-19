@@ -85,7 +85,9 @@
             },
             ...[-1, 1].map(side => ({
               control: 'elevator', material: /^07___Default$/,
-              pivot: [side * 2.5, 3.08, 27.7], axis: [-1, -side * 0.11, -side * 0.66],
+              // Negative deflection must raise the trailing edge, matching the
+              // procedural and rigid A320 elevator pivots.
+              pivot: [side * 2.5, 3.08, 27.7], axis: [1, side * 0.11, side * 0.66],
               planes: [[side, 0, 0, -2.5], [-side, 0, 0, 9.39],
                 [-side * 0.66, 0, 1, 2.5 * 0.66 - 27.7],
                 [-side * 0.11, 1, 0, -2.35], [side * 0.11, -1, 0, 3.20]]
@@ -803,7 +805,9 @@
                 float weight = smoothstep(0.0, 0.12, dist);
                 float angle = uElevator * weight;
                 float arm = dist;
-                _planeP.y += arm * sin(angle);
+                // Negative elevator raises the trailing edge (nose up), matching
+                // the procedural pivots and the A350/A320 rigid panels.
+                _planeP.y -= arm * sin(angle);
                 _planeP.z = _zElevHinge + arm * cos(angle);
                 _deflected = true;
               }
