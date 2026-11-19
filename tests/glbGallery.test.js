@@ -98,3 +98,18 @@ test('GLBMovingPartsController provides shared moving parts and gallery demo loo
   assert.ok(viewerJs.includes('demoLoop: true'), 'glb_viewer must set demoLoop: true');
   assert.ok(viewerJs.includes('this.movingPartsController.update(dt)'), 'glb_viewer animate must update movingPartsController');
 });
+
+test('GLBMovingPartsController enforces swept-hinge rigid planar rotation and calibrated fan nacelles', () => {
+  const pipelineJs = readFileSync('web/js/glb_pipeline.js', 'utf8');
+
+  // Verify non-rubber rigid hinge rotation (no quadratic chordFraction*chordFraction deformation)
+  assert.ok(!pipelineJs.includes('chordFraction * chordFraction'), 'Must not use rubbery quadratic chord deformation');
+  assert.ok(pipelineJs.includes('_zRudderHinge'), 'Must compute swept rudder hinge line');
+  assert.ok(pipelineJs.includes('_zElevHinge'), 'Must compute swept elevator hinge line');
+  assert.ok(pipelineJs.includes('smoothstep(0.0, 0.12, dist)'), 'Must use narrow hinge boundary transition for rigid panel deflection');
+
+  // Verify A320 & A350 calibrated nacelle positions
+  assert.ok(pipelineJs.includes('leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25'), 'A320 fans must be calibrated inside engine nacelles');
+  assert.ok(pipelineJs.includes('leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0'), 'A350 fans must be calibrated inside engine nacelles');
+  assert.ok(pipelineJs.includes('nose: { x: 0, y: -1.17, z: -22.0'), 'A350 nose gear must be anchored to forward belly');
+});

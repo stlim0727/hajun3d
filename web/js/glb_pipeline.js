@@ -49,51 +49,51 @@
     static get AIRCRAFT_DEFS() {
       return {
         a320: {
-          rudderParams: [13.5, 24.5, 2.5, 12.5],
-          elevParams:   [15.0, 24.5, 2.2, 7.8],
+          rudderParams: [16.2, 25.0, 2.0, 1.35],
+          elevParams:   [15.2, 25.0, 1.2, 2.10],
           wingParams:   [8.5, 17.5, 1.2, 0.42],
           hasBuiltInGear: true,
           gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
-          fans: [{ radius: 0.80, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 }]
+          fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
         },
         a320_simplified: {
-          rudderParams: [13.5, 24.5, 2.5, 12.5],
-          elevParams:   [15.0, 24.5, 2.2, 7.8],
+          rudderParams: [16.2, 25.0, 2.0, 1.35],
+          elevParams:   [15.2, 25.0, 1.2, 2.10],
           wingParams:   [8.5, 17.5, 1.2, 0.42],
           hasBuiltInGear: true,
           gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
-          fans: [{ radius: 0.80, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 }]
+          fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
         },
         a320_detailed: {
-          rudderParams: [13.5, 24.5, 2.5, 12.5],
-          elevParams:   [15.0, 24.5, 2.2, 7.8],
+          rudderParams: [16.2, 25.0, 2.0, 1.35],
+          elevParams:   [15.2, 25.0, 1.2, 2.10],
           wingParams:   [8.5, 17.5, 1.2, 0.42],
           hasBuiltInGear: true,
           gearMaterialRegex: /Material\.(034|036|037|040|042|044|045|049|050|056)$/i,
-          fans: [{ radius: 0.80, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 }]
+          fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
         },
         a350: {
-          rudderParams: [23.0, 33.5, 3.5, 16.0],
-          elevParams:   [25.0, 33.5, 3.0, 12.5],
-          wingParams:   [15.0, 32.0, 2.0, 0.52],
+          rudderParams: [22.0, 33.5, 5.0, 1.29],
+          elevParams:   [26.5, 33.5, 1.8, 0.65],
+          wingParams:   [16.0, 32.0, 3.5, 0.55],
           hasBuiltInGear: false,
-          fans: [{ radius: 1.35, blades: 22, leftX: -9.8, rightX: 9.8, y: -2.3, z: -1.2 }],
+          fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
           gearDefs: {
-            nose: { x: 0, y: -1.34, z: -21.0, isNose: true, is4Wheel: false },
-            mainL: { x: -5.8, y: -1.34, z: 2.2, isNose: false, is4Wheel: true },
-            mainR: { x: 5.8, y: -1.34, z: 2.2, isNose: false, is4Wheel: true }
+            nose: { x: 0, y: -1.17, z: -22.0, isNose: true, is4Wheel: false },
+            mainL: { x: -5.4, y: -0.66, z: 2.1, isNose: false, is4Wheel: true },
+            mainR: { x: 5.4, y: -0.66, z: 2.1, isNose: false, is4Wheel: true }
           }
         },
         dc10: {
-          rudderParams: [18.0, 27.8, 3.0, 17.0],
-          elevParams:   [21.0, 27.8, 1.5, 11.0],
+          rudderParams: [22.5, 27.8, 5.0, 0.45],
+          elevParams:   [23.0, 27.8, 2.0, 0.85],
           wingParams:   [13.0, 25.0, 6.0, 0.42],
           hasBuiltInGear: true,
           hasRiggedAnimation: true
         },
         amphibian: {
-          rudderParams: [5.5, 9.8, 2.0, 9.8],
-          elevParams:   [6.5, 9.8, 5.5, 5.8],
+          rudderParams: [5.3, 6.6, -4.5, 0.10],
+          elevParams:   [5.8, 6.6, 2.0, 0.15],
           wingParams:   [6.5, 14.0, -1.0, 0.12],
           hasBuiltInGear: true
         }
@@ -118,7 +118,6 @@
     static normalizeAircraftScene(scene, planeType, options = {}) {
       if (!scene || typeof THREE === 'undefined') return { scale: 1, size: new THREE.Vector3() };
       const type = (planeType || 'a320').toLowerCase();
-      const isViewer = !!options.isViewer;
       const targetLengths = GLBMovingPartsController.TARGET_LENGTHS;
       const targetLength = targetLengths[type] || (type === 'ancestor' ? 14.0 : 38.0);
 
@@ -130,22 +129,18 @@
       scene.scale.set(scale, scale, scale);
 
       scene.position.x = 0;
-      if (isViewer) {
-        scene.position.y = -box.min.y * scale;
+      if (type === 'amphibian') {
+        scene.position.y = -box.min.y * scale - 4.72;
+      } else if (type.startsWith('a320')) {
+        scene.position.y = -center.y * scale + 1.83;
+      } else if (type === 'a350') {
+        scene.position.y = -center.y * scale + 5.26;
+      } else if (type === 'dc10') {
+        scene.position.y = -center.y * scale + 3.69;
+      } else if (type === 'ancestor') {
+        scene.position.y = -center.y * scale + 0.35;
       } else {
-        if (type === 'amphibian') {
-          scene.position.y = -box.min.y * scale - 4.72;
-        } else if (type.startsWith('a320')) {
-          scene.position.y = -center.y * scale + 1.83;
-        } else if (type === 'a350') {
-          scene.position.y = -center.y * scale + 5.26;
-        } else if (type === 'dc10') {
-          scene.position.y = -center.y * scale + 3.69;
-        } else if (type === 'ancestor') {
-          scene.position.y = -center.y * scale + 0.35;
-        } else {
-          scene.position.y = -center.y * scale + 1.2;
-        }
+        scene.position.y = -center.y * scale + 1.2;
       }
       scene.position.z = -center.z * scale;
 
@@ -346,7 +341,6 @@
             fan.position.set(x, f.y, f.z);
             this.planeGroup.add(fan);
             this.fans.push(fan);
-            this.parts.fans.push(fan);
             this.hasMovingParts = true;
           });
         });
@@ -471,56 +465,71 @@
               vec4 _planeP = uMeshToPlane * vec4( position, 1.0 );
               bool _deflected = false;
 
-              // 1. Rudder Deflection (Vertical Fin Trailing Edge)
-              if (_planeP.z > uRudderParams.x && _planeP.z <= uRudderParams.y &&
-                  _planeP.y >= uRudderParams.z && _planeP.y <= uRudderParams.w &&
-                  abs(_planeP.x) < 0.95) {
-                float chordFraction = clamp((_planeP.z - uRudderParams.x) / max(0.1, uRudderParams.y - uRudderParams.x), 0.0, 1.0);
-                float weight = chordFraction * chordFraction;
+              // 1. Rudder Deflection (Swept Hinge Rigid Planar Rotation)
+              // uRudderParams: [zBase, zMax, yBase, sweepSlope]
+              float _rZBase = uRudderParams.x;
+              float _rZMax = uRudderParams.y;
+              float _rYBase = uRudderParams.z;
+              float _rSweep = uRudderParams.w;
+              float _zRudderHinge = _rZBase + max(0.0, _planeP.y - _rYBase) * _rSweep;
+
+              if (_planeP.z > _zRudderHinge && _planeP.z <= _rZMax &&
+                  _planeP.y >= _rYBase && abs(_planeP.x) < 0.95) {
+                float dist = _planeP.z - _zRudderHinge;
+                // Narrow blend across hinge line to prevent skin tearing; rigid rotation across panel
+                float weight = smoothstep(0.0, 0.12, dist);
                 float angle = uRudder * weight;
-                float arm = _planeP.z - uRudderParams.x;
+                float arm = dist;
                 _planeP.x += arm * sin(angle);
-                _planeP.z = uRudderParams.x + arm * cos(angle);
+                _planeP.z = _zRudderHinge + arm * cos(angle);
                 _deflected = true;
               }
 
-              // 2. Elevator Deflection (Horizontal Stabilizer Trailing Edge)
-              if (!_deflected && _planeP.z > uElevParams.x && _planeP.z <= uElevParams.y &&
-                  abs(_planeP.y - uElevParams.z) < 2.5 &&
-                  abs(_planeP.x) > 1.2 && abs(_planeP.x) <= uElevParams.w) {
-                float chordFraction = clamp((_planeP.z - uElevParams.x) / max(0.1, uElevParams.y - uElevParams.x), 0.0, 1.0);
-                float weight = chordFraction * chordFraction;
-                float angle = uElevator * weight;
-                float arm = _planeP.z - uElevParams.x;
-                _planeP.y += arm * sin(angle);
-                _planeP.z = uElevParams.x + arm * cos(angle);
-                _deflected = true;
-              }
-
-              // 3. Aileron Deflection (Outboard Wing Trailing Edge)
+              // 2. Elevator Deflection (Swept Hinge Rigid Planar Rotation)
+              // uElevParams: [zBase, zMax, xBase, sweepSlope]
+              float _eZBase = uElevParams.x;
+              float _eZMax = uElevParams.y;
+              float _eXBase = uElevParams.z;
+              float _eSweep = uElevParams.w;
               float _absX = abs(_planeP.x);
+              float _zElevHinge = _eZBase + max(0.0, _absX - _eXBase) * _eSweep;
+
+              if (!_deflected && _planeP.z > _zElevHinge && _planeP.z <= _eZMax &&
+                  _absX >= _eXBase && _absX <= (_eXBase + 8.5) &&
+                  _planeP.y < 8.0 && _planeP.y > -3.5) {
+                float dist = _planeP.z - _zElevHinge;
+                float weight = smoothstep(0.0, 0.12, dist);
+                float angle = uElevator * weight;
+                float arm = dist;
+                _planeP.y += arm * sin(angle);
+                _planeP.z = _zElevHinge + arm * cos(angle);
+                _deflected = true;
+              }
+
+              // 3. Aileron Deflection (Rear Spar Rigid Planar Rotation)
+              // uWingParams: [xMin, xMax, zRootSpar, sweepSlope]
               if (!_deflected && _absX >= uWingParams.x && _absX <= uWingParams.y) {
                 float zSpar = uWingParams.z + (_absX - uWingParams.x) * uWingParams.w;
-                if (_planeP.z > zSpar && _planeP.z < zSpar + 4.5 && _planeP.y < 4.0 && _planeP.y > -3.0) {
-                  float chordFraction = clamp((_planeP.z - zSpar) / 2.5, 0.0, 1.0);
-                  float weight = chordFraction * chordFraction;
+                float dist = _planeP.z - zSpar;
+                if (dist > 0.0 && dist < 4.2 && _planeP.y < 5.0 && _planeP.y > -3.5) {
+                  float weight = smoothstep(0.0, 0.12, dist);
                   float ailDef = (_planeP.x < 0.0) ? uAileronL : uAileronR;
                   float angle = ailDef * weight;
-                  float arm = _planeP.z - zSpar;
+                  float arm = dist;
                   _planeP.y += arm * sin(angle);
                   _planeP.z = zSpar + arm * cos(angle);
                   _deflected = true;
                 }
               }
 
-              // 4. Flap Deflection (Inboard Wing Trailing Edge)
+              // 4. Flap Deflection (Inboard Wing Trailing Edge Rigid Extension)
               if (!_deflected && _absX >= 1.8 && _absX < uWingParams.x && uFlap > 0.001) {
                 float zFlapSpar = uWingParams.z + (_absX - 1.8) * (uWingParams.w * 0.85);
-                if (_planeP.z > zFlapSpar && _planeP.z < zFlapSpar + 5.0 && _planeP.y < 4.0 && _planeP.y > -3.0) {
-                  float chordFraction = clamp((_planeP.z - zFlapSpar) / 3.2, 0.0, 1.0);
-                  float weight = chordFraction * chordFraction;
+                float dist = _planeP.z - zFlapSpar;
+                if (dist > 0.0 && dist < 5.0 && _planeP.y < 5.0 && _planeP.y > -3.5) {
+                  float weight = smoothstep(0.0, 0.12, dist);
                   float angle = uFlap * weight;
-                  float arm = _planeP.z - zFlapSpar;
+                  float arm = dist;
                   _planeP.y -= arm * sin(angle);
                   _planeP.z = zFlapSpar + arm * cos(angle);
                   _deflected = true;

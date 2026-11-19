@@ -714,6 +714,12 @@
         });
       }
 
+      // ★ 전체 복합체(기체 + 착륙장치 + 터보팬) 지표면(Y=0) 정렬
+      wrapper.updateMatrixWorld(true);
+      const groundBox = new THREE.Box3().setFromObject(wrapper);
+      wrapper.position.y = -groundBox.min.y;
+      wrapper.updateMatrixWorld(true);
+
       // 기본 GLTF 키프레임 애니메이션 (컨트롤러가 미장착된 모델의 경우)
       const animCount = gltf.animations ? gltf.animations.length : 0;
       if (animCount > 0 && (!this.movingPartsController || !this.movingPartsController.mixer)) {
