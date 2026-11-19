@@ -159,6 +159,9 @@
 
   // ★ 실기형 고속 회전 티타늄 터보팬 블레이드 시스템 (Titanium Turbofan Fan Blades)
   createTurbofanFan(radius, bladeCount = 20, chromeMat) {
+    if (typeof GLBMovingParts !== 'undefined' && GLBMovingParts.createTurbofanFan) {
+      return GLBMovingParts.createTurbofanFan(radius, bladeCount, chromeMat);
+    }
     const fanGroup = new THREE.Group();
 
     // 1. 중앙 스피너 콘 (중앙 화이트 소용돌이 스파이럴 마킹)
@@ -2364,6 +2367,9 @@
   // GLB 기체 전용 랜딩 기어 어셈블리 생성 (수납/전개/조향 피벗 통합)
   // ----------------------------------------------------------------
   createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat) {
+    if (typeof GLBMovingParts !== 'undefined' && GLBMovingParts.createGLBLandingGear) {
+      return GLBMovingParts.createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat);
+    }
     const gearAssembly = new THREE.Group();
     gearAssembly.position.set(x, y, z);
 
@@ -2482,6 +2488,7 @@
   // 제어평면(에일러론/승강타/방향타/플랩)은 GLB 고유 외형 100% 보존을 위해 GPU 버텍스 셰이더로 정밀 가동
   // ----------------------------------------------------------------
   attachGLBMovingParts(type) {
+    if (this.glbMovingPartsController) return;
     if (type !== 'a320' && type !== 'a350') return;
 
     this.turbofans = this.turbofans || [];

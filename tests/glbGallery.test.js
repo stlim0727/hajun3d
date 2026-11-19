@@ -80,3 +80,21 @@ test('a320_simplified and a350 are packed into offline GLB_BUNDLE for instant lo
   assert.ok(bundleJs.includes('a320_simplified'), 'a320_simplified must be packed in GLB_BUNDLE');
   assert.ok(bundleJs.includes('a350'), 'a350 must be packed in GLB_BUNDLE');
 });
+
+test('GLBMovingPartsController provides shared moving parts and gallery demo loop without code duplication', () => {
+  const html = readFileSync('web/glb-viewer.html', 'utf8');
+  assert.ok(html.includes('js/glb_pipeline.js'), 'glb-viewer.html must load js/glb_pipeline.js');
+  assert.ok(html.includes('js/glb_viewer.js'), 'glb-viewer.html must load js/glb_viewer.js');
+
+  const pipelineJs = readFileSync('web/js/glb_pipeline.js', 'utf8');
+  assert.ok(pipelineJs.includes('class GLBMovingPartsController'), 'glb_pipeline.js must define GLBMovingPartsController');
+  assert.ok(pipelineJs.includes('window.GLBMovingParts = GLBMovingPartsController'), 'Must export window.GLBMovingParts');
+  assert.ok(pipelineJs.includes('normalizeAircraftScene'), 'Must provide static normalizeAircraftScene');
+  assert.ok(pipelineJs.includes('createTurbofanFan'), 'Must provide static createTurbofanFan');
+  assert.ok(pipelineJs.includes('createGLBLandingGear'), 'Must provide static createGLBLandingGear');
+
+  const viewerJs = readFileSync('web/js/glb_viewer.js', 'utf8');
+  assert.ok(viewerJs.includes('this.movingPartsController = new window.GLBMovingParts'), 'glb_viewer must instantiate GLBMovingParts');
+  assert.ok(viewerJs.includes('demoLoop: true'), 'glb_viewer must set demoLoop: true');
+  assert.ok(viewerJs.includes('this.movingPartsController.update(dt)'), 'glb_viewer animate must update movingPartsController');
+});

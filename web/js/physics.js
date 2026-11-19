@@ -212,30 +212,35 @@
       }
     });
 
-    if (this.glbMixer && this.glbGearAction) {
-      const dur = this.glbGearDuration || 1.0;
-      // dc10.glb 애니메이션: t=0 수납(UP), t=dur 전개(DOWN)
-      this.glbGearAction.time = isExtending ? progress * dur : (1.0 - progress) * dur;
-      this.glbMixer.update(0);
-    }
+    const actualProgress = isExtending ? progress : (1.0 - progress);
+    if (this.glbMovingPartsController) {
+      this.glbMovingPartsController.updateGear(actualProgress, isExtending, this.gearPhase);
+    } else {
+      if (this.glbMixer && this.glbGearAction) {
+        const dur = this.glbGearDuration || 1.0;
+        // dc10.glb 애니메이션: t=0 수납(UP), t=dur 전개(DOWN)
+        this.glbGearAction.time = isExtending ? progress * dur : (1.0 - progress) * dur;
+        this.glbMixer.update(0);
+      }
 
-    if (this.glbMovingParts && this.glbMovingParts.landingGear) {
-      const gearNode = this.glbMovingParts.landingGear;
-      const gearFactor = isExtending ? progress : (1.0 - progress);
-      const basePosY = gearNode.userData.basePosY || 0;
-      gearNode.visible = gearFactor > 0.15;
-      gearNode.scale.y = 1.0;
-      gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
-    }
+      if (this.glbMovingParts && this.glbMovingParts.landingGear) {
+        const gearNode = this.glbMovingParts.landingGear;
+        const gearFactor = isExtending ? progress : (1.0 - progress);
+        const basePosY = gearNode.userData.basePosY || 0;
+        gearNode.visible = gearFactor > 0.15;
+        gearNode.scale.y = 1.0;
+        gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
+      }
 
-    if (this.glbGearNodes && this.glbGearNodes.length > 0) {
-      const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
-      this.glbGearNodes.forEach(n => { n.visible = isVis; });
-    }
+      if (this.glbGearNodes && this.glbGearNodes.length > 0) {
+        const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
+        this.glbGearNodes.forEach(n => { n.visible = isVis; });
+      }
 
-    if (this.glbGearMaterials && this.glbGearMaterials.length > 0) {
-      const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
-      this.glbGearMaterials.forEach(m => { m.visible = isVis; });
+      if (this.glbGearMaterials && this.glbGearMaterials.length > 0) {
+        const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
+        this.glbGearMaterials.forEach(m => { m.visible = isVis; });
+      }
     }
 
     // 시퀀스 완료 처리
@@ -243,6 +248,9 @@
       if (isExtending) {
         this.gearPhase = 'DOWN';
         this.gearExtended = true;
+        if (this.glbMovingPartsController) {
+          this.glbMovingPartsController.setGearProgress(1.0, 'DOWN');
+        }
         if (this.glbGearNodes) {
           this.glbGearNodes.forEach(n => { n.visible = true; });
         }
@@ -277,6 +285,9 @@
       } else {
         this.gearPhase = 'UP';
         this.gearExtended = false;
+        if (this.glbMovingPartsController) {
+          this.glbMovingPartsController.setGearProgress(0.0, 'UP');
+        }
         if (this.glbGearNodes) {
           this.glbGearNodes.forEach(n => { n.visible = false; });
         }
@@ -408,61 +419,73 @@
       );
     }
 
-    // 4. GLB 셰이더 디포메이션 가동 제어면 (A320, A350, DC-10, CL-215)
-    if (this.glbShaderUniforms) {
-      this.glbShaderUniforms.uAileronL.value = THREE.MathUtils.lerp(
-        this.glbShaderUniforms.uAileronL.value,
-        -targetAileron,
-        0.20
-      );
-      this.glbShaderUniforms.uAileronR.value = THREE.MathUtils.lerp(
-        this.glbShaderUniforms.uAileronR.value,
-        targetAileron,
-        0.20
-      );
-      this.glbShaderUniforms.uElevator.value = THREE.MathUtils.lerp(
-        this.glbShaderUniforms.uElevator.value,
-        targetElevator,
-        0.20
-      );
-      this.glbShaderUniforms.uRudder.value = THREE.MathUtils.lerp(
-        this.glbShaderUniforms.uRudder.value,
-        targetRudder,
-        0.22
-      );
+    // 4. GLB 통합 무빙 파츠 컨트롤러 (셰이더 디포메이션, 러더/플랩, 터보팬 블레이드)
+    if (this.glbMovingPartsController) {
       const flapAngles = [0, 0.16, 0.34, 0.56];
       const targetFlap = flapAngles[this.flapIndex || 0] || 0;
-      this.glbShaderUniforms.uFlap.value = THREE.MathUtils.lerp(
-        this.glbShaderUniforms.uFlap.value,
+      const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
+      this.glbMovingPartsController.updateFlightControls(dt, {
+        targetAileron,
+        targetElevator,
+        targetRudder,
         targetFlap,
-        0.15
-      );
-    }
-
-    // 5. GLB 가동 파츠 (러더, 플랩, 3발 터보팬 블레이드 회전)
-    if (this.glbMovingParts) {
-      if (this.glbMovingParts.rudder) {
-        const baseY = this.glbMovingParts.rudder.userData.baseRotY || 0;
-        this.glbMovingParts.rudder.rotation.y = THREE.MathUtils.lerp(
-          this.glbMovingParts.rudder.rotation.y,
-          baseY + targetRudder,
+        rpmRatio
+      });
+    } else {
+      if (this.glbShaderUniforms) {
+        this.glbShaderUniforms.uAileronL.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uAileronL.value,
+          -targetAileron,
+          0.20
+        );
+        this.glbShaderUniforms.uAileronR.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uAileronR.value,
+          targetAileron,
+          0.20
+        );
+        this.glbShaderUniforms.uElevator.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uElevator.value,
+          targetElevator,
+          0.20
+        );
+        this.glbShaderUniforms.uRudder.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uRudder.value,
+          targetRudder,
           0.22
         );
-      }
-      if (this.glbMovingParts.flaps && this.glbMovingParts.flaps.length > 0) {
         const flapAngles = [0, 0.16, 0.34, 0.56];
         const targetFlap = flapAngles[this.flapIndex || 0] || 0;
-        for (let i = 0; i < this.glbMovingParts.flaps.length; i++) {
-          const flap = this.glbMovingParts.flaps[i];
-          const baseX = flap.userData.baseRotX || 0;
-          flap.rotation.x = THREE.MathUtils.lerp(flap.rotation.x, baseX + targetFlap, 0.12);
-        }
+        this.glbShaderUniforms.uFlap.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uFlap.value,
+          targetFlap,
+          0.15
+        );
       }
-      if (this.glbMovingParts.fans && this.glbMovingParts.fans.length > 0) {
-        const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
-        const fanDelta = rpmRatio * 30.0 * (dt || 0.016);
-        for (let i = 0; i < this.glbMovingParts.fans.length; i++) {
-          this.glbMovingParts.fans[i].rotation.z += fanDelta;
+
+      if (this.glbMovingParts) {
+        if (this.glbMovingParts.rudder) {
+          const baseY = this.glbMovingParts.rudder.userData.baseRotY || 0;
+          this.glbMovingParts.rudder.rotation.y = THREE.MathUtils.lerp(
+            this.glbMovingParts.rudder.rotation.y,
+            baseY + targetRudder,
+            0.22
+          );
+        }
+        if (this.glbMovingParts.flaps && this.glbMovingParts.flaps.length > 0) {
+          const flapAngles = [0, 0.16, 0.34, 0.56];
+          const targetFlap = flapAngles[this.flapIndex || 0] || 0;
+          for (let i = 0; i < this.glbMovingParts.flaps.length; i++) {
+            const flap = this.glbMovingParts.flaps[i];
+            const baseX = flap.userData.baseRotX || 0;
+            flap.rotation.x = THREE.MathUtils.lerp(flap.rotation.x, baseX + targetFlap, 0.12);
+          }
+        }
+        if (this.glbMovingParts.fans && this.glbMovingParts.fans.length > 0) {
+          const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
+          const fanDelta = rpmRatio * 30.0 * (dt || 0.016);
+          for (let i = 0; i < this.glbMovingParts.fans.length; i++) {
+            this.glbMovingParts.fans[i].rotation.z += fanDelta;
+          }
         }
       }
     }

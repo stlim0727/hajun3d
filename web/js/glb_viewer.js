@@ -51,6 +51,7 @@
       this.activeModelId = null;
       this.currentObject = null;
       this.mixer = null;
+      this.movingPartsController = null;
       this.animationsPlaying = true;
       this.clock = typeof THREE !== 'undefined' ? new THREE.Clock() : null;
 
@@ -614,6 +615,10 @@
         this.mixer.stopAllAction();
         this.mixer = null;
       }
+      if (this.movingPartsController) {
+        this.movingPartsController.dispose();
+        this.movingPartsController = null;
+      }
       if (this.currentObject) {
         this.scene.remove(this.currentObject);
         this.currentObject.traverse((node) => {
@@ -677,28 +682,46 @@
         }
       });
 
-      // Center horizontally and rest bottom on Y = 0
-      const box = new THREE.Box3().setFromObject(root);
-      const size = new THREE.Vector3();
-      const center = new THREE.Vector3();
-      box.getSize(size);
-      box.getCenter(center);
+      // ★ 실물 스케일 정규화 (항공기는 GLBMovingPartsController의 표준 제원 적용)
+      const isAircraft = (meta.category === 'aircraft');
+      let size;
+      if (isAircraft && typeof window !== 'undefined' && window.GLBMovingParts) {
+        const norm = window.GLBMovingParts.normalizeAircraftScene(root, meta.id, { isViewer: true });
+        size = norm.size;
+      } else {
+        const box = new THREE.Box3().setFromObject(root);
+        size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+        root.position.set(-center.x, -box.min.y, -center.z);
+      }
 
       const wrapper = new THREE.Group();
-      root.position.set(-center.x, -box.min.y, -center.z);
       wrapper.add(root);
       this.scene.add(wrapper);
       this.currentObject = wrapper;
 
-      // Setup animations if present
+      // ★ 통합 무빙 파츠 컨트롤러 연결 (갤러리 연속 가동 데모 루프 모드)
+      if (typeof window !== 'undefined' && window.GLBMovingParts) {
+        this.movingPartsController = new window.GLBMovingParts({
+          scene: root,
+          planeType: meta.id,
+          planeGroup: wrapper,
+          demoLoop: true,
+          animations: gltf.animations
+        });
+      }
+
+      // 기본 GLTF 키프레임 애니메이션 (컨트롤러가 미장착된 모델의 경우)
       const animCount = gltf.animations ? gltf.animations.length : 0;
-      if (animCount > 0) {
+      if (animCount > 0 && (!this.movingPartsController || !this.movingPartsController.mixer)) {
         this.mixer = new THREE.AnimationMixer(root);
         gltf.animations.forEach((clip) => {
           this.mixer.clipAction(clip).play();
         });
-        this.animationsPlaying = true;
       }
+      this.animationsPlaying = true;
 
       // Auto-frame camera to bounding sphere
       const maxDim = Math.max(size.x, size.y, size.z, 0.5);
@@ -744,20 +767,22 @@
       setText('info-verts', `${verts.toLocaleString()} verts`);
       setText('info-mats', `${mats}개`);
 
+      const hasMoving = (this.movingPartsController && this.movingPartsController.hasMovingParts) || anims > 0;
       const animBtn = document.getElementById('btn-anim-toggle');
       if (animBtn) {
-        animBtn.classList.toggle('hidden', anims === 0);
-        animBtn.textContent = this.animationsPlaying ? `⏸️ 애니 (${anims})` : `▶️ 애니 (${anims})`;
+        animBtn.classList.toggle('hidden', !hasMoving);
+        animBtn.textContent = this.animationsPlaying ? '⏸️ 무빙파츠 동작' : '▶️ 무빙파츠 일시정지';
       }
     }
 
     toggleAnimation() {
-      if (!this.mixer) return;
       this.animationsPlaying = !this.animationsPlaying;
+      if (this.movingPartsController) {
+        this.movingPartsController.enabled = this.animationsPlaying;
+      }
       const animBtn = document.getElementById('btn-anim-toggle');
       if (animBtn) {
-        const count = animBtn.textContent.match(/\((\d+)\)/)?.[1] || '1';
-        animBtn.textContent = this.animationsPlaying ? `⏸️ 애니 (${count})` : `▶️ 애니 (${count})`;
+        animBtn.textContent = this.animationsPlaying ? '⏸️ 무빙파츠 동작' : '▶️ 무빙파츠 일시정지';
       }
     }
 
@@ -768,6 +793,9 @@
 
       if (this.mixer && this.animationsPlaying) {
         this.mixer.update(dt);
+      }
+      if (this.movingPartsController && this.animationsPlaying) {
+        this.movingPartsController.update(dt);
       }
 
       if (this.autoRotate) {
