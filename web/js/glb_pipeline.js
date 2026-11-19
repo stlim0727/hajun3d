@@ -33,6 +33,8 @@
       this.landingGears = [];
       this.gearNodes = [];
       this.builtInGear = [];
+      this.gearRotation = new THREE.Matrix4();
+      this.builtInGearRestorations = [];
       this.gearMaterials = [];
       this.mixer = null;
       this.gearAction = null;
@@ -371,60 +373,78 @@
       this.planeGroup.updateMatrixWorld(true);
       const planeInverse = this.planeGroup.matrixWorld.clone().invert();
       const point = new THREE.Vector3();
+      // A320 gear attachment points in aircraft coordinates. Nose folds forward,
+      // while each main strut folds toward the centerline.
+      const hinges = [
+        { pivot: [0, -1.95, -7.35], axis: new THREE.Vector3(1, 0, 0) },
+        { pivot: [-3.78, -1.18, 5.32], axis: new THREE.Vector3(0, 0, 1) },
+        { pivot: [3.78, -1.18, 5.32], axis: new THREE.Vector3(0, 0, -1) }
+      ];
       this.scene.traverse(node => {
         if (!node.isMesh || !node.material || Array.isArray(node.material) || node.userData.builtInGear) return;
         const name = node.material.name;
-        let gear = node;
-        let restoreGeometry;
-        if (def.sharedGearMaterials.test(name)) {
-          const geometry = node.geometry;
-          const index = geometry.index;
-          if (!index) return;
-          const position = geometry.attributes.position;
-          const meshToPlane = new THREE.Matrix4().multiplyMatrices(planeInverse, node.matrixWorld);
-          const gearVertices = new Uint8Array(position.count);
-          for (let i = 0; i < position.count; i++) {
-            point.fromBufferAttribute(position, i).applyMatrix4(meshToPlane);
-            const x = Math.abs(point.x);
-            const nose = x < 0.65 && point.z > -8.1 && point.z < -6.7;
-            const main = x > 2.25 && x < 4.7 && point.z > 4.1 && point.z < 6.2;
-            gearVertices[i] = point.y < -1.0 && (nose || main);
-          }
-          const gearIndices = [];
-          const fixedIndices = [];
-          for (let i = 0; i < index.count; i += 3) {
-            const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
-            const indices = gearVertices[a] && gearVertices[b] && gearVertices[c] ? gearIndices : fixedIndices;
-            indices.push(a, b, c);
-          }
-          if (!gearIndices.length) return;
+        const shared = def.sharedGearMaterials.test(name);
+        if (!shared && !def.gearMaterialRegex.test(name)) return;
 
-          // Keep the shared wing and engine triangles on the original mesh.
+        const geometry = node.geometry;
+        const index = geometry.index;
+        if (!index) return;
+        const position = geometry.attributes.position;
+        const meshToPlane = new THREE.Matrix4().multiplyMatrices(planeInverse, node.matrixWorld);
+        const planeToMesh = meshToPlane.clone().invert();
+        const gearVertices = new Int8Array(position.count).fill(-1);
+        for (let i = 0; i < position.count; i++) {
+          point.fromBufferAttribute(position, i).applyMatrix4(meshToPlane);
+          const x = Math.abs(point.x);
+          const nose = x < 0.65 && point.z > -8.1 && point.z < -6.7;
+          const main = x > 2.25 && x < 4.7 && point.z > 4.1 && point.z < 6.2;
+          if (shared && (point.y >= -1 || !(nose || main))) continue;
+          gearVertices[i] = (shared ? nose : point.z < 0) ? 0 : (point.x < 0 ? 1 : 2);
+        }
+
+        const fixedIndices = [];
+        const gearIndices = hinges.map(() => []);
+        for (let i = 0; i < index.count; i += 3) {
+          const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+          const leg = gearVertices[a];
+          const indices = leg >= 0 && leg === gearVertices[b] && leg === gearVertices[c]
+            ? gearIndices[leg] : fixedIndices;
+          indices.push(a, b, c);
+        }
+        if (!gearIndices.some(indices => indices.length)) return;
+
+        // Keep wing, engine and fuselage triangles on the original mesh.
+        geometry.setIndex(fixedIndices);
+        const gearMeshes = [];
+        gearIndices.forEach((indices, leg) => {
+          if (!indices.length) return;
           const gearGeometry = new THREE.BufferGeometry();
           for (const [attribute, buffer] of Object.entries(geometry.attributes)) {
             gearGeometry.setAttribute(attribute, buffer);
           }
-          gearGeometry.setIndex(gearIndices);
-          geometry.setIndex(fixedIndices);
-          gear = new THREE.Mesh(gearGeometry, node.material.clone());
+          gearGeometry.setIndex(indices);
+          const gear = new THREE.Mesh(gearGeometry, node.material.clone());
           gear.userData.builtInGear = true;
           gear.castShadow = node.castShadow;
           gear.receiveShadow = node.receiveShadow;
+          gear.matrixAutoUpdate = false;
           node.add(gear);
-          restoreGeometry = () => {
-            geometry.setIndex(index);
-            node.remove(gear);
-            gearGeometry.dispose();
-            gear.material.dispose();
-          };
-        } else if (!def.gearMaterialRegex.test(name)) {
-          return;
-        }
+          gearMeshes.push(gear);
 
-        const planeToParent = gear.parent.matrixWorld.clone().invert().multiply(this.planeGroup.matrixWorld);
-        const retractOffset = new THREE.Vector3().setFromMatrixColumn(planeToParent, 1).multiplyScalar(2.4);
-        this.builtInGear.push({ node: gear, deployed: gear.position.clone(), retractOffset, restoreGeometry });
-        this.gearNodes.push(gear);
+          const { pivot: [x, y, z], axis } = hinges[leg];
+          const fromPivot = planeToMesh.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z));
+          const toPivot = fromPivot.clone().invert();
+          this.builtInGear.push({ node: gear, axis, fromPivot, toPivot });
+          this.gearNodes.push(gear);
+        });
+        this.builtInGearRestorations.push(() => {
+          geometry.setIndex(index);
+          for (const gear of gearMeshes) {
+            node.remove(gear);
+            gear.geometry.dispose();
+            gear.material.dispose();
+          }
+        });
         this.hasMovingParts = true;
       });
     }
@@ -622,9 +642,12 @@
       this.gearProgress = Math.max(0.0, Math.min(1.0, progress));
       this.gearState = phase || (progress >= 0.99 ? 'DOWN' : (progress <= 0.01 ? 'UP' : 'TRANSIT'));
 
-      for (const { node, deployed, retractOffset } of this.builtInGear) {
-        node.position.copy(deployed).addScaledVector(retractOffset, 1 - this.gearProgress);
-        node.visible = this.gearProgress > 0.25;
+      const foldAngle = (1 - this.gearProgress) * Math.PI / 2;
+      for (const { node, axis, fromPivot, toPivot } of this.builtInGear) {
+        this.gearRotation.makeRotationAxis(axis, foldAngle);
+        node.matrix.copy(fromPivot).multiply(this.gearRotation).multiply(toPivot);
+        node.matrixWorldNeedsUpdate = true;
+        node.visible = this.gearProgress > 0.01;
       }
 
       // A350 정밀 착륙장치 스트럿/도어 회전
@@ -786,11 +809,8 @@
         });
       });
       this.landingGears = [];
-      for (const { node, deployed, restoreGeometry } of this.builtInGear) {
-        node.position.copy(deployed);
-        node.visible = true;
-        restoreGeometry?.();
-      }
+      this.builtInGearRestorations.forEach(restore => restore());
+      this.builtInGearRestorations = [];
       this.gearNodes = [];
       this.builtInGear = [];
       this.gearMaterials = [];
