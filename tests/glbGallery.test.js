@@ -16,21 +16,25 @@ function getGLBHeader(filePath) {
   return { magic, version, totalLength, fileSize: buf.length, jsonChunkType, gltf };
 }
 
-test('MODEL_CATALOG includes a320_detailed and a320_simplified with existing model files', () => {
+test('MODEL_CATALOG includes a320_detailed, a320_simplified, and a350 with existing model files', () => {
   const viewerJs = readFileSync('web/js/glb_viewer.js', 'utf8');
 
   assert.ok(viewerJs.includes("id: 'a320_detailed'"), 'a320_detailed should be in MODEL_CATALOG');
   assert.ok(viewerJs.includes("id: 'a320_simplified'"), 'a320_simplified should be in MODEL_CATALOG');
+  assert.ok(viewerJs.includes("id: 'a350'"), 'a350 should be in MODEL_CATALOG');
 
   assert.ok(existsSync('web/models/a320_detailed.glb'), 'web/models/a320_detailed.glb must exist');
   assert.ok(existsSync('web/models/a320_simplified.glb'), 'web/models/a320_simplified.glb must exist');
+  assert.ok(existsSync('web/models/a350.glb'), 'web/models/a350.glb must exist');
   assert.ok(existsSync('web/assets/models/a320_detailed.glb'), 'web/assets/models/a320_detailed.glb must exist');
   assert.ok(existsSync('web/assets/models/a320_simplified.glb'), 'web/assets/models/a320_simplified.glb must exist');
+  assert.ok(existsSync('web/assets/models/a350.glb'), 'web/assets/models/a350.glb must exist');
 });
 
-test('a320_detailed and a320_simplified are valid GLB 2.0 binaries with realistic dimensions', () => {
+test('a320_detailed, a320_simplified, and a350 are valid GLB 2.0 binaries with realistic dimensions', () => {
   const detailed = getGLBHeader('web/models/a320_detailed.glb');
   const simplified = getGLBHeader('web/models/a320_simplified.glb');
+  const a350 = getGLBHeader('web/models/a350.glb');
 
   // Verify glTF 2.0 binary headers
   assert.equal(detailed.magic, 0x46546C67);
@@ -40,6 +44,10 @@ test('a320_detailed and a320_simplified are valid GLB 2.0 binaries with realisti
   assert.equal(simplified.magic, 0x46546C67);
   assert.equal(simplified.version, 2);
   assert.equal(simplified.totalLength, simplified.fileSize);
+
+  assert.equal(a350.magic, 0x46546C67);
+  assert.equal(a350.version, 2);
+  assert.equal(a350.totalLength, a350.fileSize);
 
   // Check polygon count reduction
   let detailedTris = 0;
@@ -67,7 +75,8 @@ test('glb_viewer enables logarithmicDepthBuffer and polygonOffset to prevent win
   assert.ok(viewerJs.includes('polygonOffset = true'), 'Viewer must apply polygonOffset to eliminate window flickering');
 });
 
-test('a320_simplified is packed into offline GLB_BUNDLE for instant loading', () => {
+test('a320_simplified and a350 are packed into offline GLB_BUNDLE for instant loading', () => {
   const bundleJs = readFileSync('web/glb_bundle.js', 'utf8');
   assert.ok(bundleJs.includes('a320_simplified'), 'a320_simplified must be packed in GLB_BUNDLE');
+  assert.ok(bundleJs.includes('a350'), 'a350 must be packed in GLB_BUNDLE');
 });

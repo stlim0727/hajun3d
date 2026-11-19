@@ -6,6 +6,8 @@ const files = [
   'a320.glb',
   'a320_detailed.glb',
   'a320_simplified.glb',
+  'a350.glb',
+  'airbus_a350.glb',
   'b747.glb',
   'dc10.glb',
   'md80.glb',
