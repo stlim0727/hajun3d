@@ -34,6 +34,9 @@
       this.gearNodes = [];
       this.builtInGear = [];
       this.gearRotation = new THREE.Matrix4();
+      this.controlPanels = [];
+      this.controlPanelRestorations = [];
+      this.gearDoors = [];
       this.builtInGearRestorations = [];
       this.gearMaterials = [];
       this.mixer = null;
@@ -52,11 +55,11 @@
     static get AIRCRAFT_DEFS() {
       // The three A320 GLBs share one airframe and material layout.
       const a320 = {
-        rudderParams: [21.7, 24.6, 1.42, 0.30],
-        elevParams:   [21.5, 24.5, 0.62, 0.40],
+        rudderParams: [21.84, 24.6, 1.88, 0.30],
+        elevParams:   [21.85, 24.5, 0.62, 0.40],
         wingParams:   [2.6, 13.05, 16.1, 7.55],
         wingProfile:  [0.255, 0.22, -1.85, 0.9],
-        sweptTailHinges: true,
+        rigidPanels: true,
         surfaceMaterials: {
           rudder: /^Material\.033$/,
           elevator: /^Material\.033$/,
@@ -320,7 +323,10 @@
         }
       });
 
-      if (def?.gearMaterialRegex) this.setupBuiltInGear(def);
+      if (def?.gearMaterialRegex) {
+        this.setupBuiltInGear(def);
+        if (this.builtInGear.length) this.setupBuiltInGearDoors();
+      }
 
       // 3. 엔진 터보팬 블레이드 장착 (A320, A350)
       if (def && def.fans && Array.isArray(def.fans)) {
@@ -449,6 +455,184 @@
       });
     }
 
+    setupBuiltInGearDoors() {
+      const material = new THREE.MeshStandardMaterial({ color: 0xdedede, roughness: 0.42 });
+      for (const side of [-1, 1]) {
+        for (const [x, y, z, width, length, openAngle] of [
+          [0.58, -1.98, -8.72, 0.57, 2.15, Math.PI / 2],
+          [3.05, -1.90, 5.24, 1.45, 1.55, THREE.MathUtils.degToRad(82.5)]
+        ]) {
+          const door = new THREE.Mesh(new THREE.BoxGeometry(width, 0.035, length), material);
+          const pivot = new THREE.Group();
+          pivot.position.set(side * x, y, z);
+          door.position.x = -side * width / 2;
+          door.castShadow = true;
+          pivot.add(door);
+          this.planeGroup.add(pivot);
+          this.gearDoors.push({ pivot, door, openAngle: side * openAngle });
+        }
+      }
+    }
+
+    setupRigidControlPanels(def) {
+      // Planes use aircraft coordinates and are positive inside a movable panel.
+      const panels = [];
+      for (const side of [-1, 1]) {
+        const [start, split, end, hinge] = def.wingParams;
+        for (const [control, min, max, slope, z, y] of [
+          ['flap', start, 6.33, def.wingProfile[0], hinge - 0.10, -0.47],
+          ['flap', 6.37, split - 0.02, def.wingProfile[0], hinge - 0.10, -0.47],
+          [side < 0 ? 'left' : 'right', split + 0.22, end, def.wingProfile[1], hinge + 0.05, -0.26]
+        ]) {
+          panels.push({
+            control, material: def.surfaceMaterials.wing,
+            pivot: [side * split, y, z], axis: [1, 0, side * slope],
+            planes: [[side, 0, 0, -min], [-side, 0, 0, max],
+              [-side * slope, 0, 1, split * slope - z],
+              [-0.095 * side, 1, 0, 1.7]]
+          });
+        }
+        const [z, zMax, root, slope] = def.elevParams;
+        panels.push({
+          control: 'elevator', material: def.surfaceMaterials.elevator,
+          pivot: [side * root, 0.85, z], axis: [1, 0, side * slope],
+          planes: [[side, 0, 0, -root], [0, -1, 0, 1.42],
+            [-side * slope, 0, 1, root * slope - z], [0, 0, -1, zMax]]
+        });
+      }
+      const [z, zMax, root, slope] = def.rudderParams;
+      panels.push({
+        control: 'rudder', material: def.surfaceMaterials.rudder,
+        pivot: [0, root, z], axis: [0, 1, slope],
+        planes: [[0, 1, 0, -root], [0, -slope, 1, root * slope - z], [0, 0, -1, zMax]]
+      });
+
+      this.planeGroup.updateMatrixWorld(true);
+      const planeInverse = this.planeGroup.matrixWorld.clone().invert();
+      this.scene.traverse(node => {
+        if (!node.isMesh || node.userData.builtInGear || node.userData.controlPanel) return;
+        const candidates = panels.filter(panel => panel.material.test(node.material?.name))
+          .map(panel => ({
+            ...panel,
+            distances: panel.planes.map(([x, y, z, d]) => vertex => x * vertex[0] + y * vertex[1] + z * vertex[2] + d)
+          }));
+        const geometry = node.geometry;
+        if (!candidates.length || !geometry.index) return;
+        const attributes = Object.entries(geometry.attributes);
+        const position = geometry.attributes.position;
+        const toPlane = planeInverse.clone().multiply(node.matrixWorld);
+        const toMesh = toPlane.clone().invert();
+        const point = new THREE.Vector3();
+        // Vertices carry source triangle interpolation weights, preserving seams and UVs.
+        const fixed = [];
+        const moving = candidates.map(() => []);
+        const append = (output, polygon, indices) => {
+          for (let i = 1; i + 1 < polygon.length; i++) {
+            output.push([indices, polygon[0]], [indices, polygon[i]], [indices, polygon[i + 1]]);
+          }
+        };
+        for (let i = 0; i < geometry.index.count; i += 3) {
+          const indices = [geometry.index.getX(i), geometry.index.getX(i + 1), geometry.index.getX(i + 2)];
+          const triangle = indices.map((index, j) => {
+            const vertex = point.fromBufferAttribute(position, index).applyMatrix4(toPlane).toArray();
+            return vertex.concat([Number(j === 0), Number(j === 1), Number(j === 2)]);
+          });
+          let remaining = [triangle];
+          candidates.forEach(({ distances: planes }, panelIndex) => {
+            if (planes.some(distance => triangle.every(vertex => distance(vertex) < -1e-7))) return;
+            const outside = [];
+            for (let polygon of remaining) {
+              for (const distance of planes) {
+                const distances = polygon.map(distance);
+                if (distances.every(value => value >= -1e-7)) continue;
+                if (distances.every(value => value <= 1e-7)) {
+                  outside.push(polygon);
+                  polygon = [];
+                  break;
+                }
+                const inside = [], rejected = [];
+                polygon.forEach((v, j) => {
+                  const k = (j + 1) % polygon.length;
+                  const a = distances[j], b = distances[k];
+                  if (a >= 0) inside.push(v);
+                  if (a <= 0) rejected.push(v);
+                  if (a * b < 0) {
+                    const edge = v.map((value, axis) => value + (polygon[k][axis] - value) * a / (a - b));
+                    inside.push(edge);
+                    rejected.push(edge);
+                  }
+                });
+                outside.push(rejected);
+                polygon = inside;
+              }
+              append(moving[panelIndex], polygon, indices);
+            }
+            remaining = outside;
+          });
+          for (const polygon of remaining) append(fixed, polygon, indices);
+        }
+        if (!moving.some(vertices => vertices.length)) return;
+        const makeGeometry = vertices => {
+          const result = new THREE.BufferGeometry();
+          for (const [name, attribute] of attributes) {
+            const { array, itemSize, normalized } = attribute;
+            const stride = attribute.isInterleavedBufferAttribute ? attribute.data.stride : itemSize;
+            const offset = attribute.isInterleavedBufferAttribute ? attribute.offset : 0;
+            const values = new array.constructor(vertices.length * itemSize);
+            vertices.forEach(([indices, weights], i) => {
+              for (let component = 0; component < itemSize; component++) {
+                values[i * itemSize + component] = indices.reduce((sum, index, j) =>
+                  sum + array[index * stride + offset + component] * weights[j + 3], 0);
+              }
+            });
+            result.setAttribute(name, new THREE.BufferAttribute(values, itemSize, normalized));
+          }
+          return result;
+        };
+        const fixedGeometry = makeGeometry(fixed);
+        node.geometry = fixedGeometry;
+        const meshes = [];
+        moving.forEach((vertices, index) => {
+          if (!vertices.length) return;
+          const { control, pivot, axis } = candidates[index];
+          const panel = new THREE.Mesh(makeGeometry(vertices), node.material);
+          panel.userData.controlPanel = control;
+          panel.matrixAutoUpdate = false;
+          panel.castShadow = node.castShadow;
+          panel.receiveShadow = node.receiveShadow;
+          node.add(panel);
+          meshes.push(panel);
+          const fromPivot = toMesh.clone().multiply(new THREE.Matrix4().makeTranslation(...pivot));
+          this.controlPanels.push({
+            node: panel, control, axis: new THREE.Vector3(...axis).normalize(),
+            fromPivot, toPivot: fromPivot.clone().invert()
+          });
+        });
+        this.controlPanelRestorations.push(() => {
+          node.geometry = geometry;
+          fixedGeometry.dispose();
+          for (const panel of meshes) {
+            node.remove(panel);
+            panel.geometry.dispose();
+          }
+        });
+      });
+    }
+
+    updateRigidControlPanels() {
+      if (!this.controlPanels.length) return;
+      const u = this.shaderUniforms;
+      const angles = {
+        left: -u.uAileronL.value, right: -u.uAileronR.value,
+        flap: u.uFlap.value, elevator: u.uElevator.value, rudder: u.uRudder.value
+      };
+      for (const { node, control, axis, fromPivot, toPivot } of this.controlPanels) {
+        this.gearRotation.makeRotationAxis(axis, angles[control]);
+        node.matrix.copy(fromPivot).multiply(this.gearRotation).multiply(toPivot);
+        node.matrixWorldNeedsUpdate = true;
+      }
+    }
+
     setupShaders(def) {
       if (this.planeGroup) {
         this.planeGroup.updateMatrixWorld(true);
@@ -469,9 +653,13 @@
         uRudderParams: { value: new THREE.Vector4(...def.rudderParams) },
         uElevParams:   { value: new THREE.Vector4(...def.elevParams) },
         uWingParams:   { value: new THREE.Vector4(...def.wingParams) },
-        uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) },
-        uSweptTailHinges: { value: !!def.sweptTailHinges }
+        uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) }
       };
+
+      if (def.rigidPanels) {
+        this.setupRigidControlPanels(def);
+        if (this.controlPanels.length) return;
+      }
 
       const meshToPlaneMat = new THREE.Matrix4();
       const planeToMeshMat = new THREE.Matrix4();
@@ -538,12 +726,6 @@
               uniform vec4 uWingParams;
               uniform vec4 uWingProfile;
               uniform vec3 uSurfaceMask;
-              uniform bool uSweptTailHinges;
-
-              vec3 rotateControlArm(vec3 arm, vec3 axis, float angle) {
-                return arm * cos(angle) + cross(axis, arm) * sin(angle)
-                  + axis * dot(axis, arm) * (1.0 - cos(angle));
-              }
               `
             );
 
@@ -568,14 +750,8 @@
                 float weight = smoothstep(0.0, 0.12, dist);
                 float angle = uRudder * weight;
                 float arm = dist;
-                if (uSweptTailHinges) {
-                  vec3 hinge = vec3(0.0, _planeP.y, _zRudderHinge);
-                  vec3 axis = normalize(vec3(0.0, 1.0, _rSweep));
-                  _planeP.xyz = hinge + rotateControlArm(_planeP.xyz - hinge, axis, angle);
-                } else {
-                  _planeP.x += arm * sin(angle);
-                  _planeP.z = _zRudderHinge + arm * cos(angle);
-                }
+                _planeP.x += arm * sin(angle);
+                _planeP.z = _zRudderHinge + arm * cos(angle);
                 _deflected = true;
               }
 
@@ -595,14 +771,8 @@
                 float weight = smoothstep(0.0, 0.12, dist);
                 float angle = uElevator * weight;
                 float arm = dist;
-                if (uSweptTailHinges) {
-                  vec3 hinge = vec3(_planeP.x, 0.85, _zElevHinge);
-                  vec3 axis = normalize(vec3(1.0, 0.0, sign(_planeP.x) * _eSweep));
-                  _planeP.xyz = hinge + rotateControlArm(_planeP.xyz - hinge, axis, angle);
-                } else {
-                  _planeP.y += arm * sin(angle);
-                  _planeP.z = _zElevHinge + arm * cos(angle);
-                }
+                _planeP.y += arm * sin(angle);
+                _planeP.z = _zElevHinge + arm * cos(angle);
                 _deflected = true;
               }
 
@@ -642,12 +812,17 @@
       this.gearProgress = Math.max(0.0, Math.min(1.0, progress));
       this.gearState = phase || (progress >= 0.99 ? 'DOWN' : (progress <= 0.01 ? 'UP' : 'TRANSIT'));
 
-      const foldAngle = (1 - this.gearProgress) * Math.PI / 2;
-      for (const { node, axis, fromPivot, toPivot } of this.builtInGear) {
-        this.gearRotation.makeRotationAxis(axis, foldAngle);
-        node.matrix.copy(fromPivot).multiply(this.gearRotation).multiply(toPivot);
-        node.matrixWorldNeedsUpdate = true;
-        node.visible = this.gearProgress > 0.01;
+      if (this.builtInGear.length) {
+        const travel = THREE.MathUtils.smoothstep(this.gearProgress, 0.25, 0.75);
+        const doorTravel = THREE.MathUtils.smoothstep(Math.min(this.gearProgress, 1 - this.gearProgress), 0, 0.25);
+        for (const { pivot, openAngle } of this.gearDoors) pivot.rotation.z = openAngle * doorTravel;
+        for (const { node, axis, fromPivot, toPivot } of this.builtInGear) {
+          const foldAngle = THREE.MathUtils.degToRad(axis.x ? 92 : 80.5);
+          this.gearRotation.makeRotationAxis(axis, (1 - travel) * foldAngle);
+          node.matrix.copy(fromPivot).multiply(this.gearRotation).multiply(toPivot);
+          node.matrixWorldNeedsUpdate = true;
+          node.visible = travel > 0 || doorTravel > 0;
+        }
       }
 
       // A350 정밀 착륙장치 스트럿/도어 회전
@@ -687,6 +862,7 @@
         this.shaderUniforms.uElevator.value = elev;
         this.shaderUniforms.uRudder.value = rud;
         this.shaderUniforms.uFlap.value = flap;
+        this.updateRigidControlPanels();
       }
       if (this.parts.rudder) {
         this.parts.rudder.rotation.y = (this.parts.rudder.userData.baseRotY || 0) + rud;
@@ -767,6 +943,7 @@
         this.shaderUniforms.uElevator.value = THREE.MathUtils.lerp(this.shaderUniforms.uElevator.value, targetElevator, 0.20);
         this.shaderUniforms.uRudder.value = THREE.MathUtils.lerp(this.shaderUniforms.uRudder.value, targetRudder, 0.22);
         this.shaderUniforms.uFlap.value = THREE.MathUtils.lerp(this.shaderUniforms.uFlap.value, targetFlap, 0.15);
+        this.updateRigidControlPanels();
       }
       if (this.parts.rudder) {
         const baseY = this.parts.rudder.userData.baseRotY || 0;
@@ -809,6 +986,15 @@
         });
       });
       this.landingGears = [];
+      for (const { pivot, door } of this.gearDoors) {
+        this.planeGroup.remove(pivot);
+        door.geometry.dispose();
+      }
+      this.gearDoors[0]?.door.material.dispose();
+      this.gearDoors = [];
+      this.controlPanelRestorations.forEach(restore => restore());
+      this.controlPanelRestorations = [];
+      this.controlPanels = [];
       this.builtInGearRestorations.forEach(restore => restore());
       this.builtInGearRestorations = [];
       this.gearNodes = [];
