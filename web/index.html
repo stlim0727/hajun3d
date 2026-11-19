@@ -138,11 +138,11 @@
       <button id="gear-btn" class="icon-btn glass pc-only-hud" title="랜딩 기어 접기/내리기 (단축키 G)" onclick="window.toggleLandingGear()">🛞 <span id="gear-text">기어 DOWN</span></button>
       <button id="plane-toggle-btn" class="icon-btn glass pc-only-hud" title="비행기 기종 변경 (단축키 P)" onclick="window.nextPlane()">✈ <span id="plane-name-text">A320 제트기</span></button>
       <div class="cam-control-wrap">
-        <button id="cam-toggle-btn" class="icon-btn glass" title="카메라 시점 순환 변경 (단축키 C)" onclick="window.toggleCamera()">🎥 <span id="cam-mode-text">3인칭</span></button>
+        <button id="cam-toggle-btn" class="icon-btn glass" title="카메라 전환 (C) · 화면에서 휠/핀치 줌 · Shift+휠 출력 조절" onclick="window.toggleCamera()">🎥 <span id="cam-mode-text">3인칭</span></button>
         <button id="cam-menu-btn" class="icon-btn glass cam-menu-btn" title="카메라 시점 목록 선택" onclick="window.toggleCameraMenu()">▾</button>
         <div id="cam-mode-menu" class="cam-mode-menu glass hidden">
           <div class="cam-mode-menu-header">
-            <span>🎥 카메라 시점 (C 순환 · V 시선 초기화)</span>
+            <span>🎥 카메라 시점 (C 순환 · V 시선·줌 초기화)</span>
           </div>
           <button type="button" class="cam-mode-item active" data-cam-mode="3rd" onclick="window.setCameraMode('3rd')">🎥 3인칭 후방 (Chase)</button>
           <button type="button" class="cam-mode-item" data-cam-mode="1st" onclick="window.setCameraMode('1st')">🧑‍✈️ 1인칭 조종석 (Cockpit)</button>
@@ -152,7 +152,7 @@
           <button type="button" class="cam-mode-item" data-cam-mode="tower" onclick="window.setCameraMode('tower')">🗼 공항 관제탑 (Tower)</button>
           <button type="button" class="cam-mode-item" data-cam-mode="gear" onclick="window.setCameraMode('gear')">🛞 랜딩기어 (Gear Cam)</button>
           <button type="button" class="cam-mode-item" data-cam-mode="hud" onclick="window.setCameraMode('hud')">🎯 순수 HUD (Boresight)</button>
-          <button type="button" class="cam-mode-item cam-reset-item" onclick="window.resetCameraLook(); window.toggleCameraMenu(true);">↺ 시선 중앙 초기화 (V / 더블클릭)</button>
+          <button type="button" class="cam-mode-item cam-reset-item" onclick="window.resetCameraLook(); window.toggleCameraMenu(true);">↺ 시선·줌 초기화 (V / 더블클릭)</button>
         </div>
       </div>
       <div class="effect-control-wrap pc-only-hud">

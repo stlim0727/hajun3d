@@ -556,8 +556,9 @@
       this.keys.brake = false;
     });
 
-    // 마우스 휠 스크롤: 엔진 출력(Throttle) 가감속 (스크롤 업: 가속 ⏫, 스크롤 다운: 감속 ⏬)
+    // Shift + 휠로 엔진 출력 조절
     window.addEventListener('wheel', (e) => {
+      if (!e.shiftKey || e.ctrlKey) return;
       const hotasModal = document.getElementById('hotas-modal');
       const glbModal = document.getElementById('glb-modal');
       const overlay = document.getElementById('overlay-screen');
@@ -570,10 +571,11 @@
       }
 
       if (this.isPlaying && !this.isDestroyed) {
-        if (e.deltaY < 0) {
+        const delta = e.deltaY || e.deltaX;
+        if (delta < 0) {
           this.throttle = Math.min(1.0, this.throttle + 0.05);
           this.showPopup(`엔진 출력: ${Math.round(this.throttle * 100)}% (스크롤 가속 ⏫)`);
-        } else if (e.deltaY > 0) {
+        } else if (delta > 0) {
           this.throttle = Math.max(0.0, this.throttle - 0.05);
           this.showPopup(`엔진 출력: ${Math.round(this.throttle * 100)}% (스크롤 감속 ⏬)`);
         }
@@ -1410,6 +1412,28 @@
     target.__camDragBound = true;
 
     const getState = () => (typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState);
+    const touches = new Map();
+    const pinchDistance = () => {
+      const [first, second] = touches.values();
+      return Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+    };
+    const updateZoom = (factor) => {
+      const zoom = Math.min(3, Math.max(0.7, this.camera.zoom * factor));
+      if (zoom === this.camera.zoom) return;
+      this.camera.zoom = zoom;
+      this.camera.updateProjectionMatrix();
+    };
+    const clearDrag = (cs) => {
+      cs.isDraggingLook = false;
+      cs.dragPointerId = null;
+    };
+
+    target.addEventListener('wheel', (e) => {
+      if (!this.isPlaying || this.isDestroyed || (e.shiftKey && !e.ctrlKey)) return;
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? target.clientHeight : 1;
+      updateZoom(Math.exp(-e.deltaY * unit * 0.0015));
+    }, { passive: false });
 
     target.addEventListener('pointerdown', (e) => {
       if (!this.isPlaying || this.isDestroyed) return;
@@ -1417,6 +1441,16 @@
       if (target !== this.container && e.target !== target) return;
       const cs = getState();
       if (!cs) return;
+      if (e.pointerType === 'touch') {
+        if (touches.size === 2) return;
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (touches.size === 2) {
+          clearDrag(cs);
+          return;
+        }
+      } else if (touches.size) {
+        return;
+      }
       cs.isDraggingLook = true;
       cs.dragPointerId = e.pointerId;
       cs.dragLastX = e.clientX;
@@ -1424,6 +1458,15 @@
     });
 
     window.addEventListener('pointermove', (e) => {
+      if (!this.isPlaying || this.isDestroyed) return;
+      if (touches.has(e.pointerId)) {
+        const previousDistance = touches.size === 2 ? pinchDistance() : null;
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (previousDistance !== null) {
+          updateZoom(pinchDistance() / previousDistance);
+          return;
+        }
+      }
       const cs = getState();
       if (!cs || !cs.isDraggingLook || e.pointerId !== cs.dragPointerId) return;
       const dx = e.clientX - cs.dragLastX;
@@ -1458,12 +1501,26 @@
 
     const endDrag = (e) => {
       const cs = getState();
-      if (!cs || !cs.isDraggingLook || e.pointerId !== cs.dragPointerId) return;
-      cs.isDraggingLook = false;
-      cs.dragPointerId = null;
+      const wasPinching = touches.size === 2;
+      const releasedTouch = touches.delete(e.pointerId);
+      if (!cs) return;
+      if (releasedTouch && wasPinching) {
+        const [[id, point]] = touches;
+        cs.isDraggingLook = true;
+        cs.dragPointerId = id;
+        cs.dragLastX = point.x;
+        cs.dragLastY = point.y;
+      } else if (e.pointerId === cs.dragPointerId) {
+        clearDrag(cs);
+      }
     };
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', endDrag);
+    window.addEventListener('blur', () => {
+      touches.clear();
+      const cs = getState();
+      if (cs) clearDrag(cs);
+    });
 
     target.addEventListener('dblclick', () => {
       if (this.isPlaying && !this.isDestroyed) {
@@ -1484,8 +1541,12 @@
     cs.gearLookYaw = 0;
     cs.gearLookPitch = 0;
     cs.dronePitch = 0.28;
+    if (this.camera && this.camera.zoom !== 1) {
+      this.camera.zoom = 1;
+      this.camera.updateProjectionMatrix();
+    }
     if (typeof this.showPopup === 'function') {
-      this.showPopup('🎯 카메라 시선 중앙 초기화 [단축키 V]');
+      this.showPopup('🎯 카메라 시선·줌 초기화 [단축키 V]');
     }
   }
 
