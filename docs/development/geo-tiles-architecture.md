@@ -1,6 +1,6 @@
 # ADR: streamed geospatial tiles for Haeundae / Korea / world
 
-Status: **opt-in runtime layer integrated; open terrain sources still need projection work**.
+Status: **opt-in runtime layer integrated on a single shared renderer; open terrain sources still need projection work**.
 
 ## Decision
 
@@ -40,24 +40,28 @@ asset (`2275207`, Google Photorealistic 3D Tiles), same camera presets.
 
 ## Integration boundary
 
-`web/index.html` still uses classic scripts with a global Three.js r128, while
-`3d-tiles-renderer` requires modern ESM Three.js. Rather than migrating the whole
-game renderer, the streamed tiles render in a second, transparent-backed WebGL
-layer underneath the game canvas:
+`web/index.html` previously loaded Three.js r128 from a CDN. It now loads a
+single local bundle (`web/js/three_core_bundle.js`, mirrored into Flutter assets)
+that provides modern Three.js r186, GLTFLoader/GLTFExporter and
+`3d-tiles-renderer` to the classic scripts. This removes the CDN dependency and
+the earlier dual-renderer warning.
 
-- `scripts/geo_tiles_overlay_source.js` → bundled to `web/js/geo_tiles_bundle.js`
-  via `npm run build:geo-tiles` (also mirrored into `flutter_app/assets/web/js/`).
-- `core.js` enables it only with `?geoTiles=1&ionToken=<token>`. Default and
-  `file://` WebView playback are unchanged (one canvas, no network).
-- Camera pose is copied from the game camera each frame; the tileset is anchored
-  at Haeundae LCT (`35.1603056, 129.169`) and offset to the simulator's local
-  position `(-180, 0, -28700)`.
-- The ion/Google credit overlay is displayed when ion content is used.
+- Build: `npm run build:geo-tiles` (esbuild IIFE, `window.THREE` +
+  `window.HajunGeoTiles`).
+- `core.js` enables tiles only with `?geoTiles=1&ionToken=<token>`; the tile
+  group is added to the game's own scene and updated once per frame, so terrain
+  and aircraft share depth.
+- Tiles are anchored at Haeundae LCT (`35.1603056, 129.169`) and offset to the
+  simulator's local `(-180, 0, -28700)`.
+- Ion/Google credit is displayed when ion content is used.
 
-Verified in headless Chrome: 171 tiles loaded, 0 tile errors, 0 page exceptions,
-2 canvases. Default path: 1 canvas, no geo layer. Known limitation: two Three.js
-instances produce a console warning, and terrain cannot depth-occlude the game
-aircraft because the contexts are separate.
+Verified in headless Chrome: one canvas, Three r186, 171 tiles loaded, 0 tile
+errors, 0 exceptions, 0 warnings — with and without the tile layer. GLB aircraft
+loading still works (`a320`, 12 plane-group children, `TAKEOFF_RUN`).
+
+Remaining limitation: the simulator's local layout is not a true geodetic ENU
+projection, so only the Haeundae anchor is aligned; whole-Korea alignment needs
+a georeferencing pass on the simulator itself.
 
 ## Data sources and licensing
 

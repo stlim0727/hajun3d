@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sky Explorer 3D - 3D 비행기 게임</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Three.js & GLTF/GLB 3D Pipeline CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+  <!-- Unified Three.js + GLTF/GLB pipeline + optional 3D Tiles (offline-safe local bundle) -->
+  <script src="js/three_core_bundle.js"></script>
 </head>
 <body>
   <!-- 3D WebGL Canvas Container -->
@@ -765,12 +763,6 @@
 
   <script src="glb_bundle.js"></script>
   <!-- Modular Architecture for Clean Maintenance & Token Efficiency -->
-  <script>
-    // Load the streamed-tiles bundle only when explicitly requested.
-    if (new URLSearchParams(location.search).get('geoTiles') === '1') {
-      document.write('<script src="js/geo_tiles_bundle.js"><\/script>');
-    }
-  </script>
   <script src="js/core.js"></script>
   <script src="js/config.js"></script>
   <script src="js/audio.js"></script>

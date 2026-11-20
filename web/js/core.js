@@ -324,8 +324,7 @@ class AirplaneGame {
     const geoEnabled = geoParams.get('geoTiles') === '1' && Boolean(window.HajunGeoTiles);
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      powerPreference: 'high-performance',
-      alpha: geoEnabled
+      powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // 고해상도 디스플레이 필레이트 병목 제거
@@ -345,20 +344,15 @@ class AirplaneGame {
     this.container.appendChild(this.renderer.domElement);
 
     if (geoEnabled) {
-      this.renderer.setClearColor(0x000000, 0);
-      this.scene.background = null;
-      this.container.style.position = 'relative';
       this.geoLayer = window.HajunGeoTiles.create({
         ionToken: geoParams.get('ionToken') || '',
         lat: Number(geoParams.get('geoLat') ?? 35.1603056),
         lon: Number(geoParams.get('geoLon') ?? 129.169),
         simAnchor: { x: -180, y: 0, z: -28700 },
-        container: this.container,
-        width: window.innerWidth,
-        height: window.innerHeight
-      });
-      window.addEventListener('resize', () => {
-        if (this.geoLayer) this.geoLayer.resize(window.innerWidth, window.innerHeight);
+        scene: this.scene,
+        camera: this.camera,
+        renderer: this.renderer,
+        container: this.container
       });
     }
 
@@ -477,7 +471,7 @@ class AirplaneGame {
       this.screenShake *= 0.92;
     }
 
-    if (this.geoLayer) this.geoLayer.render(this.camera);
+    if (this.geoLayer) this.geoLayer.update();
     this.renderer.render(this.scene, this.camera);
   }
 }
