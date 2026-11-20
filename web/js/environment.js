@@ -265,11 +265,14 @@
         const dx = height[y * W + xp] - height[y * W + xm];
         const dz = height[yp * W + x] - height[ym * W + x];
         const len = Math.hypot(dx, dz, 2.0);
+        // Standard tangent-space encoding: R/G are surface slopes, B is the
+        // positive outward component so normals never point inward.
         const nx = -dx / len;
-        const nz = -dz / len;
+        const ny = -dz / len;
+        const nz = 2.0 / len;
         const idx = (y * W + x) * 4;
         data[idx]     = (nx * 0.5 + 0.5) * 255;
-        data[idx + 1] = 128;
+        data[idx + 1] = (ny * 0.5 + 0.5) * 255;
         data[idx + 2] = (nz * 0.5 + 0.5) * 255;
         data[idx + 3] = 255;
       }
@@ -320,11 +323,14 @@
         const dx = height[y * W + xp] - height[y * W + xm];
         const dz = height[yp * W + x] - height[ym * W + x];
         const len = Math.hypot(dx, dz, 2.0);
+        // Standard tangent-space encoding: R/G are surface slopes, B is the
+        // positive outward component so normals never point inward.
         const nx = -dx / len;
-        const nz = -dz / len;
+        const ny = -dz / len;
+        const nz = 2.0 / len;
         const idx = (y * W + x) * 4;
         data[idx]     = (nx * 0.5 + 0.5) * 255;
-        data[idx + 1] = 128;
+        data[idx + 1] = (ny * 0.5 + 0.5) * 255;
         data[idx + 2] = (nz * 0.5 + 0.5) * 255;
         data[idx + 3] = 255;
       }

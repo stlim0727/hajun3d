@@ -114,32 +114,35 @@ function loadProximityHarness() {
     localStorage: { getItem: () => null, setItem: () => {} },
     document: {
       getElementById: () => null,
-      createElement: () => ({
-        width: 0,
-        height: 0,
-        getContext: () => ({
-          fillStyle: '',
-          strokeStyle: '',
-          lineWidth: 1,
-          lineCap: 'round',
-          fillRect: () => {},
-          beginPath: () => {},
-          arc: () => {},
-          fill: () => {},
-          stroke: () => {},
-          bezierCurveTo: () => {},
-          moveTo: () => {},
-          lineTo: () => {},
-          createLinearGradient: () => ({ addColorStop: () => {} }),
-          createRadialGradient: () => ({ addColorStop: () => {} }),
-          createImageData: (w, h) => ({
-            width: w,
-            height: h,
-            data: new Uint8ClampedArray(w * h * 4)
-          }),
-          putImageData: () => {}
-        })
-      })
+      createElement: () => {
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            fillStyle: '',
+            strokeStyle: '',
+            lineWidth: 1,
+            lineCap: 'round',
+            fillRect: () => {},
+            beginPath: () => {},
+            arc: () => {},
+            fill: () => {},
+            stroke: () => {},
+            bezierCurveTo: () => {},
+            moveTo: () => {},
+            lineTo: () => {},
+            createLinearGradient: () => ({ addColorStop: () => {} }),
+            createRadialGradient: () => ({ addColorStop: () => {} }),
+            createImageData: (w, h) => ({
+              width: w,
+              height: h,
+              data: new Uint8ClampedArray(w * h * 4)
+            }),
+            putImageData: (img) => { canvas.lastImageData = img; }
+          })
+        };
+        return canvas;
+      }
     },
     performance: { now: () => 1000 },
     console
@@ -247,6 +250,20 @@ test('ocean and terrain canvas textures use high-frequency tiling for low-altitu
   assert.equal(oceanTex.repeat.ry, 1200);
   assert.equal(terrainTex.repeat.rx, 500);
   assert.equal(terrainTex.repeat.ry, 400);
+});
+test('normal map textures encode outward tangent-space Z and non-flat slopes', () => {
+  const { game } = loadProximityHarness();
+  for (const make of [game.createTerrainNormalTexture, game.createOceanNormalTexture]) {
+    const tex = make.call(game);
+    const data = tex.canvas.lastImageData.data;
+    let inward = 0, greenFlat = true, greenSample = data[1];
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 2] <= 128) inward++;
+      if (data[i + 1] !== greenSample) greenFlat = false;
+    }
+    assert.equal(inward, 0, 'normal map blue channel must be positive outward Z everywhere');
+    assert.equal(greenFlat, false, 'normal map green channel must carry the second slope, not a constant');
+  }
 });
 
 test('takeoff roll and low climb over runway/land spawn no ground dust particles', () => {
