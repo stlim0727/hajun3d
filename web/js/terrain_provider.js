@@ -19,6 +19,7 @@
   const TILE_SIZE = 256;
   const DEFAULT_ZOOM = 11;
   const D2R = Math.PI / 180;
+  const RETRY_MS = 5000;
 
   /** Terrarium PNG RGBA -> Float32 heights (metres above MSL). */
   function decodeTerrarium(rgba) {
@@ -86,9 +87,17 @@
 
     const keyOf = (x, y) => `${zoom}/${x}/${y}`;
 
+    const failedAt = new Map(); // key -> ms; failed tiles are retried after RETRY_MS
+
     function request(tx, ty) {
       const key = keyOf(tx, ty);
-      if (tiles.has(key)) return tiles.get(key);
+      if (tiles.has(key)) {
+        const state = tiles.get(key);
+        if (state !== 'failed' || Date.now() - (failedAt.get(key) || 0) < RETRY_MS) return state;
+        tiles.delete(key);
+        const at = order.indexOf(key);
+        if (at >= 0) order.splice(at, 1);
+      }
       tiles.set(key, 'pending');
       order.push(key);
       while (order.length > maxTiles) tiles.delete(order.shift());
@@ -99,7 +108,9 @@
           tiles.set(key, decodeTerrarium(rgba));
         })
         .catch(() => {
-          if (!disposed && tiles.has(key)) tiles.set(key, 'failed');
+          if (disposed || !tiles.has(key)) return;
+          tiles.set(key, 'failed');
+          failedAt.set(key, Date.now());
         });
       return 'pending';
     }
@@ -147,8 +158,9 @@
       kind: 'terrarium',
       zoom,
       getHeight(x, z) {
-        if (!ensureDatum()) return null;
+        // Always request the tile for (x, z), even while the datum tile is still loading.
         const h = sampleMsl(x, z, true);
+        if (!ensureDatum()) return null;
         return h === null ? null : h - datumM;
       },
       isReady(x, z) {
@@ -168,7 +180,8 @@
         return { x: nx / len, y: ny / len, z: nz / len };
       },
       update(position) {
-        if (!position || !ensureDatum()) return;
+        if (!position) return;
+        ensureDatum();
         const { lat, lon } = frame.toWgs84(position.x, position.z);
         const { fx, fy } = lonLatToTilePixel(lat, lon, zoom);
         const cx = Math.floor(fx);

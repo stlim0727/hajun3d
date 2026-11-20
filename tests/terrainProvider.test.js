@@ -71,3 +71,35 @@ test('resolveGroundHeight prefers provider heights when ready', async () => {
   const ground = TP.resolveGroundHeight(() => provider, () => -45);
   assert.ok(Math.abs(ground(0, 0)) < 0.01);
 });
+
+test('getHeight requests its own tile before the datum tile has loaded', async () => {
+  const requested = [];
+  const provider = TP.createTerrariumProvider({
+    anchor: ANCHOR,
+    loadTile: async (z, x, y) => { requested.push(`${x}/${y}`); return flatTile(5); },
+  });
+  provider.getHeight(0, -20000); // ~20 km north: a different tile than the anchor's
+  assert.ok(new Set(requested).size >= 2 || (await settle(), new Set(requested).size >= 2));
+  provider.dispose();
+});
+
+test('failed tiles are retried after the cooldown', async () => {
+  let calls = 0;
+  const realNow = Date.now;
+  const provider = TP.createTerrariumProvider({
+    anchor: ANCHOR,
+    loadTile: async () => { calls += 1; if (calls === 1) throw new Error('offline'); return flatTile(5); },
+  });
+  provider.getHeight(0, 0);
+  await settle();
+  const first = calls;
+  Date.now = () => realNow() + 6000;
+  try {
+    provider.getHeight(0, 0);
+    await settle();
+    provider.getHeight(0, 0);
+  } finally { Date.now = realNow; }
+  assert.ok(calls > first);
+  assert.equal(provider.isReady(0, 0), true);
+  provider.dispose();
+});
