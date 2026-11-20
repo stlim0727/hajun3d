@@ -255,7 +255,7 @@
     this.setTimeOfDay(this.timeOfDay === 'day' ? 'night' : 'day');
   },
 
-  // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 3800m 활주로 중앙 정렬)
+  // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 김해 3200m 활주로 중앙 정렬)
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
     this.showGateActionPrompt(false);
@@ -415,15 +415,18 @@
     if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
 
     this.buildAircraft(this.currentPlaneType);
-    // 3 km south of Haeundae, over the sea, heading north toward LCT/beach.
-    this.planeGroup.position.set(-180, 900, -29500);
-    this.yaw = Math.PI;
+    // Haeundae LCT in the Gimhae-anchored frame; start 800 m south over the sea.
+    const haeundae = window.geoLocalDelta
+      ? window.geoLocalDelta(window.GEO_POINTS.haeundae).local
+      : { x: -180, z: -28700 };
+    this.planeGroup.position.set(haeundae.x, 900, haeundae.z + 800);
+    this.yaw = 0;
     this.pitch = 0;
     this.roll = 0;
     this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
     this.planeGroup.visible = true;
 
-    this.velocity.set(0, 0, 78);
+    this.velocity.set(0, 0, -78);
     this.speed = 1.0;
     this.groundSpeed = 78;
     this.verticalSpeed = 0;

@@ -53162,6 +53162,7 @@ void main() {
       lat,
       lon,
       height = 0,
+      azimuth = 0,
       simAnchor = { x: -180, y: 0, z: -28700 },
       scene,
       camera,
@@ -53172,7 +53173,7 @@ void main() {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     const tiles = new Yt();
     tiles.registerPlugin(new er({ apiToken: ionToken, assetId, autoRefreshToken: true }));
-    tiles.registerPlugin(new oi({ lat: lat * D2R, lon: lon * D2R, height }));
+    tiles.registerPlugin(new oi({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
     tiles.registerPlugin(new or());
     tiles.registerPlugin(new bi());
     tiles.addEventListener("load-root-tileset", () => {

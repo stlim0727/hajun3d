@@ -1,6 +1,6 @@
 # ADR: streamed geospatial tiles for Haeundae / Korea / world
 
-Status: **opt-in runtime layer integrated on a single shared renderer; open terrain sources still need projection work**.
+Status: **opt-in runtime layer on a single renderer, anchored at Gimhae for whole-map streaming; open terrain sources still need projection work**.
 
 ## Decision
 
@@ -76,3 +76,21 @@ a georeferencing pass on the simulator itself.
   ion logo + Google logo required; no offline caching on Community plan.
 - Korean close-range buildings: VWorld / NGII or OSM footprints + heights.
 - Global open terrain: AWS Terrarium tiles are reachable, but their projection scheme does not work with the current ENU reorientation; not shipped.
+
+
+## Whole-map georeference — Gimhae anchor
+
+The simulator's original layout used a compressed local corridor. It is now
+anchored at **Gimhae International Airport (RKPK/PUS), runway 18R/36L 36L
+threshold** (`35.165199, 128.938995`, heading `353.9°`). The departure runway is
+resized to its real 3,200 m length.
+
+`geo_config.js` carries the anchor, the ion token, and `geoLocalDelta()`, which
+maps real lat/lon landmarks into the game's local frame (`+X` right, `-Z`
+forward along the runway heading). Haeundae and Incheon landmark groups and
+their collision boxes are relocated to their real geodetic offsets. When tiles
+are active, the procedural terrain/island/mountain/tree groups are hidden so
+streamed terrain covers the whole map without overlap.
+
+Known limit: other procedural scenery along the old corridor is not yet
+georeferenced; only Gimhae, Haeundae and Incheon are placed at real coordinates.

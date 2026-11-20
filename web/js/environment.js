@@ -887,6 +887,19 @@
       });
     });
 
+    if (window.geoLocalDelta && window.GEO_POINTS) {
+      const h = window.geoLocalDelta(window.GEO_POINTS.haeundae);
+      const hVec = new THREE.Vector3(h.x, h.y, h.z);
+      this.obstacles.forEach(o => {
+        if (/해운대|광안대교|마린시티/.test(o.name)) o.box.translate(hVec);
+      });
+      const i = window.geoLocalDelta(window.GEO_POINTS.incheon);
+      const iVec = new THREE.Vector3(i.x, i.y, i.z);
+      this.obstacles.forEach(o => {
+        if (/인천/.test(o.name)) o.box.translate(iVec);
+      });
+    }
+
     this.initTerrainColliders();
   },
 

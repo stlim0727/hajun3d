@@ -271,7 +271,12 @@ class AirplaneGame {
       this.initStars();
       this.initGLBSystem();
       this.initEnvironments();
-      if (this.geoLayer && this.terrainGroup) this.terrainGroup.visible = false;
+      if (typeof this.applyGeodeticPlacement === 'function') this.applyGeodeticPlacement();
+      if (this.geoLayer) {
+        ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+          if (this[name]) this[name].visible = false;
+        });
+      }
     } catch (e) {
       console.error('Scene init error:', e);
     }
@@ -323,10 +328,13 @@ class AirplaneGame {
     // Disabled by default: the offline file:// WebView path is unchanged.
     const geoParams = new URLSearchParams(window.location.search);
     const geoEnabled = geoParams.get('geoTiles') === '1' && Boolean(window.HajunGeoTiles);
+    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9 };
     this.geoAnchor = {
-      lat: Number(geoParams.get('geoLat') ?? 35.1603056),
-      lon: Number(geoParams.get('geoLon') ?? 129.169)
+      lat: Number(geoParams.get('geoLat') ?? baseAnchor.lat),
+      lon: Number(geoParams.get('geoLon') ?? baseAnchor.lon),
+      headingDeg: Number(geoParams.get('geoHeading') ?? baseAnchor.headingDeg)
     };
+    this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance'
@@ -365,20 +373,31 @@ class AirplaneGame {
     this.scene.add(this.planeGroup);
   }
 
+  applyGeodeticPlacement() {
+    if (!window.geoLocalDelta || !window.GEO_POINTS) return;
+    const haeundae = window.geoLocalDelta(window.GEO_POINTS.haeundae);
+    if (this.cityGroup) this.cityGroup.position.set(haeundae.x, haeundae.y, haeundae.z);
+    const incheon = window.geoLocalDelta(window.GEO_POINTS.incheon);
+    if (this.incheonAirportGroup) this.incheonAirportGroup.position.set(incheon.x, incheon.y, incheon.z);
+  }
+
   enableGeoTiles(ionToken) {
     if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken,
       lat: this.geoAnchor.lat,
       lon: this.geoAnchor.lon,
-      simAnchor: { x: -180, y: 0, z: -28700 },
+      azimuth: this.geoAzimuth,
+      simAnchor: { x: 160, y: 0, z: 1600 },
       scene: this.scene,
       camera: this.camera,
       renderer: this.renderer,
       container: this.container
     });
     if (this.geoLayer) {
-      if (this.terrainGroup) this.terrainGroup.visible = false;
+      ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+        if (this[name]) this[name].visible = false;
+      });
     }
     return Boolean(this.geoLayer);
   }

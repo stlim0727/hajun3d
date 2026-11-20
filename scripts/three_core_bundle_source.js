@@ -25,6 +25,7 @@ export function create(options = {}) {
     lat,
     lon,
     height = 0,
+    azimuth = 0,
     simAnchor = { x: -180, y: 0, z: -28700 },
     scene,
     camera,
@@ -37,7 +38,7 @@ export function create(options = {}) {
 
   const tiles = new TilesRenderer();
   tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: ionToken, assetId, autoRefreshToken: true }));
-  tiles.registerPlugin(new ReorientationPlugin({ lat: lat * D2R, lon: lon * D2R, height }));
+  tiles.registerPlugin(new ReorientationPlugin({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
   tiles.registerPlugin(new TileCompressionPlugin());
   tiles.registerPlugin(new TilesFadePlugin());
 
