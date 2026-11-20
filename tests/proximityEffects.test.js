@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 function loadProximityHarness() {
+  class Vector2 {
+    constructor(x = 0, y = 0) {
+      this.x = x; this.y = y;
+    }
+    set(x, y) { this.x = x; this.y = y; return this; }
+  }
+
   class Vector3 {
     constructor(x = 0, y = 0, z = 0) {
       this.x = x; this.y = y; this.z = z;
@@ -22,6 +29,7 @@ function loadProximityHarness() {
   }
 
   const THREE = {
+    Vector2,
     Vector3,
     Quaternion,
     AdditiveBlending: 2,
@@ -106,26 +114,35 @@ function loadProximityHarness() {
     localStorage: { getItem: () => null, setItem: () => {} },
     document: {
       getElementById: () => null,
-      createElement: () => ({
-        width: 0,
-        height: 0,
-        getContext: () => ({
-          fillStyle: '',
-          strokeStyle: '',
-          lineWidth: 1,
-          lineCap: 'round',
-          fillRect: () => {},
-          beginPath: () => {},
-          arc: () => {},
-          fill: () => {},
-          stroke: () => {},
-          bezierCurveTo: () => {},
-          moveTo: () => {},
-          lineTo: () => {},
-          createLinearGradient: () => ({ addColorStop: () => {} }),
-          createRadialGradient: () => ({ addColorStop: () => {} })
-        })
-      })
+      createElement: () => {
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            fillStyle: '',
+            strokeStyle: '',
+            lineWidth: 1,
+            lineCap: 'round',
+            fillRect: () => {},
+            beginPath: () => {},
+            arc: () => {},
+            fill: () => {},
+            stroke: () => {},
+            bezierCurveTo: () => {},
+            moveTo: () => {},
+            lineTo: () => {},
+            createLinearGradient: () => ({ addColorStop: () => {} }),
+            createRadialGradient: () => ({ addColorStop: () => {} }),
+            createImageData: (w, h) => ({
+              width: w,
+              height: h,
+              data: new Uint8ClampedArray(w * h * 4)
+            }),
+            putImageData: (img) => { canvas.lastImageData = img; }
+          })
+        };
+        return canvas;
+      }
     },
     performance: { now: () => 1000 },
     console
@@ -234,6 +251,20 @@ test('ocean and terrain canvas textures use high-frequency tiling for low-altitu
   assert.equal(terrainTex.repeat.rx, 500);
   assert.equal(terrainTex.repeat.ry, 400);
 });
+test('normal map textures encode outward tangent-space Z and non-flat slopes', () => {
+  const { game } = loadProximityHarness();
+  for (const make of [game.createTerrainNormalTexture, game.createOceanNormalTexture]) {
+    const tex = make.call(game);
+    const data = tex.canvas.lastImageData.data;
+    let inward = 0, greenFlat = true, greenSample = data[1];
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 2] <= 128) inward++;
+      if (data[i + 1] !== greenSample) greenFlat = false;
+    }
+    assert.equal(inward, 0, 'normal map blue channel must be positive outward Z everywhere');
+    assert.equal(greenFlat, false, 'normal map green channel must carry the second slope, not a constant');
+  }
+});
 
 test('takeoff roll and low climb over runway/land spawn no ground dust particles', () => {
   const { game } = loadProximityHarness();
@@ -273,7 +304,7 @@ test('createJetExhaustParticles does not emit flame or exhaust cubes at full tak
   assert.equal(game.particles.length, 0);
 });
 
-test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white base color to GLB ground/ocean meshes', () => {
+test('applyEnvironmentTexturesToGLB assigns UVs, textures, displacement maps, and white base color to GLB ground/ocean meshes', () => {
   const { game, THREE } = loadProximityHarness();
 
   const makeMat = (name, hex = 0x1e293b) => {
@@ -361,7 +392,7 @@ test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white b
     assert.equal(uv.itemSize, 2);
     assert.equal(uv.array.length, (pos.array.length / 3) * 2);
     assert.ok(m.material.map, `${m.material.name} must receive diffuse map`);
-    assert.ok(m.material.bumpMap, `${m.material.name} must receive bumpMap`);
+    assert.ok(m.material.normalMap || m.material.bumpMap, `${m.material.name} must receive terrain displacement map (normal or bump)`);
     assert.equal(m.material.color._hex, 0xffffff, `${m.material.name} base color must reset to white`);
   }
 
@@ -374,8 +405,8 @@ test('applyEnvironmentTexturesToGLB assigns UVs, textures, bumpMaps, and white b
   assert.equal(runwayMesh.geometry.attributes.uv.array[0], 0);
   assert.equal(runwayMesh.geometry.attributes.uv.array[2], 1);
 
-  assert.ok(mountainMesh.geometry.attributes.uv, 'Mountain terrain must receive uv attribute for bump mapping');
+  assert.ok(mountainMesh.geometry.attributes.uv, 'Mountain terrain must receive uv attribute for normal mapping');
   assert.equal(mountainMesh.material.vertexColors, true);
-  assert.equal(mountainMesh.material.bumpMap, game.continentTexture);
+  assert.equal(mountainMesh.material.normalMap, game.terrainNormalTexture);
   assert.equal(mountainMesh.material.map, null);
 });
