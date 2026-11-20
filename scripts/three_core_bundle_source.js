@@ -42,7 +42,7 @@ export function create(options = {}) {
   tiles.registerPlugin(new TileCompressionPlugin());
   tiles.registerPlugin(new TilesFadePlugin());
   // Korea has no photogrammetric high-LOD tiles; request coarser available levels.
-  tiles.errorTarget = 32;
+  tiles.errorTarget = 128;
 
   tiles.addEventListener('load-root-tileset', () => {
     tiles.group.position.x += simAnchor.x;
@@ -70,7 +70,7 @@ export function create(options = {}) {
 
   function update() {
     // GoogleCloudAuthPlugin resets this on init; keep Korean LOD requests available.
-    tiles.errorTarget = 32;
+    tiles.errorTarget = 128;
     tiles.setResolutionFromRenderer(camera, renderer);
     tiles.update();
   }

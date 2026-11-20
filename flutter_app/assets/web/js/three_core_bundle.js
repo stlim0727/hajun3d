@@ -53176,7 +53176,7 @@ void main() {
     tiles.registerPlugin(new oi({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
     tiles.registerPlugin(new or());
     tiles.registerPlugin(new bi());
-    tiles.errorTarget = 32;
+    tiles.errorTarget = 128;
     tiles.addEventListener("load-root-tileset", () => {
       tiles.group.position.x += simAnchor.x;
       tiles.group.position.y += simAnchor.y;
@@ -53200,7 +53200,7 @@ void main() {
       container.appendChild(credit);
     }
     function update() {
-      tiles.errorTarget = 32;
+      tiles.errorTarget = 128;
       tiles.setResolutionFromRenderer(camera, renderer);
       tiles.update();
     }
