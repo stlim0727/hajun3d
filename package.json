@@ -8,6 +8,7 @@
     "test": "node --test tests/**/*.test.js",
     "build:core": "node scripts/build_flightsim_core_bundle.mjs",
     "build:info": "node scripts/generate-build-info.mjs",
+    "build:geo-tiles": "esbuild scripts/geo_tiles_overlay_source.js --bundle --format=iife --global-name=HajunGeoTiles --outfile=web/js/geo_tiles_bundle.js --target=es2020 --platform=browser && cp web/js/geo_tiles_bundle.js flutter_app/assets/web/js/geo_tiles_bundle.js",
     "wt:new": "node scripts/agent-workflow.mjs wt:new",
     "audio:departure": "node scripts/build-gemini-departure-radio.mjs",
     "audio:check": "node scripts/build-gemini-departure-radio.mjs --check",
@@ -26,6 +27,7 @@
   },
   "dependencies": {
     "@stlim0727/flightsim-core": "git+https://github.com/stlim0727/flightsim-core.git#45e5c064b52011c4845196cbd4604caa49a648f6",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "3d-tiles-renderer": "^0.5.4"
   }
 }

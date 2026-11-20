@@ -923,6 +923,12 @@
 
   <script src="glb_bundle.js?v=20261117i"></script>
   <!-- Modular Architecture for Clean Maintenance & Token Efficiency -->
+  <script>
+    // Load the streamed-tiles bundle only when explicitly requested.
+    if (new URLSearchParams(location.search).get('geoTiles') === '1') {
+      document.write('<script src="js/geo_tiles_bundle.js"><\/script>');
+    }
+  </script>
   <script src="js/core.js"></script>
   <script src="js/config.js?v=20261117i"></script>
   <script src="js/audio.js"></script>

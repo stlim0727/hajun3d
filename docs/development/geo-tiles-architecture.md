@@ -1,6 +1,6 @@
 # ADR: streamed geospatial tiles for Haeundae / Korea / world
 
-Status: **accepted direction, not yet integrated into the game runtime**.
+Status: **opt-in runtime layer integrated; open terrain sources still need projection work**.
 
 ## Decision
 
@@ -40,24 +40,28 @@ asset (`2275207`, Google Photorealistic 3D Tiles), same camera presets.
 
 ## Integration boundary
 
-`web/index.html` loads classic scripts and a global Three.js **r128**;
-`3d-tiles-renderer` requires modern Three.js as an ES module. Therefore the
-runtime integration is a scoped migration, not a drop-in patch:
+`web/index.html` still uses classic scripts with a global Three.js r128, while
+`3d-tiles-renderer` requires modern ESM Three.js. Rather than migrating the whole
+game renderer, the streamed tiles render in a second, transparent-backed WebGL
+layer underneath the game canvas:
 
-1. Move the app to a modern ESM Three.js build (preserving the `file://` offline
-   bundle and zero-CORS WebView constraint).
-2. Introduce a geodetic anchor and ENU frame; keep physics in local metres.
-3. Add `TilesRenderer` with `ReorientationPlugin`, terrain plugin, fade and
-   compression plugins; keep generated GLB landmarks for close range.
-4. Sample tile heights into `Environment.getTerrainColliderHit()` so visuals and
-   collision agree; prefetch along the flight path and bound the LRU cache.
+- `scripts/geo_tiles_overlay_source.js` → bundled to `web/js/geo_tiles_bundle.js`
+  via `npm run build:geo-tiles` (also mirrored into `flutter_app/assets/web/js/`).
+- `core.js` enables it only with `?geoTiles=1&ionToken=<token>`. Default and
+  `file://` WebView playback are unchanged (one canvas, no network).
+- Camera pose is copied from the game camera each frame; the tileset is anchored
+  at Haeundae LCT (`35.1603056, 129.169`) and offset to the simulator's local
+  position `(-180, 0, -28700)`.
+- The ion/Google credit overlay is displayed when ion content is used.
 
-Until step 1 is done, the working reference implementation lives in
-`~/fff/tiles-demo/` (outside the repository) and is documented above.
+Verified in headless Chrome: 171 tiles loaded, 0 tile errors, 0 page exceptions,
+2 canvases. Default path: 1 canvas, no geo layer. Known limitation: two Three.js
+instances produce a console warning, and terrain cannot depth-occlude the game
+aircraft because the contexts are separate.
 
 ## Data sources and licensing
 
 - Google 3D Tiles via ion: good outside Korea, no Korean building meshes;
   ion logo + Google logo required; no offline caching on Community plan.
 - Korean close-range buildings: VWorld / NGII or OSM footprints + heights.
-- Global open terrain: AWS Terrarium tiles, no API key, suitable for high-alt LOD.
+- Global open terrain: AWS Terrarium tiles are reachable, but their projection scheme does not work with the current ENU reorientation; not shipped.

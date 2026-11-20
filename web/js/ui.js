@@ -156,7 +156,7 @@
 
     // 1. 하늘 배경색 및 안개 색상/밀도
     if (this.scene) {
-      this.scene.background.setHex(isNight ? 0x050a18 : 0x7ec8e3);
+      if (this.scene.background) this.scene.background.setHex(isNight ? 0x050a18 : 0x7ec8e3);
       if (this.scene.fog) {
         this.scene.fog.color.setHex(isNight ? 0x060d1f : 0xa3d5ed);
         this.scene.fog.density = isNight ? 0.000032 : 0.000028;
