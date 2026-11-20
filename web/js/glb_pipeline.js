@@ -1203,6 +1203,7 @@
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.airportGroup.add(scene);
         this.glbAirportBuffer = buf;
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         if (typeof this.addRunwayVisualDetails === 'function') {
           const whiteMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,
@@ -1210,7 +1211,7 @@
             polygonOffsetFactor: -4,
             polygonOffsetUnits: -4
           });
-          this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3800, whiteMat);
+          this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3200, whiteMat);
         }
         this.initPAPILights();
       }
@@ -1226,6 +1227,7 @@
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.incheonAirportGroup.add(scene);
         this.glbIncheonBuffer = buf;
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         if (typeof this.addRunwayVisualDetails === 'function') {
           const whiteMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,

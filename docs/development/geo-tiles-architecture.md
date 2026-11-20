@@ -94,3 +94,19 @@ streamed terrain covers the whole map without overlap.
 
 Known limit: other procedural scenery along the old corridor is not yet
 georeferenced; only Gimhae, Haeundae and Incheon are placed at real coordinates.
+
+
+## Airfield cleanup and flat buildings
+
+With tiles active, the GLB airfield ground island and the merged
+terminal/buildings nodes are hidden. Only the runway overlay (marked to the
+real 3,200 m Gimhae length), the dedicated control tower and the PAPI/beacon
+lights remain; collision boxes for terminal/hangar are removed.
+
+Buildings that appear only as **flat shapes in streamed imagery** are treated as
+background: no 3D proxy and no collision. This avoids double geometry over
+imagery and keeps the 60 FPS budget. Only named GLB landmarks (LCT, Marine City,
+Gwangandaegyo) get 3D geometry and obstacle boxes. If real building geometry is
+needed later, use VWorld/NGII 3D building tiles for Korea or OSM footprints with
+heights and ODbL attribution, and add them as LOD-gated tiles rather than
+per-building meshes.

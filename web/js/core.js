@@ -376,6 +376,47 @@ class AirplaneGame {
     this.scene.add(this.planeGroup);
   }
 
+  applyAirfieldMinimalism() {
+    const hideMatching = (group, patterns) => {
+      if (!group) return;
+      group.traverse(object => {
+        if (patterns.some(pattern => pattern.test(object.name || ''))) object.visible = false;
+      });
+    };
+    hideMatching(this.airportGroup, [
+      /Airfield_Ground_And_Runways/,
+      /Terminal_Tower_And_Facilities/
+    ]);
+    hideMatching(this.incheonAirportGroup, [
+      /Incheon_Airfield_And_Dual_Runways/,
+      /Incheon_Terminals_Concourse_And_Tower/
+    ]);
+
+    if (this.airportGroup && !this._geoControlTower) {
+      const tower = new THREE.Group();
+      tower.name = 'GeoControlTower';
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(7, 9, 80, 16),
+        new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 })
+      );
+      shaft.position.set(-380, 40, -500);
+      const cab = new THREE.Mesh(
+        new THREE.CylinderGeometry(14, 11, 14, 16),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.1, metalness: 0.85 })
+      );
+      cab.position.set(-380, 87, -500);
+      tower.add(shaft, cab);
+      this.airportGroup.add(tower);
+      this._geoControlTower = tower;
+    }
+
+    if (this.obstacles) {
+      this.obstacles = this.obstacles.filter(o =>
+        !/제1여객터미널|항공정비 격납고|인천국제공항 T1/.test(o.name)
+      );
+    }
+  }
+
   applyGeodeticPlacement() {
     if (!window.geoLocalDelta || !window.GEO_POINTS) return;
     const haeundae = window.geoLocalDelta(window.GEO_POINTS.haeundae);
@@ -401,6 +442,7 @@ class AirplaneGame {
       ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
         if (this[name]) this[name].visible = false;
       });
+      this.applyAirfieldMinimalism();
     }
     return Boolean(this.geoLayer);
   }
