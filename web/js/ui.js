@@ -416,7 +416,7 @@
 
     this.buildAircraft(this.currentPlaneType);
     // 3 km south of Haeundae, over the sea, heading north toward LCT/beach.
-    this.planeGroup.position.set(-180, 1200, -34700);
+    this.planeGroup.position.set(-180, 900, -29500);
     this.yaw = Math.PI;
     this.pitch = 0;
     this.roll = 0;
