@@ -331,11 +331,12 @@ class AirplaneGame {
     const geoEnabled = (hosted || geoParams.get('geoTiles') === '1')
       && Boolean(window.GEO_ION_TOKEN || geoParams.get('ionToken'))
       && Boolean(window.HajunGeoTiles);
-    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9 };
+    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9, height: 31 };
     this.geoAnchor = {
       lat: Number(geoParams.get('geoLat') ?? baseAnchor.lat),
       lon: Number(geoParams.get('geoLon') ?? baseAnchor.lon),
-      headingDeg: Number(geoParams.get('geoHeading') ?? baseAnchor.headingDeg)
+      headingDeg: Number(geoParams.get('geoHeading') ?? baseAnchor.headingDeg),
+      height: Number(geoParams.get('geoHeight') ?? baseAnchor.height ?? 0)
     };
     this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
     this.renderer = new THREE.WebGLRenderer({
@@ -383,36 +384,17 @@ class AirplaneGame {
         if (patterns.some(pattern => pattern.test(object.name || ''))) object.visible = false;
       });
     };
-    hideMatching(this.airportGroup, [
-      /Airfield_Ground_And_Runways/,
-      /Terminal_Tower_And_Facilities/
-    ]);
+    hideMatching(this.airportGroup, [/^DepartureAirfieldGLB$/, /^RunwayShoulder$/]);
+    const pavement = this.airportGroup?.getObjectByName('RunwayPavement');
+    if (pavement) pavement.scale.x = 60 / pavement.geometry.parameters.width;
     hideMatching(this.incheonAirportGroup, [
       /Incheon_Airfield_And_Dual_Runways/,
       /Incheon_Terminals_Concourse_And_Tower/
     ]);
 
-    if (this.airportGroup && !this._geoControlTower) {
-      const tower = new THREE.Group();
-      tower.name = 'GeoControlTower';
-      const shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(7, 9, 80, 16),
-        new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 })
-      );
-      shaft.position.set(-380, 40, -500);
-      const cab = new THREE.Mesh(
-        new THREE.CylinderGeometry(14, 11, 14, 16),
-        new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.1, metalness: 0.85 })
-      );
-      cab.position.set(-380, 87, -500);
-      tower.add(shaft, cab);
-      this.airportGroup.add(tower);
-      this._geoControlTower = tower;
-    }
-
     if (this.obstacles) {
       this.obstacles = this.obstacles.filter(o =>
-        !/제1여객터미널|항공정비 격납고|인천국제공항 T1/.test(o.name)
+        !['제1여객터미널', '항공정비 격납고', '관제탑', '인천국제공항 T1'].includes(o.name)
       );
     }
   }
@@ -431,8 +413,10 @@ class AirplaneGame {
       ionToken,
       lat: this.geoAnchor.lat,
       lon: this.geoAnchor.lon,
+      height: this.geoAnchor.height,
       azimuth: this.geoAzimuth,
       simAnchor: { x: 160, y: 0, z: 1600 },
+      nearAnchorMaxDepth: 19,
       scene: this.scene,
       camera: this.camera,
       renderer: this.renderer,

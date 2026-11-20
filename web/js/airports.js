@@ -95,6 +95,7 @@
       polygonOffsetUnits: -2
     });
     const activeRunway = new THREE.Mesh(new THREE.PlaneGeometry(46, length), activeRunwayMat);
+    activeRunway.name = 'RunwayPavement';
     activeRunway.rotation.x = -Math.PI / 2;
     activeRunway.position.set(xCenter, 2.148, zCenter);
     activeRunway.receiveShadow = true;
@@ -110,6 +111,7 @@
     const shoulderGeo = new THREE.PlaneGeometry(27, length);
     [-36.5, 36.5].forEach(xOff => {
       const shoulder = new THREE.Mesh(shoulderGeo, shoulderMat);
+      shoulder.name = 'RunwayShoulder';
       shoulder.rotation.x = -Math.PI / 2;
       shoulder.position.set(xCenter + xOff, 2.144, zCenter);
       shoulder.receiveShadow = true;

@@ -1201,9 +1201,9 @@
           this.applyEnvironmentTexturesToGLB(scene, 'airport');
         }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
+        scene.name = 'DepartureAirfieldGLB';
         this.airportGroup.add(scene);
         this.glbAirportBuffer = buf;
-        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         if (typeof this.addRunwayVisualDetails === 'function') {
           const whiteMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,
@@ -1211,8 +1211,12 @@
             polygonOffsetFactor: -4,
             polygonOffsetUnits: -4
           });
-          this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3200, whiteMat);
+          const runway = new THREE.Group();
+          runway.name = 'DepartureRunway';
+          this.addRunwayVisualDetails(runway, 160, 0, 3200, whiteMat);
+          this.airportGroup.add(runway);
         }
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         this.initPAPILights();
       }
     });

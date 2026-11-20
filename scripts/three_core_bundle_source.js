@@ -27,6 +27,7 @@ export function create(options = {}) {
     height = 0,
     azimuth = 0,
     simAnchor = { x: -180, y: 0, z: -28700 },
+    nearAnchorMaxDepth = 0,
     scene,
     camera,
     renderer,
@@ -34,7 +35,7 @@ export function create(options = {}) {
   } = options;
 
   if (!ionToken || !scene || !camera || !renderer) return null;
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (![lat, lon, height].every(Number.isFinite)) return null;
 
   const tiles = new TilesRenderer();
   tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: ionToken, assetId, autoRefreshToken: true }));
@@ -50,18 +51,6 @@ export function create(options = {}) {
     tiles.group.position.z += simAnchor.z;
     tiles.group.updateMatrixWorld();
   });
-
-  // Neutral backing plane: Google does not serve every LOD over Korea, and the
-  // gaps would otherwise show the sky background as false water.
-  const fallbackGround = new THREE.Mesh(
-    new THREE.PlaneGeometry(600000, 600000),
-    new THREE.MeshBasicMaterial({ color: 0x6b7a5a, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 })
-  );
-  fallbackGround.name = 'GeoFallbackGround';
-  fallbackGround.rotation.x = -Math.PI / 2;
-  fallbackGround.position.y = 2;
-  fallbackGround.renderOrder = -1;
-  scene.add(fallbackGround);
 
   scene.add(tiles.group);
   tiles.setCamera(camera);
@@ -83,6 +72,10 @@ export function create(options = {}) {
   function update() {
     // GoogleCloudAuthPlugin resets this on init; keep Korean LOD requests available.
     tiles.errorTarget = 128;
+    // Keep the available parent tiles around Gimhae during ground operations.
+    const nearAnchor = camera.position.y < simAnchor.y + 600 &&
+      Math.hypot(camera.position.x - simAnchor.x, camera.position.z - simAnchor.z) < 6000;
+    tiles.maxDepth = nearAnchor ? nearAnchorMaxDepth : 0;
     tiles.setResolutionFromRenderer(camera, renderer);
     tiles.update();
   }
@@ -90,9 +83,6 @@ export function create(options = {}) {
   function dispose() {
     tiles.dispose();
     scene.remove(tiles.group);
-    scene.remove(fallbackGround);
-    fallbackGround.geometry.dispose();
-    fallbackGround.material.dispose();
   }
 
   function debug() {

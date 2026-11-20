@@ -53164,13 +53164,14 @@ void main() {
       height = 0,
       azimuth = 0,
       simAnchor = { x: -180, y: 0, z: -28700 },
+      nearAnchorMaxDepth = 0,
       scene,
       camera,
       renderer,
       container
     } = options;
     if (!ionToken || !scene || !camera || !renderer) return null;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (![lat, lon, height].every(Number.isFinite)) return null;
     const tiles = new Yt();
     tiles.registerPlugin(new er({ apiToken: ionToken, assetId, autoRefreshToken: true }));
     tiles.registerPlugin(new oi({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
@@ -53183,15 +53184,6 @@ void main() {
       tiles.group.position.z += simAnchor.z;
       tiles.group.updateMatrixWorld();
     });
-    const fallbackGround = new Mesh(
-      new PlaneGeometry(6e5, 6e5),
-      new MeshBasicMaterial({ color: 7043674, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 })
-    );
-    fallbackGround.name = "GeoFallbackGround";
-    fallbackGround.rotation.x = -Math.PI / 2;
-    fallbackGround.position.y = 2;
-    fallbackGround.renderOrder = -1;
-    scene.add(fallbackGround);
     scene.add(tiles.group);
     tiles.setCamera(camera);
     tiles.setResolutionFromRenderer(camera, renderer);
@@ -53210,15 +53202,14 @@ void main() {
     }
     function update() {
       tiles.errorTarget = 128;
+      const nearAnchor = camera.position.y < simAnchor.y + 600 && Math.hypot(camera.position.x - simAnchor.x, camera.position.z - simAnchor.z) < 6e3;
+      tiles.maxDepth = nearAnchor ? nearAnchorMaxDepth : 0;
       tiles.setResolutionFromRenderer(camera, renderer);
       tiles.update();
     }
     function dispose() {
       tiles.dispose();
       scene.remove(tiles.group);
-      scene.remove(fallbackGround);
-      fallbackGround.geometry.dispose();
-      fallbackGround.material.dispose();
     }
     function debug() {
       return {
