@@ -348,7 +348,7 @@ class AirplaneGame {
 
     this.container.appendChild(this.renderer.domElement);
 
-    if (geoEnabled) this.enableGeoTiles(geoParams.get('ionToken') || '');
+    if (geoEnabled) this.enableGeoTiles(geoParams.get('ionToken') || window.GEO_ION_TOKEN || '');
 
     // PMREM sky environment map for realistic water/sky reflections
     const skyScene = new THREE.Scene();
