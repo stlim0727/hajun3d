@@ -327,7 +327,10 @@ class AirplaneGame {
     // Opt-in streamed terrain layer (?geoTiles=1&ionToken=...).
     // Disabled by default: the offline file:// WebView path is unchanged.
     const geoParams = new URLSearchParams(window.location.search);
-    const geoEnabled = geoParams.get('geoTiles') === '1' && Boolean(window.HajunGeoTiles);
+    const hosted = location.protocol === 'https:' && /stlim0727\.github\.io/.test(location.hostname);
+    const geoEnabled = (hosted || geoParams.get('geoTiles') === '1')
+      && Boolean(window.GEO_ION_TOKEN || geoParams.get('ionToken'))
+      && Boolean(window.HajunGeoTiles);
     const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9 };
     this.geoAnchor = {
       lat: Number(geoParams.get('geoLat') ?? baseAnchor.lat),
