@@ -59,6 +59,13 @@ Verified in headless Chrome: one canvas, Three r186, 171 tiles loaded, 0 tile
 errors, 0 exceptions, 0 warnings — with and without the tile layer. GLB aircraft
 loading still works (`a320`, 12 plane-group children, `TAKEOFF_RUN`).
 
+In-game entry point: **🌊 해운대 상공 비행 (Flying over Haeundae)** in the startup menu
+and the mobile scenario menu. `startHaeundaeFlight()` places the aircraft 3 km
+south of LCT at 1,200 m, heading north at cruise speed, and enables tiles when a
+token is available from `window.GEO_ION_TOKEN` or `localStorage['hajun3d.ionToken']`.
+With tiles active, the GLB terrain group is hidden so streamed terrain is not
+overlapped by the procedural sea/land; Haeundae landmark GLBs stay visible.
+
 Remaining limitation: the simulator's local layout is not a true geodetic ENU
 projection, so only the Haeundae anchor is aligned; whole-Korea alignment needs
 a georeferencing pass on the simulator itself.

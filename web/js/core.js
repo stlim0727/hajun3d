@@ -271,6 +271,7 @@ class AirplaneGame {
       this.initStars();
       this.initGLBSystem();
       this.initEnvironments();
+      if (this.geoLayer && this.terrainGroup) this.terrainGroup.visible = false;
     } catch (e) {
       console.error('Scene init error:', e);
     }
@@ -322,6 +323,10 @@ class AirplaneGame {
     // Disabled by default: the offline file:// WebView path is unchanged.
     const geoParams = new URLSearchParams(window.location.search);
     const geoEnabled = geoParams.get('geoTiles') === '1' && Boolean(window.HajunGeoTiles);
+    this.geoAnchor = {
+      lat: Number(geoParams.get('geoLat') ?? 35.1603056),
+      lon: Number(geoParams.get('geoLon') ?? 129.169)
+    };
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance'
@@ -343,18 +348,7 @@ class AirplaneGame {
 
     this.container.appendChild(this.renderer.domElement);
 
-    if (geoEnabled) {
-      this.geoLayer = window.HajunGeoTiles.create({
-        ionToken: geoParams.get('ionToken') || '',
-        lat: Number(geoParams.get('geoLat') ?? 35.1603056),
-        lon: Number(geoParams.get('geoLon') ?? 129.169),
-        simAnchor: { x: -180, y: 0, z: -28700 },
-        scene: this.scene,
-        camera: this.camera,
-        renderer: this.renderer,
-        container: this.container
-      });
-    }
+    if (geoEnabled) this.enableGeoTiles(geoParams.get('ionToken') || '');
 
     // PMREM sky environment map for realistic water/sky reflections
     const skyScene = new THREE.Scene();
@@ -369,6 +363,24 @@ class AirplaneGame {
     // 비행기 최상위 3D 그룹 초기화 & 씬 추가
     this.planeGroup = new THREE.Group();
     this.scene.add(this.planeGroup);
+  }
+
+  enableGeoTiles(ionToken) {
+    if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
+    this.geoLayer = window.HajunGeoTiles.create({
+      ionToken,
+      lat: this.geoAnchor.lat,
+      lon: this.geoAnchor.lon,
+      simAnchor: { x: -180, y: 0, z: -28700 },
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      container: this.container
+    });
+    if (this.geoLayer) {
+      if (this.terrainGroup) this.terrainGroup.visible = false;
+    }
+    return Boolean(this.geoLayer);
   }
 
   // ----------------------------------------------------------------

@@ -379,6 +379,78 @@
     this.startJetSound();
   },
 
+
+  // 시나리오: 해운대 상공 비행 (Haeundae overhead flight)
+  startHaeundaeFlight() {
+    this.overlay.classList.add('hidden');
+    this.showGateActionPrompt(false);
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.throttle = 0.78;
+    this.n1 = 86.0;
+    this.targetN1 = 86.0;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
+
+    this.buildAircraft(this.currentPlaneType);
+    // 3 km south of Haeundae, over the sea, heading north toward LCT/beach.
+    this.planeGroup.position.set(-180, 1200, -34700);
+    this.yaw = Math.PI;
+    this.pitch = 0;
+    this.roll = 0;
+    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    this.planeGroup.visible = true;
+
+    this.velocity.set(0, 0, 78);
+    this.speed = 1.0;
+    this.groundSpeed = 78;
+    this.verticalSpeed = 0;
+    this.isOnGround = false;
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = '해운대 상공 비행 (Haeundae)';
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = window.GEO_ION_TOKEN || '';
+      try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    }
+    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    this.showPopup(tilesOn
+      ? '🌊 해운대 상공 비행 시작! 실제 스트리밍 지형이 표시됩니다. (Flying over Haeundae)'
+      : '🌊 해운대 상공 비행 시작! 이 빌드에는 지형 토큰이 없어 기존 절차적 경관이 표시됩니다. (Flying over Haeundae)');
+    this.startJetSound();
+  },
+
   getCameraModeDefs() {
     return [
       { id: '3rd', icon: '🎥', short: '3인칭', label: '3인칭 후방 시점 (Chase)' },

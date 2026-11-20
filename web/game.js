@@ -95,6 +95,29 @@ window.startGateDeparture = function() {
   }
 };
 
+
+window.startHaeundaeFlight = function() {
+  const overlay = document.getElementById('overlay-screen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.style.display = 'none';
+  }
+  const gateAction = document.getElementById('gate-action-container');
+  if (gateAction) gateAction.classList.add('hidden');
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startHaeundaeFlight();
+    }
+  } catch (err) {
+    console.error('startHaeundaeFlight error:', err);
+  }
+};
+
 window.toggleEmergencyPanel = function() {
   if (!debounceAction('toggleEmergencyPanel', 180)) return;
   if (!window.airplaneGame) initGame();
