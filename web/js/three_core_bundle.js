@@ -53183,6 +53183,15 @@ void main() {
       tiles.group.position.z += simAnchor.z;
       tiles.group.updateMatrixWorld();
     });
+    const fallbackGround = new Mesh(
+      new PlaneGeometry(6e5, 6e5),
+      new MeshBasicMaterial({ color: 7043674, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 })
+    );
+    fallbackGround.name = "GeoFallbackGround";
+    fallbackGround.rotation.x = -Math.PI / 2;
+    fallbackGround.position.y = 2;
+    fallbackGround.renderOrder = -1;
+    scene.add(fallbackGround);
     scene.add(tiles.group);
     tiles.setCamera(camera);
     tiles.setResolutionFromRenderer(camera, renderer);
@@ -53207,6 +53216,9 @@ void main() {
     function dispose() {
       tiles.dispose();
       scene.remove(tiles.group);
+      scene.remove(fallbackGround);
+      fallbackGround.geometry.dispose();
+      fallbackGround.material.dispose();
     }
     function debug() {
       return {

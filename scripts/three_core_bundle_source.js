@@ -51,6 +51,18 @@ export function create(options = {}) {
     tiles.group.updateMatrixWorld();
   });
 
+  // Neutral backing plane: Google does not serve every LOD over Korea, and the
+  // gaps would otherwise show the sky background as false water.
+  const fallbackGround = new THREE.Mesh(
+    new THREE.PlaneGeometry(600000, 600000),
+    new THREE.MeshBasicMaterial({ color: 0x6b7a5a, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 })
+  );
+  fallbackGround.name = 'GeoFallbackGround';
+  fallbackGround.rotation.x = -Math.PI / 2;
+  fallbackGround.position.y = 2;
+  fallbackGround.renderOrder = -1;
+  scene.add(fallbackGround);
+
   scene.add(tiles.group);
   tiles.setCamera(camera);
   tiles.setResolutionFromRenderer(camera, renderer);
@@ -78,6 +90,9 @@ export function create(options = {}) {
   function dispose() {
     tiles.dispose();
     scene.remove(tiles.group);
+    scene.remove(fallbackGround);
+    fallbackGround.geometry.dispose();
+    fallbackGround.material.dispose();
   }
 
   function debug() {
