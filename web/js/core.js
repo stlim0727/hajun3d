@@ -407,6 +407,23 @@ class AirplaneGame {
     if (this.incheonAirportGroup) this.incheonAirportGroup.position.set(incheon.x, incheon.y, incheon.z);
   }
 
+  // Physics ground height from Terrarium elevation tiles (visual layer is 3D Tiles only).
+  // Falls back to the legacy flat model while tiles load or if they fail.
+  enableTerrainProvider() {
+    const TP = window.TerrainProvider;
+    if (!TP || this.terrainProvider) return false;
+    this.terrainProvider = TP.createTerrariumProvider({
+      anchor: this.geoAnchor,
+      simOffset: { x: 160, z: 1600 },
+      loadTile: TP.createBrowserTileLoader()
+    });
+    this._resolveGroundHeightFn = (fallback, floorY) => {
+      const resolved = TP.resolveGroundHeight(() => this.terrainProvider, fallback);
+      return (x, z) => Math.max(floorY, resolved(x, z));
+    };
+    return true;
+  }
+
   enableGeoTiles(ionToken) {
     if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
     this.geoLayer = window.HajunGeoTiles.create({
@@ -424,6 +441,7 @@ class AirplaneGame {
       container: this.container
     });
     if (this.geoLayer) {
+      this.enableTerrainProvider();
       ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
         if (this[name]) this[name].visible = false;
       });
@@ -533,6 +551,7 @@ class AirplaneGame {
     }
 
     if (this.geoLayer) this.geoLayer.update();
+    if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
     this.renderer.render(this.scene, this.camera);
   }
 }

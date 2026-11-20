@@ -704,7 +704,13 @@
       : () => true;
 
     return {
-      getGroundHeight: (sx, sz) => (isOverAirportFn(sx, sz) ? 0.0 : seaSimY - 45.0),
+      // Terrain provider (when enabled later) overrides the flat legacy model; read lazily.
+      getGroundHeight: (sx, sz) => {
+        const legacy = isOverAirportFn(sx, sz) ? 0.0 : seaSimY - 45.0;
+        return this._resolveGroundHeightFn
+          ? this._resolveGroundHeightFn(() => legacy, seaSimY - 45.0)(sx, sz)
+          : legacy;
+      },
       getGroundNormal: () => null,
       isOnRunway: (sx, sz) => isOverAirportFn(sx, sz),
       isRunwaySafetyArea: (sx, sz) => isOverAirportFn(sx, sz),
