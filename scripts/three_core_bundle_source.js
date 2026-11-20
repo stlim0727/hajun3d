@@ -69,6 +69,8 @@ export function create(options = {}) {
   }
 
   function update() {
+    // GoogleCloudAuthPlugin resets this on init; keep Korean LOD requests available.
+    tiles.errorTarget = 32;
     tiles.setResolutionFromRenderer(camera, renderer);
     tiles.update();
   }

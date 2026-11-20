@@ -53200,6 +53200,7 @@ void main() {
       container.appendChild(credit);
     }
     function update() {
+      tiles.errorTarget = 32;
       tiles.setResolutionFromRenderer(camera, renderer);
       tiles.update();
     }
