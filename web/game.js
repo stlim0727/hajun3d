@@ -31,6 +31,13 @@ window.switchPlane = function(type) {
   }
 };
 
+window.setAirlineSkin = function(id) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setAirlineSkin === 'function') {
+    window.airplaneGame.setAirlineSkin(id);
+  }
+};
+
 window.nextPlane = function() {
   if (!debounceAction('nextPlane', 200)) return;
   if (!window.airplaneGame) initGame();

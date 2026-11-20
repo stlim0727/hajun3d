@@ -1374,6 +1374,10 @@
         }
       }
     });
+    // 선택한 항공사 스킨을 GLB 외피/ACCENT 머티리얼에 적용
+    if (typeof this.applyAirlineSkin === 'function') {
+      this.applyAirlineSkin(scene);
+    }
 
     this.customGLBModel = scene;
     this.planeGroup.add(scene);

@@ -803,6 +803,41 @@
         </div>
       </div>
 
+      <!-- Airline Livery Selector -->
+      <div class="plane-selector-box skin-selector-box">
+        <label class="plane-select-label">항공사 스킨 선택 (Korean Airlines)</label>
+        <div class="skin-selector-buttons">
+          <button class="skin-choice-btn" type="button" data-skin="default" onclick="window.setAirlineSkin('default')">
+            <span class="skin-swatch" style="--swatch-base:#f8fafc; --swatch-accent:#0284c7; --swatch-secondary:#dc2626;"></span>
+            <strong>기본 스카이젯</strong>
+          </button>
+          <button class="skin-choice-btn active" type="button" data-skin="jeju" onclick="window.setAirlineSkin('jeju')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#f47920; --swatch-secondary:#162a4a;"></span>
+            <strong>제주항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="jin" onclick="window.setAirlineSkin('jin')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#7c3aed; --swatch-secondary:#db2777;"></span>
+            <strong>진에어</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="eastar" onclick="window.setAirlineSkin('eastar')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#dc2626; --swatch-secondary:#0f172a;"></span>
+            <strong>이스타항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="korean" onclick="window.setAirlineSkin('korean')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#0b3b8c; --swatch-secondary:#c8102e;"></span>
+            <strong>대한항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="asiana" onclick="window.setAirlineSkin('asiana')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#1e3a8a; --swatch-secondary:#64748b;"></span>
+            <strong>아시아나항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="tway" onclick="window.setAirlineSkin('tway')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#e11d68; --swatch-secondary:#6d28d9;"></span>
+            <strong>티웨이항공</strong>
+          </button>
+        </div>
+      </div>
+
       <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
         <button id="takeoff-direct-btn" class="btn-primary" type="button" onclick="window.startDirectTakeoff()" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); pointer-events: auto !important; cursor: pointer !important;">🛫 활주로에서 즉시 이륙하기 (추천)</button>
         <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()" style="pointer-events: auto !important; cursor: pointer !important;">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>

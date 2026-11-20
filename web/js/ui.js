@@ -120,6 +120,12 @@
     this.micToggleBtn = document.getElementById('mic-toggle-btn');
     this.engineShutdownBtn = document.getElementById('engine-shutdown-btn');
     this.gateEngineShutdownBtn = document.getElementById('gate-engine-shutdown-btn');
+    if (this.getActiveAirlineSkin) {
+      const activeSkin = this.getActiveAirlineSkin();
+      document.querySelectorAll('.skin-choice-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset && btn.dataset.skin === activeSkin.id);
+      });
+    }
     this.updateSpeedEffectUI();
   },
 

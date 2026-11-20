@@ -220,8 +220,109 @@
     return geo;
   },
 
+  // ----------------------------------------------------------------
+  // 항공사 스킨 (Korean airline liveries) - GLB & 프로시저럴 기체 공통 적용
+  // ----------------------------------------------------------------
+  getAirlineSkins() {
+    return [
+      { id: 'default', name: '기본 스카이젯', base: 0xf8fafc, accent: 0x0284c7, secondary: 0xdc2626, trim: 0xf59e0b, title: 'SKY JET AIRWAYS' },
+      { id: 'jeju', name: '제주항공', base: 0xffffff, accent: 0xf47920, secondary: 0x162a4a, trim: 0xffffff, title: 'JEJU AIR' },
+      { id: 'jin', name: '진에어', base: 0xffffff, accent: 0x7c3aed, secondary: 0xdb2777, trim: 0xffffff, title: 'JIN AIR' },
+      { id: 'eastar', name: '이스타항공', base: 0xffffff, accent: 0xdc2626, secondary: 0x0f172a, trim: 0xf97316, title: 'EASTAR JET' },
+      { id: 'korean', name: '대한항공', base: 0xffffff, accent: 0x0b3b8c, secondary: 0xc8102e, trim: 0xffffff, title: 'KOREAN AIR' },
+      { id: 'asiana', name: '아시아나항공', base: 0xffffff, accent: 0x1e3a8a, secondary: 0x64748b, trim: 0xffffff, title: 'ASIANA AIRLINES' },
+      { id: 'tway', name: '티웨이항공', base: 0xffffff, accent: 0xe11d68, secondary: 0x6d28d9, trim: 0xffffff, title: "T'WAY AIR" }
+    ];
+  },
+
+  getActiveAirlineSkin() {
+    if (!this.activeSkinId) {
+      let stored = null;
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          stored = window.localStorage.getItem('hajun-airline-skin');
+        }
+      } catch (e) { /* 저장소 차단 시 무시 */ }
+      const skins = this.getAirlineSkins();
+      this.activeSkinId = skins.some(s => s.id === stored) ? stored : 'jeju';
+    }
+    return this.getAirlineSkins().find(s => s.id === this.activeSkinId) || this.getAirlineSkins()[0];
+  },
+
+  setAirlineSkin(id) {
+    const skin = this.getAirlineSkins().find(s => s.id === id);
+    if (!skin) return;
+    this.activeSkinId = skin.id;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('hajun-airline-skin', skin.id);
+      }
+    } catch (e) { /* 저장소 차단 시 무시 */ }
+
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.skin-choice-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset && btn.dataset.skin === skin.id);
+      });
+    }
+    if (this.customGLBModel) this.applyAirlineSkin(this.customGLBModel);
+    if (this.fuselageTexture) {
+      this.updateFuselageTexture(this.currentPlaneType, this.timeOfDay === 'night', skin);
+    }
+  },
+
+  // 색상 값에 명암 배율을 적용한 CSS 색상 (캔버스 리버리용)
+  _skinCss(hex, factor = 1) {
+    const r = Math.min(255, Math.max(0, Math.round(((hex >> 16) & 255) * factor)));
+    const g = Math.min(255, Math.max(0, Math.round(((hex >> 8) & 255) * factor)));
+    const b = Math.min(255, Math.max(0, Math.round((hex & 255) * factor)));
+    return `rgb(${r}, ${g}, ${b})`;
+  },
+
+  // GLB 머티리얼을 외피/ACCENT/보조 색상으로 분류 (유리·타이어·금속 부품은 제외)
+  _skinRoleForMaterial(mat, planeType) {
+    if (!mat || !mat.color || mat.transparent || mat.map) return null;
+    const name = (mat.name || '').toLowerCase();
+    if (/window|glass|cockpit|windshield|tire|wheel|light|lamp|intake|exhaust|fan|turbine|propeller|chrome|dark|black/.test(name)) return null;
+    if (/airlineblue|body_blue|stripe|swoosh|cheatline/.test(name)) return 'accent';
+    if (/airlinered|body_purple|body_red|tail/.test(name)) return 'secondary';
+
+    const { r, g, b } = mat.color;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const neutral = max - min < 0.08;
+    // A320 GLB는 동체가 중간 회색이라 밝은 무채색도 외피로 취급
+    if (neutral && (lum >= 0.82 || (planeType && planeType.startsWith('a320') && lum >= 0.45))) return 'base';
+    if (b > 0.45 && b > r * 1.35 && b > g * 1.1) return 'accent';
+    if ((r > 0.6 && g < 0.4 && b < 0.4) ||
+        (b > 0.35 && r > 0.3 && g < r * 0.7 && g < b * 0.7)) return 'secondary';
+    return null;
+  },
+
+  applyAirlineSkin(scene) {
+    if (!scene || typeof scene.traverse !== 'function') return;
+    const skin = this.getActiveAirlineSkin();
+    const planeType = this.currentPlaneType || '';
+    scene.traverse(node => {
+      if (!node || !node.isMesh || !node.material) return;
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+      mats.forEach(mat => {
+        if (!mat || !mat.color) return;
+        mat.userData = mat.userData || {};
+        if (!mat.userData.skinRole) {
+          mat.userData.skinRole = this._skinRoleForMaterial(mat, planeType);
+        }
+        const role = mat.userData.skinRole;
+        if (!role) return;
+        mat.color.setHex(role === 'accent' ? skin.accent : role === 'secondary' ? skin.secondary : skin.base);
+        mat.needsUpdate = true;
+      });
+    });
+  },
+
   // ★ AI 생성급 초고해상도 실사 캔버스 그래픽 텍스처 (동체 리버리 & 음영 & 3D 엠보싱)
-  updateFuselageTexture(type, isNight) {
+  updateFuselageTexture(type, isNight, skin) {
+    skin = skin || this.getActiveAirlineSkin();
     if (!this.fuselageCanvas) {
       this.fuselageCanvas = document.createElement('canvas');
       this.fuselageCanvas.width = 2048;
@@ -240,19 +341,19 @@
       else c.rect(x, y, w, h);
     };
 
-    // 1. 에어로 펄 화이트 & 알루미늄 배면 3D 셰이딩 베이스 코트
+    // 1. 선택한 항공사 스킨 베이스 코트 & 알루미늄 배면 셰이딩
     const baseGrad = ctx.createLinearGradient(0, 0, W, 0);
-    baseGrad.addColorStop(0.00, '#94a3b8'); // 배면(Belly) 하단 메탈릭 알루미늄 음영
-    baseGrad.addColorStop(0.12, '#cbd5e1');
-    baseGrad.addColorStop(0.20, '#f1f5f9');
-    baseGrad.addColorStop(0.25, '#ffffff'); // 우현(Starboard) 중심
-    baseGrad.addColorStop(0.35, '#f8fafc');
-    baseGrad.addColorStop(0.50, '#ffffff'); // 상단 루프(Crown) 하이글로스 펄
-    baseGrad.addColorStop(0.65, '#f8fafc');
-    baseGrad.addColorStop(0.75, '#ffffff'); // 좌현(Port) 중심
-    baseGrad.addColorStop(0.80, '#f1f5f9');
-    baseGrad.addColorStop(0.88, '#cbd5e1');
-    baseGrad.addColorStop(1.00, '#94a3b8'); // 배면 하단
+    baseGrad.addColorStop(0.00, this._skinCss(skin.base, 0.58));
+    baseGrad.addColorStop(0.12, this._skinCss(skin.base, 0.78));
+    baseGrad.addColorStop(0.20, this._skinCss(skin.base, 0.94));
+    baseGrad.addColorStop(0.25, this._skinCss(skin.base, 1.00));
+    baseGrad.addColorStop(0.35, this._skinCss(skin.base, 0.97));
+    baseGrad.addColorStop(0.50, this._skinCss(skin.base, 1.00));
+    baseGrad.addColorStop(0.65, this._skinCss(skin.base, 0.97));
+    baseGrad.addColorStop(0.75, this._skinCss(skin.base, 1.00));
+    baseGrad.addColorStop(0.80, this._skinCss(skin.base, 0.94));
+    baseGrad.addColorStop(0.88, this._skinCss(skin.base, 0.78));
+    baseGrad.addColorStop(1.00, this._skinCss(skin.base, 0.58));
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, W, H);
 
@@ -301,12 +402,12 @@
       ctx.stroke();
     }
 
-    // 3. 프리미엄 항공사 스우시 리버리 (Dynamic Aero Swoosh Livery)
+    // 3. 선택한 항공사 스우시 리버리 (Dynamic Aero Swoosh Livery)
     [-1, 1].forEach(side => {
       const cx = side === -1 ? 1536 : 512;
 
-      // 로열 네이비 하부 다이내믹 웨이브
-      ctx.fillStyle = '#0369a1';
+      // 짙은 하부 다이내믹 웨이브
+      ctx.fillStyle = this._skinCss(skin.accent, 0.65);
       ctx.beginPath();
       ctx.moveTo(cx - 95 * side, 960);
       ctx.bezierCurveTo(cx - 60 * side, 620, cx - 40 * side, 320, cx - 120 * side, 30);
@@ -315,8 +416,8 @@
       ctx.closePath();
       ctx.fill();
 
-      // 스카이블루 메인 치트라인
-      ctx.fillStyle = '#38bdf8';
+      // 메인 치트라인
+      ctx.fillStyle = this._skinCss(skin.accent, 1.45);
       ctx.beginPath();
       ctx.moveTo(cx - 58 * side, 965);
       ctx.bezierCurveTo(cx - 22 * side, 620, cx - 4 * side, 320, cx - 72 * side, 30);
@@ -325,8 +426,8 @@
       ctx.closePath();
       ctx.fill();
 
-      // 골드 핀스트라이프 하이라이트
-      ctx.fillStyle = '#f59e0b';
+      // 핀스트라이프 하이라이트
+      ctx.fillStyle = this._skinCss(skin.trim, 1.0);
       ctx.beginPath();
       ctx.moveTo(cx - 26 * side, 940);
       ctx.bezierCurveTo(cx + 4 * side, 620, cx + 20 * side, 320, cx - 32 * side, 50);
@@ -345,11 +446,11 @@
     ctx.translate(1536 + 72, 620);
     ctx.rotate(-Math.PI / 2);
     ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = this._skinCss(skin.secondary, 0.35);
     ctx.textAlign = 'center';
-    ctx.fillText('SKY JET AIRWAYS', 0, 0);
+    ctx.fillText(skin.title, 0, 0);
     ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0284c7';
+    ctx.fillStyle = this._skinCss(skin.accent, 0.8);
     ctx.fillText(modelTitle, 0, 24);
     ctx.restore();
 
@@ -367,11 +468,11 @@
     ctx.translate(512 - 72, 620);
     ctx.rotate(Math.PI / 2);
     ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = this._skinCss(skin.secondary, 0.35);
     ctx.textAlign = 'center';
-    ctx.fillText('SKY JET AIRWAYS', 0, 0);
+    ctx.fillText(skin.title, 0, 0);
     ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0284c7';
+    ctx.fillStyle = this._skinCss(skin.accent, 0.8);
     ctx.fillText(modelTitle, 0, 24);
     ctx.restore();
 
@@ -715,7 +816,8 @@
     };
 
     const isNight = (this.timeOfDay === 'night');
-    const liveryTex = this.updateFuselageTexture(type, isNight);
+    const skin = this.getActiveAirlineSkin();
+    const liveryTex = this.updateFuselageTexture(type, isNight, skin);
     const wingTex = this.updateWingTexture(type, isNight);
 
     // 프리미엄 항공사 PBR 재질 & 프로시저럴 고해상도 그래픽 텍스처 (실제 항공기 하이글로스 반사광)
@@ -725,17 +827,17 @@
       metalness: 0.28
     });
     const fuselageMat = new THREE.MeshStandardMaterial({
-      color: 0xf8fafc,
+      color: skin.base,
       roughness: 0.20,
       metalness: 0.25
     });
     const cheatlineMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+      color: skin.accent,
       roughness: 0.18,
       metalness: 0.38
     });
     const goldTrimMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
+      color: skin.trim,
       roughness: 0.22,
       metalness: 0.75
     });
