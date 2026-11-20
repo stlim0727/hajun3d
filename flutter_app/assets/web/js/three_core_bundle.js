@@ -53176,6 +53176,7 @@ void main() {
     tiles.registerPlugin(new oi({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
     tiles.registerPlugin(new or());
     tiles.registerPlugin(new bi());
+    tiles.errorTarget = 32;
     tiles.addEventListener("load-root-tileset", () => {
       tiles.group.position.x += simAnchor.x;
       tiles.group.position.y += simAnchor.y;

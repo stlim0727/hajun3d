@@ -41,6 +41,8 @@ export function create(options = {}) {
   tiles.registerPlugin(new ReorientationPlugin({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
   tiles.registerPlugin(new TileCompressionPlugin());
   tiles.registerPlugin(new TilesFadePlugin());
+  // Korea has no photogrammetric high-LOD tiles; request coarser available levels.
+  tiles.errorTarget = 32;
 
   tiles.addEventListener('load-root-tileset', () => {
     tiles.group.position.x += simAnchor.x;
