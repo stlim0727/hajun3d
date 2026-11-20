@@ -331,7 +331,7 @@ class AirplaneGame {
     const geoEnabled = (hosted || geoParams.get('geoTiles') === '1')
       && Boolean(window.GEO_ION_TOKEN || geoParams.get('ionToken'))
       && Boolean(window.HajunGeoTiles);
-    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9, height: 31 };
+    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9, height: 33.25 };
     this.geoAnchor = {
       lat: Number(geoParams.get('geoLat') ?? baseAnchor.lat),
       lon: Number(geoParams.get('geoLon') ?? baseAnchor.lon),
@@ -416,7 +416,8 @@ class AirplaneGame {
       height: this.geoAnchor.height,
       azimuth: this.geoAzimuth,
       simAnchor: { x: 160, y: 0, z: 1600 },
-      nearAnchorMaxDepth: 19,
+      // Deeper tiles around Gimhae leave holes and intersect the runway.
+      nearAnchorMaxDepth: 17,
       scene: this.scene,
       camera: this.camera,
       renderer: this.renderer,
