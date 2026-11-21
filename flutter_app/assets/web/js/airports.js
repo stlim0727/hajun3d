@@ -95,6 +95,7 @@
       polygonOffsetUnits: -2
     });
     const activeRunway = new THREE.Mesh(new THREE.PlaneGeometry(46, length), activeRunwayMat);
+    activeRunway.name = 'RunwayPavement';
     activeRunway.rotation.x = -Math.PI / 2;
     activeRunway.position.set(xCenter, 2.148, zCenter);
     activeRunway.receiveShadow = true;
@@ -110,6 +111,7 @@
     const shoulderGeo = new THREE.PlaneGeometry(27, length);
     [-36.5, 36.5].forEach(xOff => {
       const shoulder = new THREE.Mesh(shoulderGeo, shoulderMat);
+      shoulder.name = 'RunwayShoulder';
       shoulder.rotation.x = -Math.PI / 2;
       shoulder.position.set(xCenter + xOff, 2.144, zCenter);
       shoulder.receiveShadow = true;
@@ -257,10 +259,10 @@
     this.airportGroup.add(airportGround);
 
     // --------------------------------------------------------------
-    // 36L 정밀 활주로 (60m x 3800m ICAO 4F 규격 런웨이, Y = 2.10)
+    // 36L 정밀 활주로 (60m x 3200m 김해국제공항 18R/36L 규격 런웨이, Y = 2.10)
     // --------------------------------------------------------------
-    const runwayGeo = new THREE.PlaneGeometry(60, 3800);
-    const runwayTex = this.createRunwayAsphaltTexture(380);
+    const runwayGeo = new THREE.PlaneGeometry(60, 3200);
+    const runwayTex = this.createRunwayAsphaltTexture(320);
     const runwayMat = new THREE.MeshStandardMaterial({ 
       color: runwayTex ? 0xffffff : 0x1e293b,
       map: runwayTex || null,
@@ -284,7 +286,7 @@
       polygonOffsetFactor: -4,
       polygonOffsetUnits: -4
     });
-    [-1800, 1800].forEach(zBase => {
+    [-1600, 1600].forEach(zBase => {
       for (let k = -26; k <= 26; k += 4.0) {
         const bar = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 36), whiteMat);
         bar.rotation.x = -Math.PI / 2;
@@ -295,7 +297,7 @@
 
     // 활주로 중앙선 (Centerline Stripes - 폭 0.75m, 길이 9.0m, 주기 16m, Y = 2.165)
     const depDashGeo = new THREE.PlaneGeometry(0.75, 9.0);
-    for (let z = -1810; z <= 1810; z += 16) {
+    for (let z = -1610; z <= 1610; z += 16) {
       const stripe = new THREE.Mesh(depDashGeo, whiteMat);
       stripe.rotation.x = -Math.PI / 2;
       stripe.position.set(160, 2.165, z);
@@ -303,7 +305,7 @@
     }
 
     // 착륙 목표 지점 (Aiming Point - Z = ±1400, Y = 2.14)
-    [-1400, 1400].forEach(z => {
+    [-1150, 1150].forEach(z => {
       [-14, 14].forEach(xOff => {
         const aim = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 50), whiteMat);
         aim.rotation.x = -Math.PI / 2;
@@ -312,7 +314,7 @@
       });
     });
 
-    this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3800, whiteMat);
+    this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3200, whiteMat);
 
     // PAPI (Precision Approach Path Indicator) 4구 진입각 지시등
     this.papiLights = [];
@@ -331,10 +333,10 @@
     }
 
     // --------------------------------------------------------------
-    // 유도로 및 황색 유도선 (Taxiways - 75m x 3800m, Y = 1.92)
+    // 유도로 및 황색 유도선 (Taxiways - 75m x 3200m, Y = 1.92)
     // --------------------------------------------------------------
     const taxiway = new THREE.Mesh(
-      new THREE.PlaneGeometry(75, 3800),
+      new THREE.PlaneGeometry(75, 3200),
       new THREE.MeshStandardMaterial({ 
         color: 0x242e3d, 
         roughness: 0.85,
@@ -349,7 +351,7 @@
     this.airportGroup.add(taxiway);
 
     // 연결 유도로 5개소 (Connectors: -1500, -750, 0, 750, 1500, Y = 1.96)
-    [-1500, -750, 0, 750, 1500].forEach(z => {
+    [-1200, -600, 0, 600, 1200].forEach(z => {
       const link = new THREE.Mesh(new THREE.PlaneGeometry(240, 65), new THREE.MeshStandardMaterial({ 
         color: 0x242e3d,
         polygonOffset: true,
@@ -367,7 +369,7 @@
       polygonOffsetFactor: -3,
       polygonOffsetUnits: -3
     });
-    const taxiLine = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3750), yellowMat);
+    const taxiLine = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3150), yellowMat);
     taxiLine.rotation.x = -Math.PI / 2;
     taxiLine.position.set(-80, 2.02, 0);
     this.airportGroup.add(taxiLine);
@@ -386,9 +388,9 @@
     const blueBulbMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
 
     // 1. 활주로 양측 측면 유도등 (Runway Edge Lights: X = 160 ± 32, Z = -1800 ~ 1800)
-    for (let z = -1800; z <= 1800; z += 60) {
-      const isThreshold = (z > 1650);
-      const isEnd = (z < -1650);
+    for (let z = -1600; z <= 1600; z += 60) {
+      const isThreshold = (z > 1350);
+      const isEnd = (z < -1350);
       const mat = isThreshold ? greenBulbMat : (isEnd ? redBulbMat : whiteBulbMat);
 
       [-32, 32].forEach(xOff => {
@@ -399,7 +401,7 @@
     }
 
     // 2. 유도로 측면 청색 유도등 (Taxiway Blue Edge Lights: X = -80 ± 40, Z = -1800 ~ 1800)
-    for (let z = -1800; z <= 1800; z += 90) {
+    for (let z = -1600; z <= 1600; z += 90) {
       [-40, 40].forEach(xOff => {
         const bulb = new THREE.Mesh(edgeBulbGeo, blueBulbMat);
         bulb.position.set(-80 + xOff, 2.35, z);

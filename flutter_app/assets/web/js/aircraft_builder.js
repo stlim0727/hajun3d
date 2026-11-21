@@ -159,6 +159,9 @@
 
   // ★ 실기형 고속 회전 티타늄 터보팬 블레이드 시스템 (Titanium Turbofan Fan Blades)
   createTurbofanFan(radius, bladeCount = 20, chromeMat) {
+    if (typeof GLBMovingParts !== 'undefined' && GLBMovingParts.createTurbofanFan) {
+      return GLBMovingParts.createTurbofanFan(radius, bladeCount, chromeMat);
+    }
     const fanGroup = new THREE.Group();
 
     // 1. 중앙 스피너 콘 (중앙 화이트 소용돌이 스파이럴 마킹)
@@ -217,8 +220,109 @@
     return geo;
   },
 
+  // ----------------------------------------------------------------
+  // 항공사 스킨 (Korean airline liveries) - GLB & 프로시저럴 기체 공통 적용
+  // ----------------------------------------------------------------
+  getAirlineSkins() {
+    return [
+      { id: 'default', name: '기본 스카이젯', base: 0xf8fafc, accent: 0x0284c7, secondary: 0xdc2626, trim: 0xf59e0b, title: 'SKY JET AIRWAYS' },
+      { id: 'jeju', name: '제주항공', base: 0xffffff, accent: 0xf47920, secondary: 0x162a4a, trim: 0xffffff, title: 'JEJU AIR' },
+      { id: 'jin', name: '진에어', base: 0xffffff, accent: 0x7c3aed, secondary: 0xdb2777, trim: 0xffffff, title: 'JIN AIR' },
+      { id: 'eastar', name: '이스타항공', base: 0xffffff, accent: 0xdc2626, secondary: 0x0f172a, trim: 0xf97316, title: 'EASTAR JET' },
+      { id: 'korean', name: '대한항공', base: 0xffffff, accent: 0x0b3b8c, secondary: 0xc8102e, trim: 0xffffff, title: 'KOREAN AIR' },
+      { id: 'asiana', name: '아시아나항공', base: 0xffffff, accent: 0x1e3a8a, secondary: 0x64748b, trim: 0xffffff, title: 'ASIANA AIRLINES' },
+      { id: 'tway', name: '티웨이항공', base: 0xffffff, accent: 0xe11d68, secondary: 0x6d28d9, trim: 0xffffff, title: "T'WAY AIR" }
+    ];
+  },
+
+  getActiveAirlineSkin() {
+    if (!this.activeSkinId) {
+      let stored = null;
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          stored = window.localStorage.getItem('hajun-airline-skin');
+        }
+      } catch (e) { /* 저장소 차단 시 무시 */ }
+      const skins = this.getAirlineSkins();
+      this.activeSkinId = skins.some(s => s.id === stored) ? stored : 'jeju';
+    }
+    return this.getAirlineSkins().find(s => s.id === this.activeSkinId) || this.getAirlineSkins()[0];
+  },
+
+  setAirlineSkin(id) {
+    const skin = this.getAirlineSkins().find(s => s.id === id);
+    if (!skin) return;
+    this.activeSkinId = skin.id;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('hajun-airline-skin', skin.id);
+      }
+    } catch (e) { /* 저장소 차단 시 무시 */ }
+
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.skin-choice-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset && btn.dataset.skin === skin.id);
+      });
+    }
+    if (this.customGLBModel) this.applyAirlineSkin(this.customGLBModel);
+    if (this.fuselageTexture) {
+      this.updateFuselageTexture(this.currentPlaneType, this.timeOfDay === 'night', skin);
+    }
+  },
+
+  // 색상 값에 명암 배율을 적용한 CSS 색상 (캔버스 리버리용)
+  _skinCss(hex, factor = 1) {
+    const r = Math.min(255, Math.max(0, Math.round(((hex >> 16) & 255) * factor)));
+    const g = Math.min(255, Math.max(0, Math.round(((hex >> 8) & 255) * factor)));
+    const b = Math.min(255, Math.max(0, Math.round((hex & 255) * factor)));
+    return `rgb(${r}, ${g}, ${b})`;
+  },
+
+  // GLB 머티리얼을 외피/ACCENT/보조 색상으로 분류 (유리·타이어·금속 부품은 제외)
+  _skinRoleForMaterial(mat, planeType) {
+    if (!mat || !mat.color || mat.transparent || mat.map) return null;
+    const name = (mat.name || '').toLowerCase();
+    if (/window|glass|cockpit|windshield|tire|wheel|light|lamp|intake|exhaust|fan|turbine|propeller|chrome|dark|black/.test(name)) return null;
+    if (/airlineblue|body_blue|stripe|swoosh|cheatline/.test(name)) return 'accent';
+    if (/airlinered|body_purple|body_red|tail/.test(name)) return 'secondary';
+
+    const { r, g, b } = mat.color;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const neutral = max - min < 0.08;
+    // A320 GLB는 동체가 중간 회색이라 밝은 무채색도 외피로 취급
+    if (neutral && (lum >= 0.82 || (planeType && planeType.startsWith('a320') && lum >= 0.45))) return 'base';
+    if (b > 0.45 && b > r * 1.35 && b > g * 1.1) return 'accent';
+    if ((r > 0.6 && g < 0.4 && b < 0.4) ||
+        (b > 0.35 && r > 0.3 && g < r * 0.7 && g < b * 0.7)) return 'secondary';
+    return null;
+  },
+
+  applyAirlineSkin(scene) {
+    if (!scene || typeof scene.traverse !== 'function') return;
+    const skin = this.getActiveAirlineSkin();
+    const planeType = this.currentPlaneType || '';
+    scene.traverse(node => {
+      if (!node || !node.isMesh || !node.material) return;
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+      mats.forEach(mat => {
+        if (!mat || !mat.color) return;
+        mat.userData = mat.userData || {};
+        if (!mat.userData.skinRole) {
+          mat.userData.skinRole = this._skinRoleForMaterial(mat, planeType);
+        }
+        const role = mat.userData.skinRole;
+        if (!role) return;
+        mat.color.setHex(role === 'accent' ? skin.accent : role === 'secondary' ? skin.secondary : skin.base);
+        mat.needsUpdate = true;
+      });
+    });
+  },
+
   // ★ AI 생성급 초고해상도 실사 캔버스 그래픽 텍스처 (동체 리버리 & 음영 & 3D 엠보싱)
-  updateFuselageTexture(type, isNight) {
+  updateFuselageTexture(type, isNight, skin) {
+    skin = skin || this.getActiveAirlineSkin();
     if (!this.fuselageCanvas) {
       this.fuselageCanvas = document.createElement('canvas');
       this.fuselageCanvas.width = 2048;
@@ -237,19 +341,19 @@
       else c.rect(x, y, w, h);
     };
 
-    // 1. 에어로 펄 화이트 & 알루미늄 배면 3D 셰이딩 베이스 코트
+    // 1. 선택한 항공사 스킨 베이스 코트 & 알루미늄 배면 셰이딩
     const baseGrad = ctx.createLinearGradient(0, 0, W, 0);
-    baseGrad.addColorStop(0.00, '#94a3b8'); // 배면(Belly) 하단 메탈릭 알루미늄 음영
-    baseGrad.addColorStop(0.12, '#cbd5e1');
-    baseGrad.addColorStop(0.20, '#f1f5f9');
-    baseGrad.addColorStop(0.25, '#ffffff'); // 우현(Starboard) 중심
-    baseGrad.addColorStop(0.35, '#f8fafc');
-    baseGrad.addColorStop(0.50, '#ffffff'); // 상단 루프(Crown) 하이글로스 펄
-    baseGrad.addColorStop(0.65, '#f8fafc');
-    baseGrad.addColorStop(0.75, '#ffffff'); // 좌현(Port) 중심
-    baseGrad.addColorStop(0.80, '#f1f5f9');
-    baseGrad.addColorStop(0.88, '#cbd5e1');
-    baseGrad.addColorStop(1.00, '#94a3b8'); // 배면 하단
+    baseGrad.addColorStop(0.00, this._skinCss(skin.base, 0.58));
+    baseGrad.addColorStop(0.12, this._skinCss(skin.base, 0.78));
+    baseGrad.addColorStop(0.20, this._skinCss(skin.base, 0.94));
+    baseGrad.addColorStop(0.25, this._skinCss(skin.base, 1.00));
+    baseGrad.addColorStop(0.35, this._skinCss(skin.base, 0.97));
+    baseGrad.addColorStop(0.50, this._skinCss(skin.base, 1.00));
+    baseGrad.addColorStop(0.65, this._skinCss(skin.base, 0.97));
+    baseGrad.addColorStop(0.75, this._skinCss(skin.base, 1.00));
+    baseGrad.addColorStop(0.80, this._skinCss(skin.base, 0.94));
+    baseGrad.addColorStop(0.88, this._skinCss(skin.base, 0.78));
+    baseGrad.addColorStop(1.00, this._skinCss(skin.base, 0.58));
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, W, H);
 
@@ -298,12 +402,12 @@
       ctx.stroke();
     }
 
-    // 3. 프리미엄 항공사 스우시 리버리 (Dynamic Aero Swoosh Livery)
+    // 3. 선택한 항공사 스우시 리버리 (Dynamic Aero Swoosh Livery)
     [-1, 1].forEach(side => {
       const cx = side === -1 ? 1536 : 512;
 
-      // 로열 네이비 하부 다이내믹 웨이브
-      ctx.fillStyle = '#0369a1';
+      // 짙은 하부 다이내믹 웨이브
+      ctx.fillStyle = this._skinCss(skin.accent, 0.65);
       ctx.beginPath();
       ctx.moveTo(cx - 95 * side, 960);
       ctx.bezierCurveTo(cx - 60 * side, 620, cx - 40 * side, 320, cx - 120 * side, 30);
@@ -312,8 +416,8 @@
       ctx.closePath();
       ctx.fill();
 
-      // 스카이블루 메인 치트라인
-      ctx.fillStyle = '#38bdf8';
+      // 메인 치트라인
+      ctx.fillStyle = this._skinCss(skin.accent, 1.45);
       ctx.beginPath();
       ctx.moveTo(cx - 58 * side, 965);
       ctx.bezierCurveTo(cx - 22 * side, 620, cx - 4 * side, 320, cx - 72 * side, 30);
@@ -322,8 +426,8 @@
       ctx.closePath();
       ctx.fill();
 
-      // 골드 핀스트라이프 하이라이트
-      ctx.fillStyle = '#f59e0b';
+      // 핀스트라이프 하이라이트
+      ctx.fillStyle = this._skinCss(skin.trim, 1.0);
       ctx.beginPath();
       ctx.moveTo(cx - 26 * side, 940);
       ctx.bezierCurveTo(cx + 4 * side, 620, cx + 20 * side, 320, cx - 32 * side, 50);
@@ -334,19 +438,19 @@
     });
 
     // 4. 항공사 정식 브랜드 레터링 & 등록 부호 (Airline Titles & Tail Number)
-    const regCode = (type === 'b747') ? 'HL7472' : (type === 'dc10' ? 'HL7310' : (type === 'md80' ? 'HL7204' : (type === 'a320' ? 'HL8031' : (type === 'concorde' ? 'F-BTSC' : 'RESCUE-01'))));
-    const modelTitle = (type === 'b747') ? 'BOEING 747-400' : (type === 'dc10' ? 'McDONNELL DOUGLAS DC-10' : (type === 'md80' ? 'MD-80 TWIN JET' : (type === 'a320' ? 'AIRBUS A320' : (type === 'concorde' ? 'CONCORDE SST' : 'CANADAIR CL-215'))));
+    const regCode = (type === 'b747') ? 'HL7472' : (type === 'dc10' ? 'HL7310' : (type === 'md80' ? 'HL7204' : (type === 'a320' ? 'HL8031' : (type === 'a350' ? 'HL8500' : (type === 'concorde' ? 'F-BTSC' : 'RESCUE-01')))));
+    const modelTitle = (type === 'b747') ? 'BOEING 747-400' : (type === 'dc10' ? 'McDONNELL DOUGLAS DC-10' : (type === 'md80' ? 'MD-80 TWIN JET' : (type === 'a320' ? 'AIRBUS A320' : (type === 'a350' ? 'AIRBUS A350-900 XWB' : (type === 'concorde' ? 'CONCORDE SST' : 'CANADAIR CL-215')))));
 
     // 좌현(Port, X=1536) 텍스트
     ctx.save();
     ctx.translate(1536 + 72, 620);
     ctx.rotate(-Math.PI / 2);
     ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = this._skinCss(skin.secondary, 0.35);
     ctx.textAlign = 'center';
-    ctx.fillText('SKY JET AIRWAYS', 0, 0);
+    ctx.fillText(skin.title, 0, 0);
     ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0284c7';
+    ctx.fillStyle = this._skinCss(skin.accent, 0.8);
     ctx.fillText(modelTitle, 0, 24);
     ctx.restore();
 
@@ -364,11 +468,11 @@
     ctx.translate(512 - 72, 620);
     ctx.rotate(Math.PI / 2);
     ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = this._skinCss(skin.secondary, 0.35);
     ctx.textAlign = 'center';
-    ctx.fillText('SKY JET AIRWAYS', 0, 0);
+    ctx.fillText(skin.title, 0, 0);
     ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#0284c7';
+    ctx.fillStyle = this._skinCss(skin.accent, 0.8);
     ctx.fillText(modelTitle, 0, 24);
     ctx.restore();
 
@@ -712,7 +816,8 @@
     };
 
     const isNight = (this.timeOfDay === 'night');
-    const liveryTex = this.updateFuselageTexture(type, isNight);
+    const skin = this.getActiveAirlineSkin();
+    const liveryTex = this.updateFuselageTexture(type, isNight, skin);
     const wingTex = this.updateWingTexture(type, isNight);
 
     // 프리미엄 항공사 PBR 재질 & 프로시저럴 고해상도 그래픽 텍스처 (실제 항공기 하이글로스 반사광)
@@ -722,17 +827,17 @@
       metalness: 0.28
     });
     const fuselageMat = new THREE.MeshStandardMaterial({
-      color: 0xf8fafc,
+      color: skin.base,
       roughness: 0.20,
       metalness: 0.25
     });
     const cheatlineMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+      color: skin.accent,
       roughness: 0.18,
       metalness: 0.38
     });
     const goldTrimMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
+      color: skin.trim,
       roughness: 0.22,
       metalness: 0.75
     });
@@ -2311,6 +2416,7 @@
       dc10: { span: 22.0, wingY: -0.2, wingZ: 0.5, tailY: 7.5, tailZ: 16.5, topY: 3.2, topZ: -2, btmY: -3.1, btmZ: -1 },
       md80: { span: 16.5, wingY: -0.2, wingZ: 0.2, tailY: 6.8, tailZ: 18.5, topY: 2.4, topZ: -2, btmY: -2.4, btmZ: -1 },
       a320: { span: 17.8, wingY: 0.2, wingZ: 0.2, tailY: 6.5, tailZ: 15.5, topY: 2.6, topZ: -2, btmY: -2.6, btmZ: -1 },
+      a350: { span: 32.4, wingY: 0.8, wingZ: -1.0, tailY: 8.8, tailZ: 26.5, topY: 4.2, topZ: -4, btmY: -3.8, btmZ: -2 },
       b747: { span: 32.0, wingY: -0.2, wingZ: 1.0, tailY: 10.5, tailZ: 29.5, topY: 5.2, topZ: -5, btmY: -4.5, btmZ: -2 },
       concorde: { span: 13.5, wingY: -0.2, wingZ: 8.5, tailY: 6.2, tailZ: 26.5, topY: 2.4, topZ: -4, btmY: -2.4, btmZ: -2 },
       amphibian: { span: 16.5, wingY: 3.2, wingZ: 0.5, tailY: 5.8, tailZ: 12.5, topY: 4.2, topZ: -1, btmY: -1.8, btmZ: -1 },
@@ -2357,6 +2463,179 @@
 
     // 초기 표시 여부 (야간에만 켜짐)
     this.aircraftNavLights.forEach(l => l.visible = isNight);
+  },
+
+  // ----------------------------------------------------------------
+  // GLB 기체 전용 랜딩 기어 어셈블리 생성 (수납/전개/조향 피벗 통합)
+  // ----------------------------------------------------------------
+  createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat) {
+    if (typeof GLBMovingParts !== 'undefined' && GLBMovingParts.createGLBLandingGear) {
+      return GLBMovingParts.createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat);
+    }
+    const gearAssembly = new THREE.Group();
+    gearAssembly.position.set(x, y, z);
+
+    const doorLGroup = new THREE.Group();
+    const doorRGroup = new THREE.Group();
+    gearAssembly.add(doorLGroup);
+    gearAssembly.add(doorRGroup);
+
+    const strutPivot = new THREE.Group();
+    strutPivot.position.set(0, 0, 0);
+
+    const mainStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2.6, 12), chromeMat);
+    mainStrut.position.set(0, -1.3, 0);
+    mainStrut.castShadow = true;
+    strutPivot.add(mainStrut);
+
+    let bogieBeamGroup = null;
+
+    if (is4WheelBogie) {
+      bogieBeamGroup = new THREE.Group();
+      bogieBeamGroup.position.set(0, -2.6, 0);
+
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.35, 2.2), chromeMat);
+      beam.castShadow = true;
+      bogieBeamGroup.add(beam);
+
+      [-0.85, 0.85].forEach(axleZ => {
+        const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.0, 10), chromeMat);
+        axle.rotation.z = Math.PI / 2;
+        axle.position.set(0, 0, axleZ);
+        bogieBeamGroup.add(axle);
+
+        [-0.85, 0.85].forEach(wheelX => {
+          const wheelGroup = new THREE.Group();
+          wheelGroup.position.set(wheelX, 0, axleZ);
+
+          const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.48, 16), tireMat);
+          tire.rotation.z = Math.PI / 2;
+          tire.castShadow = true;
+          wheelGroup.add(tire);
+
+          const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.50, 12), chromeMat);
+          hub.rotation.z = Math.PI / 2;
+          wheelGroup.add(hub);
+
+          bogieBeamGroup.add(wheelGroup);
+          this.wheels.push(tire);
+        });
+      });
+
+      strutPivot.add(bogieBeamGroup);
+    } else {
+      const axleGroup = new THREE.Group();
+      axleGroup.position.set(0, -2.6, 0);
+
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, isNose ? 1.4 : 1.8, 10), chromeMat);
+      axle.rotation.z = Math.PI / 2;
+      axleGroup.add(axle);
+
+      const wheelOffset = isNose ? 0.55 : 0.75;
+      [-wheelOffset, wheelOffset].forEach(wheelX => {
+        const wheel = new THREE.Mesh(
+          new THREE.CylinderGeometry(isNose ? 0.65 : 0.78, isNose ? 0.65 : 0.78, isNose ? 0.40 : 0.48, 16),
+          tireMat
+        );
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wheelX, 0, 0);
+        wheel.castShadow = true;
+        axleGroup.add(wheel);
+
+        const hub = new THREE.Mesh(
+          new THREE.CylinderGeometry(isNose ? 0.35 : 0.42, isNose ? 0.35 : 0.42, isNose ? 0.42 : 0.50, 12),
+          chromeMat
+        );
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(wheelX, 0, 0);
+        axleGroup.add(hub);
+
+        this.wheels.push(wheel);
+      });
+
+      strutPivot.add(axleGroup);
+      if (isNose) {
+        this.controlSurfaces.noseWheelGroup = axleGroup;
+      }
+    }
+
+    gearAssembly.add(strutPivot);
+
+    const isDown = (this.gearPhase === 'DOWN' || (this.gearPhase !== 'UP' && this.gearExtended));
+    if (isDown) {
+      strutPivot.rotation.x = 0;
+      strutPivot.visible = true;
+    } else {
+      strutPivot.rotation.x = -Math.PI / 2;
+      strutPivot.visible = false;
+    }
+
+    gearAssembly.userData = {
+      gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
+      damageState: 'normal',
+      strutPivot,
+      doorL: doorLGroup,
+      doorR: doorRGroup,
+      bogieBeam: bogieBeamGroup,
+      isNose,
+      is4WheelBogie,
+      origPos: new THREE.Vector3(x, y, z)
+    };
+
+    return gearAssembly;
+  },
+
+  // ----------------------------------------------------------------
+  // A320 및 A350 GLB 기체 가동 파츠 장착 (엔진 내부 터보팬 블레이드 및 A350 기어)
+  // 제어평면(에일러론/승강타/방향타/플랩)은 GLB 고유 외형 100% 보존을 위해 GPU 버텍스 셰이더로 정밀 가동
+  // ----------------------------------------------------------------
+  attachGLBMovingParts(type) {
+    if (this.glbMovingPartsController) return;
+    if (type !== 'a320' && type !== 'a350') return;
+
+    this.turbofans = this.turbofans || [];
+    this.wheels = this.wheels || [];
+    this.landingGears = this.landingGears || [];
+    this.glbMovingParts = this.glbMovingParts || { fans: [], rudder: null, flaps: [] };
+    this.glbMovingParts.fans = this.glbMovingParts.fans || [];
+    this.glbMovingParts.flaps = this.glbMovingParts.flaps || [];
+    this.controlSurfaces = this.controlSurfaces || {};
+
+    const isA350 = (type === 'a350');
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.95, roughness: 0.15 });
+    const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9, metalness: 0.1 });
+
+    // 1. 실제 회전 티타늄 터보팬 블레이드 & 중앙 스파이럴 콘 (Twin Turbofans)
+    // 엔진 카울 안쪽에만 깊숙이 위치시켜 흡입구 전면에서만 블레이드가 회전하도록 안착
+    const engineDefs = isA350
+      ? { radius: 1.35, blades: 22, leftX: -9.8, rightX: 9.8, y: -2.3, z: -1.2 }
+      : { radius: 0.80, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 };
+
+    [engineDefs.leftX, engineDefs.rightX].forEach(x => {
+      const fan = this.createTurbofanFan(engineDefs.radius, engineDefs.blades, chromeMat);
+      fan.position.set(x, engineDefs.y, engineDefs.z);
+      this.planeGroup.add(fan);
+      this.turbofans.push(fan);
+      this.glbMovingParts.fans.push(fan);
+    });
+
+    // 2. 착륙장치 (Landing Gear)
+    // A350은 원본 GLB에 랜딩기어가 없으므로 정밀 착륙장치 장착
+    // A320은 GLB 자체 랜딩기어가 내장되어 있으므로 중복 생성하지 않고 GLB 기어 메시를 직접 제어함
+    if (isA350) {
+      const gearDefs = {
+        nose: { x: 0, y: -1.34, z: -21.0, isNose: true, is4Wheel: false },
+        mainL: { x: -5.8, y: -1.34, z: 2.2, isNose: false, is4Wheel: true },
+        mainR: { x: 5.8, y: -1.34, z: 2.2, isNose: false, is4Wheel: true }
+      };
+
+      const gearAssemblies = [gearDefs.nose, gearDefs.mainL, gearDefs.mainR];
+      gearAssemblies.forEach(g => {
+        const gearObj = this.createGLBLandingGear(g.x, g.y, g.z, g.isNose, g.is4Wheel, chromeMat, tireMat);
+        this.planeGroup.add(gearObj);
+        this.landingGears.push(gearObj);
+      });
+    }
   }
 
   });

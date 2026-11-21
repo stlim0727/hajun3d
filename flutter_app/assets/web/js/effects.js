@@ -230,7 +230,7 @@
     this.proximityShadowMesh.renderOrder = 1;
     this.scene.add(this.proximityShadowMesh);
 
-    // 2. 저고도 수면 다운워시 파문 링 (Water Downwash Skim Ring)
+    // 2. 저고도 수면 다운워시 & 동심원 물결 파문 링 (Multi-Crest Concentric Water Ripple Texture)
     let ringTex = null;
     if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
       const rCanvas = document.createElement('canvas');
@@ -238,10 +238,14 @@
       rCanvas.height = 128;
       const rCtx = rCanvas.getContext && rCanvas.getContext('2d');
       if (rCtx) {
-        const rGrad = rCtx.createRadialGradient(64, 64, 24, 64, 64, 62);
+        const rGrad = rCtx.createRadialGradient(64, 64, 14, 64, 64, 63);
         rGrad.addColorStop(0.0, 'rgba(224, 242, 254, 0.0)');
-        rGrad.addColorStop(0.55, 'rgba(224, 242, 254, 0.35)');
-        rGrad.addColorStop(0.78, 'rgba(255, 255, 255, 0.55)');
+        rGrad.addColorStop(0.28, 'rgba(186, 230, 253, 0.22)');
+        rGrad.addColorStop(0.42, 'rgba(14, 165, 233, 0.05)');
+        rGrad.addColorStop(0.58, 'rgba(224, 242, 254, 0.45)');
+        rGrad.addColorStop(0.70, 'rgba(14, 165, 233, 0.08)');
+        rGrad.addColorStop(0.84, 'rgba(255, 255, 255, 0.72)');
+        rGrad.addColorStop(0.94, 'rgba(186, 230, 253, 0.28)');
         rGrad.addColorStop(1.0, 'rgba(224, 242, 254, 0.0)');
         rCtx.fillStyle = rGrad;
         rCtx.fillRect(0, 0, 128, 128);
@@ -262,6 +266,109 @@
     this.waterWakeRingMesh.visible = false;
     this.waterWakeRingMesh.renderOrder = 2;
     this.scene.add(this.waterWakeRingMesh);
+
+    // 2-B. 켈빈 V자형 함수파 및 활주 포말 항적 (Kelvin V-Bow Wave & Stepped-Hull Foam Wake)
+    let bowWakeTex = null;
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      const wCanvas = document.createElement('canvas');
+      wCanvas.width = 128;
+      wCanvas.height = 128;
+      const wCtx = wCanvas.getContext && wCanvas.getContext('2d');
+      if (wCtx) {
+        const coreGrad = wCtx.createRadialGradient(64, 54, 4, 64, 64, 58);
+        coreGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.65)');
+        coreGrad.addColorStop(0.35, 'rgba(224, 242, 254, 0.35)');
+        coreGrad.addColorStop(0.75, 'rgba(186, 230, 253, 0.10)');
+        coreGrad.addColorStop(1.0, 'rgba(186, 230, 253, 0.0)');
+        wCtx.fillStyle = coreGrad;
+        wCtx.fillRect(0, 0, 128, 128);
+
+        wCtx.lineCap = 'round';
+        // 주 V자 함수파(Outer Kelvin Bow Wave Arms) + 2차 내부 파랑(Feathered Wavelets)
+        const wakeArms = [
+          { tipY: 14, endX: 12, endY: 118, ctrlX: 34, ctrlY: 56, width: 5.5, color: 'rgba(255, 255, 255, 0.78)' },
+          { tipY: 18, endX: 24, endY: 118, ctrlX: 44, ctrlY: 62, width: 3.5, color: 'rgba(224, 242, 254, 0.55)' },
+          { tipY: 26, endX: 36, endY: 116, ctrlX: 52, ctrlY: 70, width: 2.4, color: 'rgba(186, 230, 253, 0.40)' }
+        ];
+        for (let i = 0; i < wakeArms.length; i++) {
+          const arm = wakeArms[i];
+          wCtx.strokeStyle = arm.color;
+          wCtx.lineWidth = arm.width;
+          // 좌현 함수파
+          wCtx.beginPath();
+          wCtx.lineTo(64, arm.tipY);
+          wCtx.bezierCurveTo(arm.ctrlX, arm.ctrlY, arm.endX + 10, arm.endY - 18, arm.endX, arm.endY);
+          wCtx.stroke();
+          // 우현 함수파
+          const rCtrlX = 128 - arm.ctrlX;
+          const rEndX = 128 - arm.endX;
+          wCtx.beginPath();
+          wCtx.lineTo(64, arm.tipY);
+          wCtx.bezierCurveTo(rCtrlX, arm.ctrlY, rEndX - 10, arm.endY - 18, rEndX, arm.endY);
+          wCtx.stroke();
+        }
+
+        // 중앙 선체 스텝 후류 포말(Turbulent Centerline Foam Trail)
+        const trailGrad = wCtx.createLinearGradient(64, 18, 64, 124);
+        trailGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.72)');
+        trailGrad.addColorStop(0.5, 'rgba(224, 242, 254, 0.42)');
+        trailGrad.addColorStop(1.0, 'rgba(186, 230, 253, 0.0)');
+        wCtx.strokeStyle = trailGrad;
+        wCtx.lineWidth = 10;
+        wCtx.beginPath();
+        wCtx.lineTo(64, 20);
+        wCtx.lineTo(64, 122);
+        wCtx.stroke();
+
+        bowWakeTex = new THREE.CanvasTexture(wCanvas);
+      }
+    }
+
+    const bowWakeMat = new THREE.MeshBasicMaterial({
+      color: 0xe0f2fe,
+      map: bowWakeTex,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    this.waterBowWakeMesh = new THREE.Mesh(shadowGeo, bowWakeMat);
+    this.waterBowWakeMesh.rotation.x = -Math.PI / 2;
+    this.waterBowWakeMesh.visible = false;
+    this.waterBowWakeMesh.renderOrder = 3;
+    this.scene.add(this.waterBowWakeMesh);
+
+    // 2-C. Zero-GC 확산 동심원 물결 풀 (Expanding Concentric Water Ripple Pool, 16개 재사용)
+    const ripplePoolSize = 16;
+    this.waterRipplePool = [];
+    this._waterRippleCursor = 0;
+    this._waterRippleSpawnAccum = 0;
+    for (let i = 0; i < ripplePoolSize; i++) {
+      const rMat = new THREE.MeshBasicMaterial({
+        color: 0xe0f2fe,
+        map: ringTex,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      const rMesh = new THREE.Mesh(shadowGeo, rMat);
+      rMesh.rotation.x = -Math.PI / 2;
+      rMesh.visible = false;
+      rMesh.renderOrder = 2;
+      this.scene.add(rMesh);
+      this.waterRipplePool.push({
+        mesh: rMesh,
+        mat: rMat,
+        active: false,
+        life: 0,
+        maxLife: 1.35,
+        baseScale: 12,
+        growRate: 28,
+        maxOpacity: 0.62,
+        aspect: 1.3
+      });
+    }
 
     // 3. Zero-GC 수면 물보라 파티클 풀 (36개 고정 재사용)
     const poolSize = 36;
@@ -296,6 +403,92 @@
     }
   },
 
+  spawnWaterRippleRing(x, z, surfaceY, opts = {}) {
+    const pool = this.waterRipplePool;
+    if (!pool || pool.length === 0) return;
+
+    const r = pool[this._waterRippleCursor];
+    this._waterRippleCursor = (this._waterRippleCursor + 1) % pool.length;
+
+    r.active = true;
+    r.maxLife = opts.maxLife ?? 1.35;
+    r.life = r.maxLife;
+    r.baseScale = opts.baseScale ?? 12;
+    r.growRate = opts.growRate ?? 28;
+    r.maxOpacity = opts.maxOpacity ?? 0.62;
+    r.aspect = opts.aspect ?? 1.3;
+
+    r.mesh.position.set(x, surfaceY + 0.11, z);
+    r.mesh.rotation.z = opts.heading || 0;
+    r.mesh.scale.set(r.baseScale, r.baseScale * r.aspect, 1);
+    r.mat.opacity = r.maxOpacity * 0.35;
+    r.mesh.visible = true;
+  },
+
+  triggerWaterTouchdownSplash(sinkRate = 2.0) {
+    if (!this.planeGroup) return;
+    const pos = this.planeGroup.position;
+    const { surfaceY, isWater } = this.getSurfaceUnderPlane(pos.x, pos.z);
+    if (!isWater) return;
+
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
+    const heading = typeof this.yaw === 'number'
+      ? this.yaw
+      : (this.planeGroup.rotation ? this.planeGroup.rotation.y : Math.atan2(-forward.x, -forward.z));
+    const impactSeverity = Math.min(1.5, Math.max(0.6, Math.abs(sinkRate || 2.0) / 2.6));
+
+    // 착수 순간 4중 동심원 충격 파문 생성
+    for (let i = 0; i < 4; i++) {
+      const aft = -3 + i * 4.5;
+      this.spawnWaterRippleRing(
+        pos.x - forward.x * aft,
+        pos.z - forward.z * aft,
+        surfaceY,
+        {
+          heading,
+          baseScale: 10 + i * 5.5,
+          growRate: (26 + i * 8) * impactSeverity,
+          maxLife: 1.25 + i * 0.28,
+          maxOpacity: Math.min(0.85, (0.72 - i * 0.1) * impactSeverity),
+          aspect: 1.35
+        }
+      );
+    }
+
+    // 선체 차인 양옆으로 솟구치는 대형 착수 물보라 커튼 (최대 12개)
+    const pool = this.proximityParticlePool;
+    if (!pool || pool.length === 0) return;
+    const burstCount = Math.min(12, pool.length);
+    for (let i = 0; i < burstCount; i++) {
+      const p = pool[this._proximityPoolCursor];
+      this._proximityPoolCursor = (this._proximityPoolCursor + 1) % pool.length;
+
+      const sideSign = i % 2 === 0 ? -1 : 1;
+      const sideOffset = sideSign * (2.4 + Math.random() * 3.4);
+      const foreAft = (Math.random() - 0.35) * 10.0;
+      p.active = true;
+      p.maxLife = 0.7 + Math.random() * 0.45;
+      p.life = p.maxLife;
+      p.baseScale = 1.8 + impactSeverity * 1.4;
+      p.growRate = 11.0;
+      p.maxOpacity = Math.min(0.82, 0.65 * impactSeverity);
+
+      p.mat.color.setHex(i % 3 === 0 ? 0xffffff : 0xe0f2fe);
+      p.mesh.position.set(
+        pos.x + right.x * sideOffset - forward.x * foreAft,
+        surfaceY + 0.4 + Math.random() * 0.5,
+        pos.z + right.z * sideOffset - forward.z * foreAft
+      );
+      p.vx = right.x * sideSign * (7.5 + Math.random() * 6.5) - forward.x * (3.0 + Math.random() * 5.0);
+      p.vy = (5.0 + Math.random() * 4.8) * impactSeverity;
+      p.vz = right.z * sideSign * (7.5 + Math.random() * 6.5) - forward.z * (3.0 + Math.random() * 5.0);
+      p.mesh.scale.setScalar(p.baseScale);
+      p.mat.opacity = p.maxOpacity;
+      p.mesh.visible = true;
+    }
+  },
+
   updateProximitySurfaceEffects(dt, currentKmh) {
     if (!this.planeGroup) return;
 
@@ -306,11 +499,22 @@
     this._surfaceClearance = clearance;
     this._isOverWaterSurface = isWater;
 
+    const onWaterSurface = isWater && (
+      Boolean(this.isOnGround) ||
+      Boolean(this._flight3dCore?.telemetry?.onWater) ||
+      pos.y <= surfaceY + 2.4
+    );
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
+    const heading = typeof this.yaw === 'number'
+      ? this.yaw
+      : (this.planeGroup.rotation ? this.planeGroup.rotation.y : Math.atan2(-forward.x, -forward.z));
+
     // 1. 근접 투영 그림자 업데이트 (수면 초저고도에서는 부드러운 수면 투영 그림자 유지, 활주로/육상에서는 정밀 2048 섀도우 맵의 선명한 실루엣을 위해 원형 블러 메쉬 숨김)
     if (this.proximityShadowMesh) {
       if (isWater && clearance < 180) {
         const prox = 1.0 - clearance / 180;
-        const span = this.currentPlaneType === 'dc10' ? 48 : (this.currentPlaneType === 'a380' ? 68 : 34);
+        const span = this.currentPlaneType === 'dc10' ? 48 : (this.currentPlaneType === 'a380' ? 68 : (this.currentPlaneType === 'amphibian' ? 29 : 34));
         const spread = span * (0.85 + (clearance / 180) * 1.45);
         this.proximityShadowMesh.visible = true;
         this.proximityShadowMesh.position.set(pos.x, surfaceY + 0.08, pos.z);
@@ -321,64 +525,157 @@
       }
     }
 
-    // 2. 저고도 수면 다운워시 파문 링 (수면 위 28m 이하, 속도 60km/h 이상)
+    // 2. 저고도 수면 다운워시 파문 링 (수면 위 28m 이하 60km/h 이상, 또는 수상 활주 12km/h 이상)
     if (this.waterWakeRingMesh) {
-      if (isWater && clearance < 28 && currentKmh > 60) {
-        const waterProx = 1.0 - clearance / 28;
-        const speedFactor = Math.min(1.0, currentKmh / 280);
+      if (isWater && ((clearance < 28 && currentKmh > 60) || (onWaterSurface && currentKmh > 12))) {
+        const waterProx = onWaterSurface ? 1.0 : (1.0 - clearance / 28);
+        const speedFactor = Math.min(1.0, currentKmh / 240);
         const pulse = 1.0 + Math.sin(performance.now() * 0.012) * 0.08;
-        const ringScale = (24 + (1.0 - waterProx) * 18) * pulse;
+        const ringScale = (20 + (1.0 - waterProx) * 18 + speedFactor * 8) * pulse;
         this.waterWakeRingMesh.visible = true;
         this.waterWakeRingMesh.position.set(pos.x, surfaceY + 0.12, pos.z);
         this.waterWakeRingMesh.scale.set(ringScale, ringScale * 1.55, 1);
-        this.waterWakeRingMesh.rotation.z = this.planeGroup.rotation.y;
-        this.waterWakeRingMesh.material.opacity = Math.min(0.65, waterProx * speedFactor * 0.65);
+        this.waterWakeRingMesh.rotation.z = heading;
+        this.waterWakeRingMesh.material.opacity = Math.min(0.65, waterProx * (0.25 + speedFactor * 0.48));
       } else {
         this.waterWakeRingMesh.visible = false;
       }
     }
 
-    // 3. 저고도 수면 물보라 파티클 스폰 & 업데이트 (Zero-GC, 수면 위에서만 발생)
+    // 2-B. 켈빈 V자형 함수파 및 활주 포말 항적 업데이트
+    if (this.waterBowWakeMesh) {
+      if (isWater && (onWaterSurface || clearance < 12) && currentKmh > 12) {
+        const wakeProx = onWaterSurface ? 1.0 : (1.0 - clearance / 12);
+        const speedFactor = Math.min(1.0, currentKmh / 180);
+        const wakeWidth = 18 + speedFactor * 18;
+        const wakeLength = 26 + speedFactor * 52;
+        const aftOffset = 6.0 + speedFactor * 10.0;
+        this.waterBowWakeMesh.visible = true;
+        this.waterBowWakeMesh.position.set(
+          pos.x - forward.x * aftOffset,
+          surfaceY + 0.14,
+          pos.z - forward.z * aftOffset
+        );
+        this.waterBowWakeMesh.scale.set(wakeWidth, wakeLength, 1);
+        this.waterBowWakeMesh.rotation.z = heading;
+        this.waterBowWakeMesh.material.opacity = Math.min(0.85, wakeProx * (0.28 + speedFactor * 0.57));
+      } else {
+        this.waterBowWakeMesh.visible = false;
+      }
+    }
+
+    // 2-C. 확산 동심원 물결 스폰 & 업데이트 (Zero-GC)
+    const ripplePool = this.waterRipplePool;
+    if (ripplePool && ripplePool.length > 0) {
+      if (isWater && (onWaterSurface || (clearance < 16 && currentKmh > 55))) {
+        const rippleRate = onWaterSurface
+          ? (currentKmh > 20 ? 4.5 + Math.min(6.5, currentKmh / 32) : 1.6)
+          : 3.5 * (1.0 - clearance / 16);
+        this._waterRippleSpawnAccum += dt * rippleRate;
+
+        while (this._waterRippleSpawnAccum >= 1.0) {
+          this._waterRippleSpawnAccum -= 1.0;
+          const speedRatio = Math.min(1.0, currentKmh / 200);
+          const aftDist = onWaterSurface ? (2.0 + speedRatio * 5.0) : 0.0;
+          this.spawnWaterRippleRing(
+            pos.x - forward.x * aftDist,
+            pos.z - forward.z * aftDist,
+            surfaceY,
+            {
+              heading,
+              baseScale: onWaterSurface ? (11 + speedRatio * 5) : 16,
+              growRate: onWaterSurface ? (22 + speedRatio * 24) : 26,
+              maxLife: onWaterSurface ? (1.25 + (1.0 - speedRatio) * 0.45) : 0.95,
+              maxOpacity: onWaterSurface ? (0.45 + speedRatio * 0.25) : 0.40 * (1.0 - clearance / 16),
+              aspect: 1.2 + speedRatio * 0.35
+            }
+          );
+        }
+      }
+
+      for (let i = 0; i < ripplePool.length; i++) {
+        const r = ripplePool[i];
+        if (!r.active) continue;
+        r.life -= dt;
+        if (r.life <= 0) {
+          r.active = false;
+          r.mesh.visible = false;
+          continue;
+        }
+        const t = 1.0 - r.life / r.maxLife;
+        const s = r.baseScale + t * r.growRate;
+        r.mesh.scale.set(s, s * r.aspect, 1);
+        r.mat.opacity = r.maxOpacity * Math.sin(t * Math.PI) * (1.0 - t * 0.45);
+      }
+    }
+
+    // 3. 저고도 수면 물보라 / 선체 차인 스프레이 파티클 스폰 & 업데이트 (Zero-GC, 수면 위에서만 발생)
     const pool = this.proximityParticlePool;
     if (!pool || pool.length === 0) return;
 
     const maxSpawnClearance = 34;
-    const shouldSpawn = isWater && currentKmh > 65 && clearance < maxSpawnClearance;
+    const shouldSpawn = isWater && ((onWaterSurface && currentKmh > 18) || (currentKmh > 65 && clearance < maxSpawnClearance));
 
     if (shouldSpawn) {
-      const prox = 1.0 - clearance / maxSpawnClearance;
-      const spawnRate = 42 * prox * Math.min(1.2, currentKmh / 220);
+      const prox = onWaterSurface ? 1.0 : (1.0 - clearance / maxSpawnClearance);
+      const speedNorm = onWaterSurface ? Math.min(1.2, Math.max(0.35, currentKmh / 150)) : Math.min(1.2, currentKmh / 220);
+      const spawnRate = (onWaterSurface ? 56 : 42) * prox * speedNorm;
       this._proximitySpawnAccum += dt * spawnRate;
-
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
 
       while (this._proximitySpawnAccum >= 1.0) {
         this._proximitySpawnAccum -= 1.0;
         const p = pool[this._proximityPoolCursor];
         this._proximityPoolCursor = (this._proximityPoolCursor + 1) % pool.length;
 
-        const side = (Math.random() - 0.5) * 26;
-        const backOffset = 4 + Math.random() * 10;
-        p.active = true;
-        p.maxLife = 0.45 + Math.random() * 0.35;
-        p.life = p.maxLife;
-        p.baseScale = 1.4 + prox * 1.8;
-        p.growRate = 9.5;
-        p.maxOpacity = 0.58 * prox;
+        if (onWaterSurface) {
+          const isFloatTip = Math.random() < 0.25;
+          const sideSign = Math.random() < 0.5 ? -1 : 1;
+          const side = sideSign * (isFloatTip ? (12.0 + Math.random() * 1.5) : (2.2 + Math.random() * 3.2));
+          const backOffset = isFloatTip ? (Math.random() * 3.0) : (1.5 + Math.random() * 8.5);
+          p.active = true;
+          p.maxLife = 0.55 + Math.random() * 0.42;
+          p.life = p.maxLife;
+          p.baseScale = (isFloatTip ? 1.0 : 1.5) + speedNorm * 1.3;
+          p.growRate = isFloatTip ? 6.5 : 10.5;
+          p.maxOpacity = Math.min(0.80, (isFloatTip ? 0.48 : 0.68) * (0.45 + speedNorm * 0.55));
 
-        p.mat.color.setHex(Math.random() > 0.35 ? 0xe0f2fe : 0xffffff);
-        p.mesh.position.set(
-          pos.x + right.x * side - forward.x * backOffset,
-          surfaceY + 0.35 + Math.random() * 0.6,
-          pos.z + right.z * side - forward.z * backOffset
-        );
-        p.vx = right.x * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.x * (6 + Math.random() * 8);
-        p.vy = 3.2 + prox * 3.5 + Math.random() * 2.0;
-        p.vz = right.z * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.z * (6 + Math.random() * 8);
-        p.mesh.scale.setScalar(p.baseScale);
-        p.mat.opacity = p.maxOpacity;
-        p.mesh.visible = true;
+          p.mat.color.setHex(Math.random() > 0.35 ? 0xffffff : 0xe0f2fe);
+          p.mesh.position.set(
+            pos.x + right.x * side - forward.x * backOffset,
+            surfaceY + 0.35 + Math.random() * 0.45,
+            pos.z + right.z * side - forward.z * backOffset
+          );
+          const outSpeed = (isFloatTip ? 4.0 : 6.0) + Math.random() * 7.0 * speedNorm;
+          const aftSpeed = 5.0 + Math.random() * 7.0;
+          p.vx = right.x * sideSign * outSpeed - forward.x * aftSpeed;
+          p.vy = (3.5 + Math.random() * 5.0) * (0.5 + 0.5 * speedNorm);
+          p.vz = right.z * sideSign * outSpeed - forward.z * aftSpeed;
+          p.mesh.scale.setScalar(p.baseScale);
+          p.mat.opacity = p.maxOpacity;
+          p.mesh.visible = true;
+        } else {
+          const side = (Math.random() - 0.5) * 26;
+          const backOffset = 4 + Math.random() * 10;
+          p.active = true;
+          p.maxLife = 0.45 + Math.random() * 0.35;
+          p.life = p.maxLife;
+          p.baseScale = 1.4 + prox * 1.8;
+          p.growRate = 9.5;
+          p.maxOpacity = 0.58 * prox;
+
+          p.mat.color.setHex(Math.random() > 0.35 ? 0xe0f2fe : 0xffffff);
+          p.mesh.position.set(
+            pos.x + right.x * side - forward.x * backOffset,
+            surfaceY + 0.35 + Math.random() * 0.6,
+            pos.z + right.z * side - forward.z * backOffset
+          );
+          p.vx = right.x * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.x * (6 + Math.random() * 8);
+          p.vy = 3.2 + prox * 3.5 + Math.random() * 2.0;
+          p.vz = right.z * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.z * (6 + Math.random() * 8);
+          p.mesh.scale.setScalar(p.baseScale);
+          p.mat.opacity = p.maxOpacity;
+          p.mesh.visible = true;
+        }
       }
     }
 
@@ -395,7 +692,11 @@
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      p.vy -= 4.5 * dt;
+      p.vy -= (isWater ? 7.5 : 4.5) * dt;
+      if (isWater && p.mesh.position.y < surfaceY + 0.15) {
+        p.mesh.position.y = surfaceY + 0.15;
+        if (p.vy < 0) p.vy = 0;
+      }
       const s = p.baseScale + t * p.growRate;
       p.mesh.scale.set(s, s * 0.65, s);
       p.mat.opacity = p.maxOpacity * (1.0 - t);
@@ -467,10 +768,13 @@
         this.speedVignetteEl.style.opacity = '0';
       }
     }
-
     // 4. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
     if (this.oceanTexture) {
       this.oceanTexture.offset.y -= dt * 0.035;
+    }
+    if (this.oceanNormalTexture) {
+      this.oceanNormalTexture.offset.x -= dt * 0.018;
+      this.oceanNormalTexture.offset.y += dt * 0.01;
     }
   },
 

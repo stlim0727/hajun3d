@@ -230,6 +230,121 @@
     tex.anisotropy = 8;
     return tex;
   },
+  createOceanNormalTexture() {
+    // Tangent-space normal map for water surface micro-relief (Bump Mapping).
+    const W = 1024, H = 1024;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Height field (single pass, ~1M sin calls) then central-difference normals.
+    const height = new Float32Array(W * H);
+    const kx1 = 0.018, ky1 = 0.0075;
+    const kx2 = 0.011, ky2 = -0.014;
+    const kx3 = 0.005, ky3 = 0.021;
+    const amp = 0.85;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        height[y * W + x] = amp * (
+          Math.sin(x * kx1 + y * ky1) +
+          Math.sin(x * kx2 + y * ky2) +
+          Math.sin(x * kx3 + y * ky3)
+        );
+      }
+    }
+
+    const img = ctx.createImageData(W, H);
+    const data = img.data;
+    for (let y = 0; y < H; y++) {
+      const ym = (y - 1 + H) % H;
+      const yp = (y + 1) % H;
+      for (let x = 0; x < W; x++) {
+        const xm = (x - 1 + W) % W;
+        const xp = (x + 1) % W;
+        const dx = height[y * W + xp] - height[y * W + xm];
+        const dz = height[yp * W + x] - height[ym * W + x];
+        const len = Math.hypot(dx, dz, 2.0);
+        // Standard tangent-space encoding: R/G are surface slopes, B is the
+        // positive outward component so normals never point inward.
+        const nx = -dx / len;
+        const ny = -dz / len;
+        const nz = 2.0 / len;
+        const idx = (y * W + x) * 4;
+        data[idx]     = (nx * 0.5 + 0.5) * 255;
+        data[idx + 1] = (ny * 0.5 + 0.5) * 255;
+        data[idx + 2] = (nz * 0.5 + 0.5) * 255;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1200, 1200);
+    tex.anisotropy = 4;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  },
+
+  createTerrainNormalTexture() {
+    // Tangent-space normal map for terrain surface micro-relief (soil, grass, rock).
+    const W = 512, H = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Higher-frequency, noisier height field than water (granular terrain detail).
+    const height = new Float32Array(W * H);
+    const kx1 = 0.09, ky1 = 0.11;
+    const kx2 = 0.21, ky2 = -0.17;
+    const kx3 = 0.37, ky3 = 0.29;
+    const amp = 0.65;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        height[y * W + x] = amp * (
+          Math.sin(x * kx1 + y * ky1) +
+          Math.sin(x * kx2 + y * ky2) +
+          Math.sin(x * kx3 + y * ky3)
+        );
+      }
+    }
+
+    const img = ctx.createImageData(W, H);
+    const data = img.data;
+    for (let y = 0; y < H; y++) {
+      const ym = (y - 1 + H) % H;
+      const yp = (y + 1) % H;
+      for (let x = 0; x < W; x++) {
+        const xm = (x - 1 + W) % W;
+        const xp = (x + 1) % W;
+        const dx = height[y * W + xp] - height[y * W + xm];
+        const dz = height[yp * W + x] - height[ym * W + x];
+        const len = Math.hypot(dx, dz, 2.0);
+        // Standard tangent-space encoding: R/G are surface slopes, B is the
+        // positive outward component so normals never point inward.
+        const nx = -dx / len;
+        const ny = -dz / len;
+        const nz = 2.0 / len;
+        const idx = (y * W + x) * 4;
+        data[idx]     = (nx * 0.5 + 0.5) * 255;
+        data[idx + 1] = (ny * 0.5 + 0.5) * 255;
+        data[idx + 2] = (nz * 0.5 + 0.5) * 255;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(500, 400);
+    tex.anisotropy = 4;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  },
 
   createTerrainCanvasTexture() {
     if (typeof document === 'undefined') return null;
@@ -316,6 +431,7 @@
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(500, 400); // ~100m x 100m 타일
     tex.anisotropy = 8;
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   },
 
@@ -493,6 +609,8 @@
 
     if (!this.oceanTexture) this.oceanTexture = this.createOceanCanvasTexture();
     if (!this.continentTexture) this.continentTexture = this.createTerrainCanvasTexture();
+    if (!this.terrainNormalTexture) this.terrainNormalTexture = this.createTerrainNormalTexture();
+    if (!this.oceanNormalTexture) this.oceanNormalTexture = this.createOceanNormalTexture();
     if (!this.airfieldGroundTexture) this.airfieldGroundTexture = this.createAirfieldGroundTexture();
     if (!this.sandTexture) this.sandTexture = this.createSandCanvasTexture();
     if (!this.runwayAsphaltTexture && typeof this.createRunwayAsphaltTexture === 'function') {
@@ -522,13 +640,17 @@
       if (!matName) return;
 
       if (matName === 'VastOceanFloor' || matName === 'OceanWater' || matName === 'MasterOcean') {
-        this.applyPlanarWorldUVs(c.geometry, 90, 90, 1200, 1200, 0, 0);
+        this.applyPlanarWorldUVs(c.geometry, 90, 90, 1200, 1200);
         setWhite(mat);
         mat.map = this.oceanTexture;
-        mat.bumpMap = this.oceanTexture;
-        mat.bumpScale = 0.45;
-        mat.roughness = 0.20;
-        mat.metalness = 0.25;
+        mat.normalMap = this.oceanNormalTexture;
+        mat.normalScale = new THREE.Vector2(0.9, 0.9);
+        mat.roughness = 0.08;
+        mat.metalness = 0.0;
+        if (this.scene && this.scene.environment) {
+          mat.envMap = this.scene.environment;
+          mat.envMapIntensity = 0.6;
+        }
         if (matName === 'OceanWater') {
           if (c.position) c.position.y = -1.46;
           mat.polygonOffset = true;
@@ -547,8 +669,8 @@
         this.applyPlanarWorldUVs(c.geometry, 120, 120, 500, 400, 0, -28000);
         setWhite(mat);
         mat.map = this.continentTexture;
-        mat.bumpMap = this.continentTexture;
-        mat.bumpScale = 0.55;
+        mat.normalMap = this.terrainNormalTexture;
+        mat.normalScale = new THREE.Vector2(0.8, 0.8);
         mat.roughness = 0.86;
         mat.metalness = 0.06;
         mat.needsUpdate = true;
@@ -628,8 +750,8 @@
       ) {
         this.applyPlanarWorldUVs(c.geometry, 75, 75, 500, 400, 0, 0);
         mat.vertexColors = true;
-        mat.bumpMap = this.continentTexture;
-        mat.bumpScale = 0.65;
+        mat.normalMap = this.terrainNormalTexture;
+        mat.normalScale = new THREE.Vector2(1.0, 1.0);
         mat.roughness = 0.92;
         mat.needsUpdate = true;
       }
@@ -671,6 +793,9 @@
 
     // 초경량 3D 뭉게구름
     this.initClouds();
+
+    // 지형 노멀 맵 (GLB 마운트 전에 생성)
+    this.terrainNormalTexture = this.createTerrainNormalTexture();
 
     // 모든 공항, 인천공항, 지형/대양/산맥, 해운대 메트로폴리스를 GLB 모델로 즉각 마운트
     this.loadAllRealGLBModels();
@@ -761,6 +886,19 @@
         name: `해운대 마린시티 마천루 #${i + 1} (${h}m)`
       });
     });
+
+    if (window.geoLocalDelta && window.GEO_POINTS) {
+      const h = window.geoLocalDelta(window.GEO_POINTS.haeundae);
+      const hVec = new THREE.Vector3(h.x, h.y, h.z);
+      this.obstacles.forEach(o => {
+        if (/해운대|광안대교|마린시티/.test(o.name)) o.box.translate(hVec);
+      });
+      const i = window.geoLocalDelta(window.GEO_POINTS.incheon);
+      const iVec = new THREE.Vector3(i.x, i.y, i.z);
+      this.obstacles.forEach(o => {
+        if (/인천/.test(o.name)) o.box.translate(iVec);
+      });
+    }
 
     this.initTerrainColliders();
   },
@@ -1031,6 +1169,18 @@
   },
 
   getTerrainColliderHit(worldX, worldY, worldZ, clearance = 6.0) {
+    if (this.geoLayer) {
+      if (!this.terrainProvider?.isReady?.(worldX, worldZ) || this.terrainProvider.isWater?.(worldX, worldZ)) {
+        return null;
+      }
+      const simH = this.terrainProvider.getHeight(worldX, worldZ);
+      if (!Number.isFinite(simH) || simH <= 10.0) return null;
+      const terrainY = 2.12 + simH;
+      if (worldY <= terrainY) {
+        return { collider: { name: '산악 지형' }, terrainY };
+      }
+      return null;
+    }
     if (!this.terrainColliders || this.terrainColliders.length === 0) return null;
     for (let i = 0; i < this.terrainColliders.length; i++) {
       const c = this.terrainColliders[i];
@@ -1201,16 +1351,24 @@
     return geo;
   },
 
+  // ----------------------------------------------------------------
   initTerrainAndSky() {
     // 1. 바다 (광활한 대양 120,000m x 120,000m - 해수면 Y = -1.5, 대륙 영역[-25000..25000, -68000..-28000]과 비중첩 분할로 원거리 Z-Fighting 원천 차단)
     this.oceanTexture = this.createOceanCanvasTexture();
-    this.oceanMaterial = new THREE.MeshStandardMaterial({
+    this.oceanNormalTexture = this.createOceanNormalTexture();
+    this.oceanMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       map: this.oceanTexture,
-      bumpMap: this.oceanTexture,
-      bumpScale: 0.45,
-      roughness: 0.20,
-      metalness: 0.25,
+      normalMap: this.oceanNormalTexture,
+      normalScale: new THREE.Vector2(0.9, 0.9),
+      roughness: 0.06,
+      metalness: 0.0,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05,
+      specular: 0x66ccff,
+      specularIntensity: 1.15,
+      ior: 1.33,
+      transmission: 0.0,
       polygonOffset: true,
       polygonOffsetFactor: 2,
       polygonOffsetUnits: 2

@@ -8,7 +8,9 @@ window.GEO_ION_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IkVqdjl
 window.GEO_ANCHOR = {
   lat: 35.165199279785156,
   lon: 128.93899536132812,
-  headingDeg: 353.9
+  headingDeg: 353.9,
+  // Align the WGS84 tile elevations to the simulator runway at the ground LOD.
+  height: 33.25
 };
 
 // Landmarks to place at real geodetic offsets from the Gimhae anchor.

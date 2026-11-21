@@ -6,8 +6,8 @@
   <title>Sky Explorer 3D - 3D 비행기 게임</title>
   <link rel="stylesheet" href="style.css">
   <!-- Unified Three.js + GLTF/GLB pipeline + optional 3D Tiles (offline-safe local bundle) -->
-  <script src="js/geo_config.js?v=20261120b"></script>
-  <script src="js/three_core_bundle.js?v=20261120b"></script>
+  <script src="js/geo_config.js?v=20261120d"></script>
+  <script src="js/three_core_bundle.js?v=20261120c"></script>
 </head>
 <body>
   <!-- 3D WebGL Canvas Container -->
@@ -136,8 +136,44 @@
       <button id="reverser-btn" class="icon-btn glass reverser-btn pc-only-hud" title="엔진 역추진 장치 (단축키 R)" onclick="window.toggleReverseThrust()">⚡ <span id="reverser-text">역추진 OFF</span></button>
       <button id="gear-btn" class="icon-btn glass pc-only-hud" title="랜딩 기어 접기/내리기 (단축키 G)" onclick="window.toggleLandingGear()">🛞 <span id="gear-text">기어 DOWN</span></button>
       <button id="plane-toggle-btn" class="icon-btn glass pc-only-hud" title="비행기 기종 변경 (단축키 P)" onclick="window.nextPlane()">✈ <span id="plane-name-text">A320 제트기</span></button>
-      <button id="cam-toggle-btn" class="icon-btn glass" title="카메라 전환 (C) · 화면에서 휠/핀치 줌 · Shift+휠 출력 조절" onclick="window.toggleCamera()">🎥 <span id="cam-mode-text">3인칭</span></button>
+      <div class="cam-control-wrap">
+        <button id="cam-toggle-btn" class="icon-btn glass" title="카메라 전환 (C) · 화면에서 휠/핀치 줌 · Shift+휠 출력 조절" onclick="window.toggleCamera()">🎥 <span id="cam-mode-text">3인칭</span></button>
+        <button id="cam-menu-btn" class="icon-btn glass cam-menu-btn" title="카메라 시점 목록 선택" onclick="window.toggleCameraMenu()">▾</button>
+        <div id="cam-mode-menu" class="cam-mode-menu glass hidden">
+          <div class="cam-mode-menu-header">
+            <span>🎥 카메라 시점 (C 순환 · V 시선·줌 초기화)</span>
+          </div>
+          <button type="button" class="cam-mode-item active" data-cam-mode="3rd" onclick="window.setCameraMode('3rd')">🎥 3인칭 후방 (Chase)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="1st" onclick="window.setCameraMode('1st')">🧑‍✈️ 1인칭 조종석 (Cockpit)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="wing" onclick="window.setCameraMode('wing')">🪽 날개 창가 (Wing View)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="drone" onclick="window.setCameraMode('drone')">🛸 드론 360° 오빗 (Drone)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="flyby" onclick="window.setCameraMode('flyby')">🎬 플라이바이 (Flyby)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="tower" onclick="window.setCameraMode('tower')">🗼 공항 관제탑 (Tower)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="gear" onclick="window.setCameraMode('gear')">🛞 랜딩기어 (Gear Cam)</button>
+          <button type="button" class="cam-mode-item" data-cam-mode="hud" onclick="window.setCameraMode('hud')">🎯 순수 HUD (Boresight)</button>
+          <button type="button" class="cam-mode-item cam-reset-item" onclick="window.resetCameraLook(); window.toggleCameraMenu(true);">↺ 시선·줌 초기화 (V / 더블클릭)</button>
+        </div>
+      </div>
+      <div class="effect-control-wrap pc-only-hud">
+        <button id="effect-menu-btn" class="icon-btn glass" title="기류/속도선 이펙트 강도 조절" onclick="window.toggleEffectMenu()">💨 <span id="effect-intensity-text">기류 35%</span></button>
+        <div id="effect-settings-menu" class="cam-mode-menu effect-settings-menu glass hidden">
+          <div class="cam-mode-menu-header effect-menu-header">
+            <span>💨 기류/속도선 이펙트 강도</span>
+            <strong id="effect-slider-val-pc" class="effect-pct-badge">35%</strong>
+          </div>
+          <div class="effect-slider-row">
+            <input id="effect-intensity-slider-pc" class="effect-range-slider" type="range" min="0" max="100" step="5" value="35" oninput="window.setSpeedEffectIntensityPercent(this.value)">
+          </div>
+          <div class="effect-preset-row">
+            <button type="button" class="effect-preset-btn" data-effect-preset="0" onclick="window.setSpeedEffectIntensityPercent(0, true)">끄기</button>
+            <button type="button" class="effect-preset-btn active" data-effect-preset="35" onclick="window.setSpeedEffectIntensityPercent(35, true)">약하게</button>
+            <button type="button" class="effect-preset-btn" data-effect-preset="65" onclick="window.setSpeedEffectIntensityPercent(65, true)">보통</button>
+            <button type="button" class="effect-preset-btn" data-effect-preset="100" onclick="window.setSpeedEffectIntensityPercent(100, true)">강하게</button>
+          </div>
+        </div>
+      </div>
       <button id="sound-btn" class="icon-btn glass" title="사운드 온/오프" onclick="window.toggleSound()">🔊</button>
+      <button id="fullscreen-btn" class="icon-btn glass" title="전체 화면 전환 / 종료" onclick="window.toggleFullscreen()">⛶ <span id="fullscreen-text">전체 화면</span></button>
       <button id="help-btn" class="icon-btn glass pc-only-hud" title="조작 방법" onclick="window.openHelp()">❓</button>
       <button id="mobile-menu-btn" class="icon-btn glass mobile-menu-btn mobile-only" title="전체 메뉴 및 기능 설정" onclick="window.toggleMobileMenu()">⚙️ <span class="mobile-menu-label">메뉴</span></button>
     </div>
@@ -175,6 +211,29 @@
             <span class="item-icon">🔴</span>
             <div><strong>엔진 시동/정지</strong><small id="mobile-engine-status">ON (가동)</small></div>
           </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.toggleGyroTilt(); window.toggleMobileMenu();">
+            <span class="item-icon">📱</span>
+            <div><strong>기기 틸트 조종</strong><small id="mobile-gyro-status">ON (737 감도)</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.recenterGyro(); window.toggleMobileMenu();">
+            <span class="item-icon">🎯</span>
+            <div><strong>틸트 영점 재설정</strong><small>현재 기기 자세를 0°로 설정</small></div>
+          </button>
+        </div>
+
+        <div class="mobile-menu-section-title">✨ 화면 및 시각 효과</div>
+        <div class="mobile-effect-card">
+          <div class="mobile-effect-header">
+            <span>💨 기류 / 속도선 이펙트 강도</span>
+            <strong id="effect-slider-val-mobile" class="effect-pct-badge">35%</strong>
+          </div>
+          <input id="effect-intensity-slider-mobile" class="effect-range-slider" type="range" min="0" max="100" step="5" value="35" oninput="window.setSpeedEffectIntensityPercent(this.value)">
+          <div class="effect-preset-row">
+            <button type="button" class="effect-preset-btn" data-effect-preset="0" onclick="window.setSpeedEffectIntensityPercent(0, true)">끄기 (0%)</button>
+            <button type="button" class="effect-preset-btn active" data-effect-preset="35" onclick="window.setSpeedEffectIntensityPercent(35, true)">약하게</button>
+            <button type="button" class="effect-preset-btn" data-effect-preset="65" onclick="window.setSpeedEffectIntensityPercent(65, true)">보통</button>
+            <button type="button" class="effect-preset-btn" data-effect-preset="100" onclick="window.setSpeedEffectIntensityPercent(100, true)">강하게</button>
+          </div>
         </div>
 
         <div class="mobile-menu-section-title">🚨 시나리오 및 통신</div>
@@ -203,6 +262,10 @@
 
         <div class="mobile-menu-section-title">📦 3D 모델 및 컨트롤러</div>
         <div class="mobile-menu-grid">
+          <button class="mobile-menu-item-btn" type="button" onclick="window.openGLBViewer()">
+            <span class="item-icon">🔍</span>
+            <div><strong>GLB 모델 뷰어</strong><small>360° 회전·줌 둘러보기</small></div>
+          </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.toggleGLBMenu(); window.toggleMobileMenu();">
             <span class="item-icon">📦</span>
             <div><strong>GLB 3D 시스템</strong><small>3D 파일 내보내기/불러오기</small></div>
@@ -214,6 +277,42 @@
           <button class="mobile-menu-item-btn" type="button" onclick="window.openHelp(); window.toggleMobileMenu();">
             <span class="item-icon">❓</span>
             <div><strong>운항 매뉴얼</strong><small>조작키 및 비행 팁</small></div>
+          </button>
+        </div>
+
+        <div class="mobile-menu-section-title">🎥 카메라 시점 선택</div>
+        <div class="mobile-menu-grid">
+          <button class="mobile-menu-item-btn active" type="button" data-cam-mode="3rd" onclick="window.setCameraMode('3rd'); window.toggleMobileMenu();">
+            <span class="item-icon">🎥</span>
+            <div><strong>3인칭 후방</strong><small>Chase (드래그 360°)</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="1st" onclick="window.setCameraMode('1st'); window.toggleMobileMenu();">
+            <span class="item-icon">🧑‍✈️</span>
+            <div><strong>1인칭 조종석</strong><small>Cockpit (G-포스/시선)</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="wing" onclick="window.setCameraMode('wing'); window.toggleMobileMenu();">
+            <span class="item-icon">🪽</span>
+            <div><strong>날개 창가</strong><small>Wing View (엔진·주익)</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="drone" onclick="window.setCameraMode('drone'); window.toggleMobileMenu();">
+            <span class="item-icon">🛸</span>
+            <div><strong>드론 오빗</strong><small>Drone 360° 선회</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="flyby" onclick="window.setCameraMode('flyby'); window.toggleMobileMenu();">
+            <span class="item-icon">🎬</span>
+            <div><strong>플라이바이</strong><small>Cinematic Flyby</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="tower" onclick="window.setCameraMode('tower'); window.toggleMobileMenu();">
+            <span class="item-icon">🗼</span>
+            <div><strong>공항 관제탑</strong><small>ATC Tower 망원 추적</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="gear" onclick="window.setCameraMode('gear'); window.toggleMobileMenu();">
+            <span class="item-icon">🛞</span>
+            <div><strong>랜딩기어</strong><small>Gear Belly View</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" data-cam-mode="hud" onclick="window.setCameraMode('hud'); window.toggleMobileMenu();">
+            <span class="item-icon">🎯</span>
+            <div><strong>순수 HUD</strong><small>Boresight 전방 시점</small></div>
           </button>
         </div>
       </div>
@@ -287,6 +386,7 @@
             <span class="status-item">🏖️ 해운대·도시: <strong id="glb-status-city" class="text-green">GLB 바이너리 적용됨</strong></span>
           </div>
           <p class="glb-desc">비행기, 활주로, 인천 메가 허브 공항, 대륙 지형·산맥·섬, 해운대 해변 도시 전체가 100% glTF 2.0 / GLB 3D 바이너리 파일 방식으로 렌더링되고 있습니다.</p>
+          <button id="glb-viewer-modal-btn" class="btn-primary glb-action-btn" type="button" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);" onclick="window.openGLBViewer()">🔍 3D GLB 모델 갤러리에서 둘러보기 (360° 회전 · 줌 인/아웃)</button>
         </div>
 
         <div class="glb-section-title">🎁 AI 추천 내장 GLB 비행기 프리셋 (바이너리 GLB 파일 즉시 탑승)</div>
@@ -294,6 +394,10 @@
           <button class="glb-preset-btn" type="button" onclick="window.loadGLBPreset('a320')">
             <span class="preset-icon">✈️</span>
             <div><strong>A320 제트 여객기</strong><small>CFM56 샤클렛 GLB</small></div>
+          </button>
+          <button class="glb-preset-btn" type="button" onclick="window.loadGLBPreset('a350')">
+            <span class="preset-icon">✈️</span>
+            <div><strong>A350-900 XWB</strong><small>Trent XWB 광동체 GLB</small></div>
           </button>
           <button class="glb-preset-btn" type="button" onclick="window.loadGLBPreset('b747')">
             <span class="preset-icon">🛫</span>
@@ -516,6 +620,14 @@
       <div class="touch-quadrant touch-right">
         <!-- Quick Action Buttons Row -->
         <div class="action-btn-row secondary-actions touch-quick-actions">
+          <button id="btn-touch-gyro" class="touch-btn mini-action-btn active" title="기기 기울기(틸트) 자이로 모드 토글 (Flight3d 737 표준 감도)" type="button" onclick="window.toggleGyroTilt()">
+            <span id="touch-gyro-icon">📱</span>
+            <small id="touch-gyro-label">틸트 ON</small>
+          </button>
+          <button id="btn-touch-gyro-recenter" class="touch-btn mini-action-btn active" title="기기 틸트 현재 자세로 기준점(영점) 잡기 (T)" type="button" onclick="window.recenterGyro()">
+            <span>🎯</span>
+            <small>영점</small>
+          </button>
           <button id="btn-touch-gear" class="touch-btn mini-action-btn" title="랜딩 기어 토글 (G)" type="button" onclick="window.toggleLandingGear()">
             <span>🛞</span>
             <small>기어</small>
@@ -536,8 +648,8 @@
 
         <!-- Virtual Flight Stick Yoke -->
         <div class="touch-stick-card">
-          <div class="touch-card-header">
-            <span class="touch-label">FLIGHT YOKE</span>
+          <div class="touch-card-header" id="touch-stick-header" onclick="window.recenterGyro()" style="cursor: pointer;" title="탭하여 현재 자세로 틸트 영점 재설정 (T)">
+            <span class="touch-label">FLIGHT YOKE 🎯</span>
             <span id="touch-stick-telemetry" class="touch-value">P: 0° | R: 0°</span>
           </div>
           <div id="joystick-zone" class="touch-stick-zone">
@@ -640,6 +752,13 @@
     <div class="modal-card glass">
       <div class="badge">AIRPORT TAXI, TAKEOFF & LANDING SIMULATOR</div>
       <h1 id="modal-title">AIRPORT FLIGHT OPERATIONS</h1>
+      <p class="build-info" data-build-info>
+        <span>Branch</span> <span data-build-branch>unknown</span>
+        <span aria-hidden="true"> · </span>
+        <span>Commit</span> <a data-build-commit target="_blank" rel="noopener noreferrer">unknown</a>
+        <span aria-hidden="true"> · </span>
+        <span data-build-age>unknown</span>
+      </p>
       <p id="modal-desc">
         게이트에서 승객을 태우고, 유도로(Taxiway)를 따라 활주로로 이동해 이륙하세요!<br>
         200km 대륙 횡단 항로를 비행하여 <strong>인천국제공항(메가 허브 공항)</strong>에 착륙 후 게이트까지 주행을 완료하세요.
@@ -652,6 +771,10 @@
           <button id="select-a320" class="plane-choice-btn active" type="button" onclick="window.switchPlane('a320')">
             <strong>에어버스 A320 (Airbus)</strong>
             <span>샤클렛 + 트윈 터보팬 최신 에어버스 제트기 (HOTAS 1 지원)</span>
+          </button>
+          <button id="select-a350" class="plane-choice-btn" type="button" onclick="window.switchPlane('a350')">
+            <strong>에어버스 A350-900 XWB</strong>
+            <span>롤스로이스 트렌트 XWB + 최첨단 탄소복합재 광동체 장거리 여객기</span>
           </button>
           <button id="select-b747" class="plane-choice-btn" type="button" onclick="window.switchPlane('b747')">
             <strong>B747-400 점보</strong>
@@ -684,10 +807,46 @@
         </div>
       </div>
 
+      <!-- Airline Livery Selector -->
+      <div class="plane-selector-box skin-selector-box">
+        <label class="plane-select-label">항공사 스킨 선택 (Korean Airlines)</label>
+        <div class="skin-selector-buttons">
+          <button class="skin-choice-btn" type="button" data-skin="default" onclick="window.setAirlineSkin('default')">
+            <span class="skin-swatch" style="--swatch-base:#f8fafc; --swatch-accent:#0284c7; --swatch-secondary:#dc2626;"></span>
+            <strong>기본 스카이젯</strong>
+          </button>
+          <button class="skin-choice-btn active" type="button" data-skin="jeju" onclick="window.setAirlineSkin('jeju')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#f47920; --swatch-secondary:#162a4a;"></span>
+            <strong>제주항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="jin" onclick="window.setAirlineSkin('jin')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#7c3aed; --swatch-secondary:#db2777;"></span>
+            <strong>진에어</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="eastar" onclick="window.setAirlineSkin('eastar')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#dc2626; --swatch-secondary:#0f172a;"></span>
+            <strong>이스타항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="korean" onclick="window.setAirlineSkin('korean')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#0b3b8c; --swatch-secondary:#c8102e;"></span>
+            <strong>대한항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="asiana" onclick="window.setAirlineSkin('asiana')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#1e3a8a; --swatch-secondary:#64748b;"></span>
+            <strong>아시아나항공</strong>
+          </button>
+          <button class="skin-choice-btn" type="button" data-skin="tway" onclick="window.setAirlineSkin('tway')">
+            <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#e11d68; --swatch-secondary:#6d28d9;"></span>
+            <strong>티웨이항공</strong>
+          </button>
+        </div>
+      </div>
+
       <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
         <button id="takeoff-direct-btn" class="btn-primary" type="button" onclick="window.startDirectTakeoff()" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); pointer-events: auto !important; cursor: pointer !important;">🛫 활주로에서 즉시 이륙하기 (추천)</button>
         <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()" style="pointer-events: auto !important; cursor: pointer !important;">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
         <button id="haeundae-flight-btn" class="btn-secondary" type="button" onclick="window.startHaeundaeFlight()" style="background: rgba(16, 185, 129, 0.18); border-color: rgba(52, 211, 153, 0.6); color: #d1fae5; pointer-events: auto !important; cursor: pointer !important;">🌊 해운대 상공 비행 (Flying over Haeundae)</button>
+        <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()" style="background: rgba(14, 165, 233, 0.18); border-color: rgba(56, 189, 248, 0.55); color: #e0f2fe; pointer-events: auto !important; cursor: pointer !important;">🔍 3D GLB 모델 갤러리 둘러보기 (회전 · 줌)</button>
       </div>
 
       <details class="controls-guide-collapsible">
@@ -702,8 +861,8 @@
               <span><strong>Thrustmaster T.Flight HOTAS One 비행 스틱 & 스로틀 레버</strong> 100% 지원! 에어버스 사이드스틱으로 피치/롤/요/스로틀 정밀 비행</span>
             </div>
             <div class="guide-item mobile-item" style="grid-column: 1 / -1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); padding: 8px;">
-              <span class="key" style="background:#059669; color:#fff;">📱 모바일 터치</span>
-              <span><strong>왼쪽 가상 조이스틱</strong>: 기수 상승/하강(피치) 및 선회(롤) • <strong>오른쪽 버튼군</strong>: BOOST(가속), BRAKE(감속), 🛞기어, 🪽플랩, 🎥시점</span>
+              <span class="key" style="background:#059669; color:#fff;">📱 기기 기울기 & 터치 (737 감도)</span>
+              <span><strong>기기 틸트(자이로)</strong>: 기기를 앞뒤(±25° 피치), 좌우(±30° 롤)로 기울여 보잉 737 조종간처럼 비행 (기본 ON) • <strong>오른쪽 FLIGHT YOKE</strong>: 터치 가상 스틱 동시 조작 • <strong>왼쪽 스로틀</strong>: 출력 쿼드런트 & 러더</span>
             </div>
             <div class="guide-item">
               <span class="key">0 ~ 9 키</span>
@@ -767,23 +926,26 @@
     </div>
   </div>
 
-  <script src="glb_bundle.js"></script>
+  <script src="glb_bundle.js?v=20261117i"></script>
   <!-- Modular Architecture for Clean Maintenance & Token Efficiency -->
-  <script src="js/core.js?v=20261120b"></script>
-  <script src="js/config.js"></script>
+  <script src="js/core.js?v=20261120d"></script>
+  <script src="js/config.js?v=20261117i"></script>
   <script src="js/audio.js"></script>
-  <script src="js/environment.js"></script>
-  <script src="js/airports.js"></script>
+  <script src="js/environment.js?v=20261119h"></script>
+  <script src="js/airports.js?v=20261120c"></script>
   <script src="js/aircraft_builder.js"></script>
-  <script src="js/glb_pipeline.js"></script>
+  <script src="js/glb_pipeline.js?v=20261120c"></script>
   <script src="js/effects.js"></script>
   <!-- Headless 120 Hz 6-DOF Physics Core (@stlim0727/flightsim-core) -->
-  <script src="js/flightsim_core_bundle.js"></script>
-  <script src="js/physics.js"></script>
+  <script src="js/flightsim_core_bundle.js?v=20261121b"></script>
+  <script src="js/terrain_provider.js?v=20261121a"></script>
+  <script src="js/physics.js?v=20261117i"></script>
   <script src="js/input.js"></script>
   <script src="js/emergency.js"></script>
   <script src="js/speech.js"></script>
   <script src="js/ui.js?v=20261120b"></script>
+  <script src="js/build_info.js"></script>
+  <script src="js/build_info_ui.js"></script>
   <script src="game.js?v=20261120b"></script>
   <script>
     window.addEventListener('load', () => {

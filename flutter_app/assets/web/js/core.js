@@ -17,6 +17,34 @@ class AirplaneGame {
     this.startTime = 0;
     this.isPlaying = false;
     this.cameraMode = '3rd';
+    this.cameraState = {
+      chaseYaw: 0,
+      chasePitch: 0,
+      chasePos: new THREE.Vector3(),
+      chaseTarget: new THREE.Vector3(),
+      chaseTargetInitialized: false,
+      lookYaw: 0,
+      lookPitch: -0.06,
+      headGForceOffset: 0,
+      touchJoltOffset: 0,
+      wasOnGround: true,
+      wingLookYaw: 0,
+      wingLookPitch: 0,
+      gearLookYaw: 0,
+      gearLookPitch: 0,
+      droneOrbitAngle: 1.8,
+      droneOrbitSpeed: 0.28,
+      dronePitch: 0.28,
+      dronePos: new THREE.Vector3(),
+      droneInitialized: false,
+      flybyPos: new THREE.Vector3(),
+      flybySet: false,
+      flybyRegime: null,
+      isDraggingLook: false,
+      dragPointerId: null,
+      dragLastX: 0,
+      dragLastY: 0
+    };
     this.soundEnabled = true;
 
     // 기체 내구도 및 파손 상태 (Damage System)
@@ -25,6 +53,16 @@ class AirplaneGame {
     this.isNoseDented = false;
     this.isGearCollapsed = false;
     this.isBellySliding = false;
+    this.gearDamageState = { nose: 'normal', mainLeft: 'normal', mainRight: 'normal' };
+    this.partDamage = {
+      nose: 'normal',
+      belly: 'normal',
+      tail: 'normal',
+      wingL: 'normal',
+      wingR: 'normal',
+      engineL: 'normal',
+      engineR: 'normal'
+    };
     this.isWaterLanding = false; // 바다 비상착수 수면 활주/부유 상태
     this.waterBobPhase = 0.0;
 
@@ -83,6 +121,20 @@ class AirplaneGame {
     this.isTouchStickReleasing = false;
     this.isTouchRudderReleasing = false;
     this.touchRudder = 0.0;
+
+    // 기기 기울기(틸트 / 자이로 센서) 제어 상태 (Flight3d 표준: 737 감도 25°/30°)
+    this.gyroEnabled = true;       // 기본 활성화 (기본 지원)
+    this.gyroActive = false;
+    this.gyroCalibration = null;   // { pitch, roll } 영점 기준각
+    this.gyroNormPitch = 0.0;      // [-1.0, 1.0] (737 엘리베이터 기준 ±25° 트래블)
+    this.gyroNormRoll = 0.0;       // [-1.0, 1.0] (737 에일러론 기준 ±30° 트래블)
+    this.gyroScreen = { angle: 0, type: 'landscape' };
+    this.stickNormPitch = 0.0;
+    this.stickNormRoll = 0.0;
+    this.isStickActive = false;
+    this.stickCurrentX = 0;
+    this.stickCurrentY = 0;
+    this.stickRadius = 50;
 
     // HOTAS 1 & 비행 조이스틱 컨트롤러 상태 (Thrustmaster T.Flight HOTAS One / Airbus TCA FBW)
     this.hotasState = {
@@ -144,6 +196,7 @@ class AirplaneGame {
     this.speedLinesGroup = null;
     this.speedLineData = [];
     this.speedLineMaterial = null;
+    this.speedEffectIntensity = this.loadSpeedEffectIntensity ? this.loadSpeedEffectIntensity() : 0.35;
     this.oceanTexture = null;
     this.speedVignetteEl = null;
     this.jetWindSrc = null;
@@ -218,6 +271,12 @@ class AirplaneGame {
       this.initStars();
       this.initGLBSystem();
       this.initEnvironments();
+      if (typeof this.applyGeodeticPlacement === 'function') this.applyGeodeticPlacement();
+      if (this.geoLayer) {
+        ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+          if (this[name]) this[name].visible = false;
+        });
+      }
     } catch (e) {
       console.error('Scene init error:', e);
     }
@@ -265,10 +324,24 @@ class AirplaneGame {
     );
     this.camera.position.set(0, 15, 65);
 
-    // logarithmicDepthBuffer: false로 GPU 조기 Z 컬링(Early-Z) 하드웨어 가속을 100% 활성화하여 프레임 드랍/끊김 원천 차단!
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true, 
-      powerPreference: 'high-performance' 
+    // Opt-in streamed terrain layer (?geoTiles=1&ionToken=...).
+    // Disabled by default: the offline file:// WebView path is unchanged.
+    const geoParams = new URLSearchParams(window.location.search);
+    const hosted = location.protocol === 'https:' && /stlim0727\.github\.io/.test(location.hostname);
+    const geoEnabled = (hosted || geoParams.get('geoTiles') === '1')
+      && Boolean(window.GEO_ION_TOKEN || geoParams.get('ionToken'))
+      && Boolean(window.HajunGeoTiles);
+    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9, height: 33.25 };
+    this.geoAnchor = {
+      lat: Number(geoParams.get('geoLat') ?? baseAnchor.lat),
+      lon: Number(geoParams.get('geoLon') ?? baseAnchor.lon),
+      headingDeg: Number(geoParams.get('geoHeading') ?? baseAnchor.headingDeg),
+      height: Number(geoParams.get('geoHeight') ?? baseAnchor.height ?? 0)
+    };
+    this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // 고해상도 디스플레이 필레이트 병목 제거
@@ -287,9 +360,93 @@ class AirplaneGame {
 
     this.container.appendChild(this.renderer.domElement);
 
+    if (geoEnabled) this.enableGeoTiles(geoParams.get('ionToken') || window.GEO_ION_TOKEN || '');
+
+    // PMREM sky environment map for realistic water/sky reflections
+    const skyScene = new THREE.Scene();
+    const skyGeo = new THREE.SphereGeometry(500, 32, 15);
+    const skyMat = new THREE.MeshBasicMaterial({ color: 0x7ec8e3, side: THREE.BackSide });
+    skyScene.add(new THREE.Mesh(skyGeo, skyMat));
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const envTex = pmrem.fromScene(skyScene, 0, 0.1, 1000, { size: 256 }).texture;
+    pmrem.dispose();
+    this.scene.environment = envTex;
+
     // 비행기 최상위 3D 그룹 초기화 & 씬 추가
     this.planeGroup = new THREE.Group();
     this.scene.add(this.planeGroup);
+  }
+
+  applyAirfieldMinimalism() {
+    const hideMatching = (group, patterns) => {
+      if (!group) return;
+      group.traverse(object => {
+        if (patterns.some(pattern => pattern.test(object.name || ''))) object.visible = false;
+      });
+    };
+    hideMatching(this.airportGroup, [/^DepartureAirfieldGLB$/, /^RunwayShoulder$/]);
+    const pavement = this.airportGroup?.getObjectByName('RunwayPavement');
+    if (pavement) pavement.scale.x = 60 / pavement.geometry.parameters.width;
+    hideMatching(this.incheonAirportGroup, [
+      /Incheon_Airfield_And_Dual_Runways/,
+      /Incheon_Terminals_Concourse_And_Tower/
+    ]);
+
+    if (this.obstacles) {
+      this.obstacles = this.obstacles.filter(o =>
+        !['제1여객터미널', '항공정비 격납고', '관제탑', '인천국제공항 T1'].includes(o.name)
+      );
+    }
+  }
+
+  applyGeodeticPlacement() {
+    if (!window.geoLocalDelta || !window.GEO_POINTS) return;
+    const haeundae = window.geoLocalDelta(window.GEO_POINTS.haeundae);
+    if (this.cityGroup) this.cityGroup.position.set(haeundae.x, haeundae.y, haeundae.z);
+    const incheon = window.geoLocalDelta(window.GEO_POINTS.incheon);
+    if (this.incheonAirportGroup) this.incheonAirportGroup.position.set(incheon.x, incheon.y, incheon.z);
+  }
+
+  // Physics ground height from Terrarium elevation tiles (visual layer is 3D Tiles only).
+  // Falls back to the legacy flat model while tiles load or if they fail.
+  enableTerrainProvider() {
+    const TP = window.TerrainProvider;
+    if (!TP || this.terrainProvider) return false;
+    this.terrainProvider = TP.createTerrariumProvider({
+      anchor: this.geoAnchor,
+      simOffset: { x: 160, z: 1600 },
+      loadTile: TP.createBrowserTileLoader(),
+      flatZones: [
+        { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 }
+      ]
+    });
+    return true;
+  }
+
+  enableGeoTiles(ionToken) {
+    if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
+    this.geoLayer = window.HajunGeoTiles.create({
+      ionToken,
+      lat: this.geoAnchor.lat,
+      lon: this.geoAnchor.lon,
+      height: this.geoAnchor.height,
+      azimuth: this.geoAzimuth,
+      simAnchor: { x: 160, y: 0, z: 1600 },
+      // Deeper tiles around Gimhae leave holes and intersect the runway.
+      nearAnchorMaxDepth: 17,
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      container: this.container
+    });
+    if (this.geoLayer) {
+      this.enableTerrainProvider();
+      ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+        if (this[name]) this[name].visible = false;
+      });
+      this.applyAirfieldMinimalism();
+    }
+    return Boolean(this.geoLayer);
   }
 
   // ----------------------------------------------------------------
@@ -323,15 +480,25 @@ class AirplaneGame {
       this.updateLandingGearAnimation(dt);
       const currentKmh = this.speed * 280;
       this.updateSpeedEffects(dt, currentKmh);
+      if (typeof this.updateProximitySurfaceEffects === 'function') {
+        this.updateProximitySurfaceEffects(dt, currentKmh);
+      }
       this.checkObstacleCollisions();
       this.updateHUD();
       this.updateParticles(dt);
       this.createJetExhaustParticles();
       this.createBellySparks();
+      if (typeof this.updatePartialDamageEffects === 'function') {
+        this.updatePartialDamageEffects(dt);
+      }
     } else {
       if (!this.isDestroyed) this.updateLandingGearAnimation(dt);
       this.updateDebrisPhysics(dt);
       this.updateParticles(dt);
+    }
+
+    if (typeof this.updateSunShadowTarget === 'function') {
+      this.updateSunShadowTarget();
     }
 
     // 제트 엔진 티타늄 터보팬 블레이드 고속 회전 (스로틀 & 속도 연동 실기 회전)
@@ -382,6 +549,8 @@ class AirplaneGame {
       this.screenShake *= 0.92;
     }
 
+    if (this.geoLayer) this.geoLayer.update();
+    if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
     this.renderer.render(this.scene, this.camera);
   }
 }

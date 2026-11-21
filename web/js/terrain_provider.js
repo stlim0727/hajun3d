@@ -24,9 +24,12 @@
       const response = await fetch(url, { mode: 'cors' });
       if (!response.ok) throw new Error(`tile ${response.status}`);
       const bitmap = await createImageBitmap(await response.blob());
-      const canvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+      const canvas = typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(TILE_SIZE, TILE_SIZE)
+        : Object.assign(document.createElement('canvas'), { width: TILE_SIZE, height: TILE_SIZE });
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(bitmap, 0, 0);
+      if (typeof bitmap.close === 'function') bitmap.close();
       return ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
     };
   }

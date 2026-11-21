@@ -34,6 +34,7 @@
       a320: 'A320 제트기',
       a320_detailed: 'A320-200 실물 고정밀',
       a320_simplified: 'A320-200 경량 최적화',
+      a350: 'A350-900 XWB',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
       amphibian: 'CL-215 수륙양용기',
@@ -119,6 +120,12 @@
     this.micToggleBtn = document.getElementById('mic-toggle-btn');
     this.engineShutdownBtn = document.getElementById('engine-shutdown-btn');
     this.gateEngineShutdownBtn = document.getElementById('gate-engine-shutdown-btn');
+    if (this.getActiveAirlineSkin) {
+      const activeSkin = this.getActiveAirlineSkin();
+      document.querySelectorAll('.skin-choice-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset && btn.dataset.skin === activeSkin.id);
+      });
+    }
     this.updateSpeedEffectUI();
   },
 
@@ -149,7 +156,7 @@
 
     // 1. 하늘 배경색 및 안개 색상/밀도
     if (this.scene) {
-      this.scene.background.setHex(isNight ? 0x050a18 : 0x7ec8e3);
+      if (this.scene.background) this.scene.background.setHex(isNight ? 0x050a18 : 0x7ec8e3);
       if (this.scene.fog) {
         this.scene.fog.color.setHex(isNight ? 0x060d1f : 0xa3d5ed);
         this.scene.fog.density = isNight ? 0.000032 : 0.000028;
@@ -248,7 +255,7 @@
     this.setTimeOfDay(this.timeOfDay === 'day' ? 'night' : 'day');
   },
 
-  // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 3800m 활주로 중앙 정렬)
+  // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 김해 3200m 활주로 중앙 정렬)
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
     this.showGateActionPrompt(false);
@@ -369,6 +376,81 @@
     this.showPopup(isFromDest 
       ? '📢 새 승객 285명 탑승 완료! 다음 비행 임무를 시작합니다. 0~9 키로 출력을 올려 이동하세요.' 
       : '📢 승객 285명 탑승 완료! 0~9 키로 출력을 올려 유도로(황색선)로 이동하세요.');
+    this.startJetSound();
+  },
+
+
+  // 시나리오: 해운대 상공 비행 (Haeundae overhead flight)
+  startHaeundaeFlight() {
+    this.overlay.classList.add('hidden');
+    this.showGateActionPrompt(false);
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.throttle = 0.78;
+    this.n1 = 86.0;
+    this.targetN1 = 86.0;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
+
+    this.buildAircraft(this.currentPlaneType);
+    // Haeundae LCT in the Gimhae-anchored frame; start 800 m south over the sea.
+    const haeundae = window.geoLocalDelta
+      ? window.geoLocalDelta(window.GEO_POINTS.haeundae).local
+      : { x: -180, z: -28700 };
+    this.planeGroup.position.set(haeundae.x, 900, haeundae.z + 800);
+    this.yaw = 0;
+    this.pitch = 0;
+    this.roll = 0;
+    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    this.planeGroup.visible = true;
+
+    this.velocity.set(0, 0, -78);
+    this.speed = 1.0;
+    this.groundSpeed = 78;
+    this.verticalSpeed = 0;
+    this.isOnGround = false;
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = '해운대 상공 비행 (Haeundae)';
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = window.GEO_ION_TOKEN || '';
+      try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    }
+    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    this.showPopup(tilesOn
+      ? '🌊 해운대 상공 비행 시작! 실제 스트리밍 지형이 표시됩니다. (Flying over Haeundae)'
+      : '🌊 해운대 상공 비행 시작! 이 빌드에는 지형 토큰이 없어 기존 절차적 경관이 표시됩니다. (Flying over Haeundae)');
     this.startJetSound();
   },
 
@@ -848,6 +930,7 @@
       a320: 'A320 제트기',
       a320_detailed: 'A320-200 실물 고정밀',
       a320_simplified: 'A320-200 경량 최적화',
+      a350: 'A350-900 XWB',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
       amphibian: 'CL-215 수륙양용기',

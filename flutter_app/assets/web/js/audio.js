@@ -501,8 +501,11 @@
       const groundSpeedKmh = this.groundSpeed ? Math.abs(this.groundSpeed * 3.6) : ((this.speed || 0) * 280);
       if (this.isOnGround && groundSpeedKmh > 3 && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
         const rumbleRatio = Math.min(1.0, groundSpeedKmh / 220.0);
-        const targetRumbleVol = Math.min(0.85, 0.12 + Math.pow(rumbleRatio, 0.85) * 0.68);
-        const targetRumbleCutoff = 190 + rumbleRatio * 280;
+        const isWater = Boolean(this._isOverWaterSurface);
+        const targetRumbleVol = isWater
+          ? Math.min(0.55, rumbleRatio * 0.45)
+          : Math.min(0.85, 0.12 + Math.pow(rumbleRatio, 0.85) * 0.68);
+        const targetRumbleCutoff = isWater ? (320 + rumbleRatio * 280) : (190 + rumbleRatio * 280);
         this.groundRumbleFilter.frequency.setTargetAtTime(targetRumbleCutoff, now, 0.08);
         this.groundRumbleGain.gain.setTargetAtTime(targetRumbleVol, now, 0.08);
       } else if (!this.isOnGround && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
@@ -731,6 +734,21 @@
     // 2. 올레오 스트럿 서스펜션 압축 둔탁한 타격 쿵 (180Hz 저역 통과)
     const severity = Math.min(1, Math.max(0.3, (typeof sinkRate === 'number' ? sinkRate : 1.5) / 3));
     this.playContactNoise(0.25, 180, 1.1 * severity, 'lowpass');
+  },
+
+  playWaterSplashSound(groundSpeedMs = 35, sinkRate = 2.0) {
+    if (!this.audioCtx || !this.soundEnabled) return;
+    this.resumeAudio();
+
+    const speed = Math.min(1.2, Math.max(0.25, (typeof groundSpeedMs === 'number' ? groundSpeedMs : 35) / 45));
+    const severity = Math.min(1.2, Math.max(0.35, Math.abs(typeof sinkRate === 'number' ? sinkRate : 2.0) / 3.0));
+
+    // 1. 선체 수면 충격 둔탁한 파동음 (150Hz 저역 통과)
+    this.playContactNoise(0.45, 150, 0.95 * severity, 'lowpass');
+    // 2. V자 선수파 쇄파 중역대 포말음 (620Hz 대역 통과)
+    this.playContactNoise(0.75 + 0.25 * speed, 620, 0.45 * speed, 'bandpass');
+    // 3. 고속 물보라 스프레이 고역대 치찰음 (1900Hz 대역 통과)
+    this.playContactNoise(0.55 + 0.25 * speed, 1900, 0.32 * speed, 'bandpass');
   },
 
   playExplosionSound() {

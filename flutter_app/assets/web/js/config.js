@@ -42,6 +42,36 @@
         yawDamping: 2.0,
         transonicMachBuffet: 0.78
       },
+      a350: {
+        name: 'Airbus A350-900 XWB',
+        emptyWeightKg: 142400,// OEW (kg)
+        mtowKg: 280000,       // MTOW (kg)
+        mass: 240000,         // Typical Long-Haul Takeoff Mass (kg)
+        fuelCapacityKg: 110500,// Usable fuel ~141,000 L (kg)
+        wingArea: 442.0,      // m² (supercritical carbon composite wing)
+        wingSpan: 64.75,      // m (with blended aerodynamic sharklets)
+        meanChord: 7.71,      // m (MAC)
+        wingLoadingKgM2: 543.0, // 240,000 / 442.0 kg/m² (MTOW: 633.5)
+        aspectRatio: 9.49,    // b² / S
+        oswaldEff: 0.85,      // Advanced CFRP wing with variable camber
+        cd0: 0.0175,
+        cl0: 0.25,
+        clAlpha: 5.50,
+        clMaxClean: 1.60,
+        clFlapBoostMax: 0.95,
+        stallAlphaClean: 0.26, // ~15°
+        numEngines: 2,
+        maxThrust: 749000,    // N (2 × Rolls-Royce Trent XWB-84 @ 374.5 kN / 84,200 lbf)
+        vRotateKmh: 285,      // ~154 kt
+        vStallCleanKmh: 230,  // ~124 kt
+        pitchAuthority: 0.48,
+        rollAuthority: 0.58,
+        pitchDamping: 2.1,
+        rollDamping: 2.4,
+        yawAuthority: 0.44,
+        yawDamping: 2.2,
+        transonicMachBuffet: 0.85
+      },
       b737: {
         name: 'Boeing 737-800',
         emptyWeightKg: 41413, // OEW (kg)
@@ -297,6 +327,7 @@
       b737: 'B738',
       b738: 'B738',
       a320: 'A320',
+      a350: 'A350',
       b747: 'B747',
       dc10: 'DC10',
       md80: 'MD80',

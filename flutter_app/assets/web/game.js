@@ -31,11 +31,18 @@ window.switchPlane = function(type) {
   }
 };
 
+window.setAirlineSkin = function(id) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setAirlineSkin === 'function') {
+    window.airplaneGame.setAirlineSkin(id);
+  }
+};
+
 window.nextPlane = function() {
   if (!debounceAction('nextPlane', 200)) return;
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame) {
-    const aircraftTypes = ['dc10', 'md80', 'a320', 'b747', 'concorde', 'amphibian', 'ancestor'];
+    const aircraftTypes = ['dc10', 'md80', 'a320', 'a350', 'b747', 'concorde', 'amphibian', 'ancestor'];
     const curIdx = aircraftTypes.indexOf(window.airplaneGame.currentPlaneType);
     const nextIdx = (curIdx + 1) % aircraftTypes.length;
     window.airplaneGame.switchAircraft(aircraftTypes[nextIdx]);
@@ -55,6 +62,9 @@ window.startDirectTakeoff = function() {
   try {
     if (!window.airplaneGame) initGame();
     if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
       window.airplaneGame.startDirectTakeoff();
     }
   } catch (err) {
@@ -75,10 +85,36 @@ window.startGateDeparture = function() {
   try {
     if (!window.airplaneGame) initGame();
     if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
       window.airplaneGame.startGateDeparture();
     }
   } catch (err) {
     console.error('startGateDeparture error:', err);
+  }
+};
+
+
+window.startHaeundaeFlight = function() {
+  const overlay = document.getElementById('overlay-screen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.style.display = 'none';
+  }
+  const gateAction = document.getElementById('gate-action-container');
+  if (gateAction) gateAction.classList.add('hidden');
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startHaeundaeFlight();
+    }
+  } catch (err) {
+    console.error('startHaeundaeFlight error:', err);
   }
 };
 
@@ -173,11 +209,70 @@ window.toggleCamera = function() {
   }
 };
 
+window.setCameraMode = function(mode) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame) {
+    window.airplaneGame.setCameraMode(mode);
+    window.airplaneGame.toggleCameraMenu(true);
+  }
+};
+
+window.toggleCameraMenu = function() {
+  if (!debounceAction('toggleCameraMenu', 140)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame) {
+    window.airplaneGame.toggleCameraMenu();
+  }
+};
+
+window.toggleEffectMenu = function() {
+  if (!debounceAction('toggleEffectMenu', 140)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.toggleEffectMenu === 'function') {
+    window.airplaneGame.toggleEffectMenu();
+  }
+};
+
+window.setSpeedEffectIntensityPercent = function(percent, announce = false) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setSpeedEffectIntensity === 'function') {
+    const val = Math.min(100, Math.max(0, Number(percent) || 0)) / 100;
+    window.airplaneGame.setSpeedEffectIntensity(val, { announce: Boolean(announce) });
+  }
+};
+
+window.resetCameraLook = function() {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.resetCameraLook === 'function') {
+    window.airplaneGame.resetCameraLook();
+  }
+};
+
+window.toggleGyroTilt = function() {
+  if (!debounceAction('toggleGyroTilt', 200)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.toggleGyroTilt === 'function') {
+    window.airplaneGame.toggleGyroTilt(true);
+  }
+};
+
+window.recenterGyro = function() {
+  if (!debounceAction('recenterGyro', 200)) return;
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.recenterGyro === 'function') {
+    window.airplaneGame.recenterGyro();
+  }
+};
+
 window.toggleSound = function() {
   if (!debounceAction('toggleSound', 180)) return;
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame) {
-    window.airplaneGame.soundEnabled = !window.airplaneGame.soundEnabled;
+    if (typeof window.airplaneGame.toggleSound === 'function') {
+      window.airplaneGame.toggleSound();
+    } else {
+      window.airplaneGame.soundEnabled = !window.airplaneGame.soundEnabled;
+    }
     const soundBtn = document.getElementById('sound-btn');
     if (soundBtn) {
       soundBtn.textContent = window.airplaneGame.soundEnabled ? '🔊' : '🔇';
@@ -195,6 +290,44 @@ window.openHelp = function() {
     overlay.classList.remove('hidden');
   }
 };
+
+window.toggleFullscreen = function() {
+  if (!debounceAction('toggleFullscreen', 250)) return;
+  try {
+    const doc = document;
+    const activeEl = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+    if (activeEl) {
+      const exitFn = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+      if (typeof exitFn === 'function') {
+        const result = exitFn.call(doc);
+        if (result && typeof result.catch === 'function') result.catch(function() {});
+      }
+    } else {
+      const el = doc.documentElement;
+      const requestFn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (typeof requestFn === 'function') {
+        const result = requestFn.call(el);
+        if (result && typeof result.catch === 'function') result.catch(function() {});
+      }
+    }
+  } catch (err) {
+    console.warn('toggleFullscreen error:', err);
+  }
+};
+
+function syncFullscreenButton() {
+  const btn = document.getElementById('fullscreen-btn');
+  if (!btn) return;
+  const doc = document;
+  const isFullscreen = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+  btn.classList.toggle('active', isFullscreen);
+  const label = document.getElementById('fullscreen-text');
+  if (label) label.textContent = isFullscreen ? '화면 종료' : '전체 화면';
+}
+
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(function(evt) {
+  document.addEventListener(evt, syncFullscreenButton);
+});
 
 window.speakCaptainPreset = function(phrase) {
   if (!debounceAction('speakCaptainPreset', 300)) return;
@@ -248,6 +381,11 @@ window.toggleGLBMenu = function() {
       modal.style.display = 'none';
     }
   }
+};
+
+window.openGLBViewer = function(modelId) {
+  const query = modelId ? `?model=${encodeURIComponent(modelId)}` : '';
+  window.location.href = `glb-viewer.html${query}`;
 };
 
 window.triggerGLBFileSelect = function(targetType = 'plane') {
@@ -407,6 +545,9 @@ window.toggleMobileMenu = function() {
 
       const engStat = document.getElementById('mobile-engine-status');
       if (engStat) engStat.textContent = window.airplaneGame.isEngineOff ? 'OFF (정지)' : 'ON (가동)';
+
+      const gyroStat = document.getElementById('mobile-gyro-status');
+      if (gyroStat) gyroStat.textContent = window.airplaneGame.gyroActive ? 'ON (737 감도)' : 'OFF';
     }
   }
 };
