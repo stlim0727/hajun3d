@@ -69,23 +69,33 @@
     PROFILES: () => PROFILES,
     WATER_DITCHING_LIMITS: () => WATER_DITCHING_LIMITS,
     WaterDitching: () => WaterDitching,
+    analyticTerrainProvider: () => analyticTerrainProvider,
     angleDelta: () => angleDelta,
     applyDeadzone: () => applyDeadzone,
     approachDeviation: () => approachDeviation,
+    assertTerrainProviderContract: () => assertTerrainProviderContract,
     asymmetricThrustYawMoment: () => asymmetricThrustYawMoment,
     autopilotState: () => autopilotState,
     classifyLanding: () => classifyLanding,
     createAeroResult: () => createAeroResult,
+    createAnchorFrame: () => createAnchorFrame,
+    createGroundHeightQuery: () => createGroundHeightQuery,
+    createGroundSurfaceQueries: () => createGroundSurfaceQueries,
+    createTerrariumProvider: () => createTerrariumProvider,
+    decodeTerrarium: () => decodeTerrarium,
     degrees: () => degrees,
     getAircraftSpecs: () => getAircraftSpecs,
     isGyroSupportedDevice: () => isGyroSupportedDevice,
+    lonLatToTilePixel: () => lonLatToTilePixel,
     nextGpwsCallout: () => nextGpwsCallout,
     readGyroScreen: () => readGyroScreen,
+    resolveGroundHeight: () => resolveGroundHeight,
     screenTilt: () => screenTilt,
     shapeTouchStick: () => shapeTouchStick,
     solveTrim: () => solveTrim,
     terrainConflictSeconds: () => terrainConflictSeconds,
     thrustFactorToN1: () => thrustFactorToN1,
+    toNormalVector3: () => toNormalVector3,
     wrapHeading: () => wrapHeading
   });
 
@@ -4676,9 +4686,10 @@
       targetElevator *= stiffness;
       targetAileron *= stiffness;
       targetRudder *= stiffness;
-      const maxElevatorRate = 0.55;
-      const maxAileronRate = 0.85;
-      const maxRudderRate = 0.6;
+      const isFighter = aircraftId === "F16";
+      const maxElevatorRate = isFighter ? 3 : 0.55;
+      const maxAileronRate = isFighter ? 4 : 0.85;
+      const maxRudderRate = isFighter ? 2.5 : 0.6;
       const elevDelta = targetElevator - this.elevator;
       const aileronDelta = targetAileron - this.aileron;
       const rudderDelta = targetRudder - this.rudder;
@@ -5255,6 +5266,382 @@
   }
   function thRad(headingDeg) {
     return headingDeg * DEG;
+  }
+
+  // node_modules/@stlim0727/flightsim-core/src/terrain/TerrainProvider.js
+  var import_three = __toESM(require_three(), 1);
+  function toPlainNormal(n) {
+    return n ? { x: n.x, y: n.y, z: n.z } : null;
+  }
+  function toNormalVector3(normal2, Vector3Ctor = import_three.Vector3) {
+    if (!normal2) return null;
+    const { x, y, z } = normal2;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    if (x * x + y * y + z * z <= 1e-4) return null;
+    if (normal2.isVector3) return normal2;
+    return typeof Vector3Ctor === "function" ? new Vector3Ctor(x, y, z) : { x, y, z };
+  }
+  function sampleReadyHeight(provider, x, z) {
+    if (!provider) return null;
+    const ready = Boolean(provider.isReady?.(x, z));
+    const h = provider.getHeight?.(x, z);
+    if (!ready) return null;
+    return Number.isFinite(h) ? h : null;
+  }
+  function analyticTerrainProvider(source, { kind = "analytic", visualRoot = null } = {}) {
+    if (typeof source?.getHeight !== "function") {
+      throw new TypeError("analyticTerrainProvider needs an object with getHeight(x, z)");
+    }
+    return {
+      kind,
+      source,
+      visualRoot: visualRoot ?? source.mesh ?? source.group ?? null,
+      getHeight(x, z) {
+        const h = source.getHeight(x, z);
+        return Number.isFinite(h) ? h : null;
+      },
+      getNormal(x, z) {
+        return typeof source.getNormal === "function" ? toPlainNormal(source.getNormal(x, z)) : null;
+      },
+      isReady: () => true,
+      update() {
+      },
+      dispose() {
+        source.dispose?.();
+      }
+    };
+  }
+  function resolveGroundHeight(getProvider, fallback) {
+    return (x, z) => {
+      const provider = getProvider();
+      const h = sampleReadyHeight(provider, x, z);
+      if (h !== null) return h;
+      return fallback(x, z);
+    };
+  }
+  function createGroundSurfaceQueries(options = {}) {
+    const {
+      getTerrain,
+      getOverride,
+      getProvider,
+      getFallbackHeight,
+      getFallbackNormal,
+      minHeight = -Infinity,
+      waterFloorHeight,
+      Vector3: Vector3Ctor = import_three.Vector3
+    } = options;
+    const overrideGetter = getOverride ?? getProvider ?? (() => null);
+    const fallbackHeight = getFallbackHeight ?? ((x, z) => getTerrain?.()?.getHeight?.(x, z) ?? 0);
+    const fallbackNormal = getFallbackNormal ?? ((x, z) => getTerrain?.()?.getNormal?.(x, z) ?? null);
+    return {
+      getGroundHeight(x, z) {
+        const provider = overrideGetter();
+        const h = sampleReadyHeight(provider, x, z);
+        if (h !== null) {
+          if (Number.isFinite(waterFloorHeight) && provider.isWater?.(x, z)) {
+            return waterFloorHeight;
+          }
+          return Math.max(minHeight, h);
+        }
+        return fallbackHeight(x, z);
+      },
+      getGroundNormal(x, z) {
+        const provider = overrideGetter();
+        const h = sampleReadyHeight(provider, x, z);
+        if (h !== null) {
+          if (Number.isFinite(waterFloorHeight) && provider.isWater?.(x, z)) return null;
+          if (h < minHeight) return null;
+          return toNormalVector3(provider.getNormal?.(x, z) ?? null, Vector3Ctor);
+        }
+        return toNormalVector3(fallbackNormal(x, z), Vector3Ctor);
+      },
+      isWater(x, z) {
+        const provider = overrideGetter();
+        if (sampleReadyHeight(provider, x, z) === null) return null;
+        return Boolean(provider.isWater?.(x, z));
+      }
+    };
+  }
+  function createGroundHeightQuery(options) {
+    return createGroundSurfaceQueries(options).getGroundHeight;
+  }
+  function assertTerrainProviderContract(provider, points = [[0, 0]]) {
+    for (const name of ["getHeight", "getNormal", "isReady", "update", "dispose"]) {
+      if (typeof provider?.[name] !== "function") throw new Error(`terrain provider is missing ${name}()`);
+    }
+    if (typeof provider.kind !== "string") throw new Error("terrain provider needs a string kind");
+    for (const [x, z] of points) {
+      const h = provider.getHeight(x, z);
+      if (h !== null && !Number.isFinite(h)) throw new Error(`getHeight(${x}, ${z}) must be a finite number or null`);
+      if (provider.isReady(x, z) && h === null) throw new Error(`isReady(${x}, ${z}) is true but getHeight is null`);
+      const n = provider.getNormal(x, z);
+      if (n !== null) {
+        const len = Math.hypot(n.x, n.y, n.z);
+        if (!(Math.abs(len - 1) < 1e-3) || n.y <= 0) throw new Error(`getNormal(${x}, ${z}) must be an upward unit vector`);
+      }
+    }
+    return true;
+  }
+
+  // node_modules/@stlim0727/flightsim-core/src/terrain/TerrariumElevationProvider.js
+  var TILE_SIZE = 256;
+  var DEFAULT_ZOOM = 11;
+  var D2R = Math.PI / 180;
+  var DEFAULT_RETRY_MS = 5e3;
+  var MAX_MERCATOR_LAT = 85.05112878;
+  function decodeTerrarium(rgba) {
+    const heights = new Float32Array(rgba.length / 4);
+    for (let i = 0, j = 0; i < heights.length; i++, j += 4) {
+      heights[i] = rgba[j] * 256 + rgba[j + 1] + rgba[j + 2] / 256 - 32768;
+    }
+    return heights;
+  }
+  function lonLatToTilePixel(lat, lon, zoom) {
+    const n = 2 ** zoom;
+    const wrappedLon = ((lon + 180) % 360 + 360) % 360 - 180;
+    const clampedLat = Math.min(MAX_MERCATOR_LAT, Math.max(-MAX_MERCATOR_LAT, lat));
+    const latRad = clampedLat * D2R;
+    const fx = (wrappedLon + 180) / 360 * n;
+    const fy = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+    return { fx, fy };
+  }
+  function createAnchorFrame(anchor, simOffset = { x: 0, z: 0 }) {
+    const r = anchor.headingDeg * D2R;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    return {
+      toWgs84(x, z) {
+        const a = x - simOffset.x;
+        const b = -(z - simOffset.z);
+        const east = a * cos + b * sin;
+        const north = -a * sin + b * cos;
+        const lat = anchor.lat + north / 110540;
+        const latMid = (anchor.lat + lat) * 0.5 * D2R;
+        const lon = anchor.lon + east / (111320 * Math.cos(latMid));
+        return { lat, lon };
+      }
+    };
+  }
+  function zoneDistance(x, z, zone) {
+    const dx = x < zone.minX ? zone.minX - x : x > zone.maxX ? x - zone.maxX : 0;
+    const dz = z < zone.minZ ? zone.minZ - z : z > zone.maxZ ? z - zone.maxZ : 0;
+    return Math.hypot(dx, dz);
+  }
+  function createTerrariumProvider(options) {
+    const {
+      anchor,
+      simOffset = { x: 0, z: 0 },
+      loadTile,
+      zoom = DEFAULT_ZOOM,
+      maxTiles = 24,
+      prefetchRadius = 1,
+      flatZones = [],
+      retryMs = DEFAULT_RETRY_MS,
+      now = () => Date.now()
+    } = options || {};
+    if (!anchor || typeof loadTile !== "function") {
+      throw new Error("createTerrariumProvider needs { anchor, loadTile }");
+    }
+    const frame = createAnchorFrame(anchor, simOffset);
+    const tilesAcross = 2 ** zoom;
+    const cacheLimit = Number.isFinite(maxTiles) ? Math.max(1, Math.floor(maxTiles)) : maxTiles === Infinity ? Infinity : 24;
+    const radius = Number.isFinite(prefetchRadius) ? Math.max(0, Math.floor(prefetchRadius)) : 1;
+    const wrapX = (tx) => (tx % tilesAcross + tilesAcross) % tilesAcross;
+    const tiles = /* @__PURE__ */ new Map();
+    const failedAt = /* @__PURE__ */ new Map();
+    let datumM = null;
+    let disposed = false;
+    const keyOf = (x, y) => `${zoom}/${x}/${y}`;
+    function touch(key) {
+      if (!tiles.has(key)) return;
+      const value = tiles.get(key);
+      tiles.delete(key);
+      tiles.set(key, value);
+    }
+    function applyFlatZones(x, z, rawHeight) {
+      if (!flatZones.length) return rawHeight;
+      let bestW = 0;
+      let bestH = rawHeight;
+      for (let i = 0; i < flatZones.length; i++) {
+        const zone = flatZones[i];
+        const dist = zoneDistance(x, z, zone);
+        const targetH = zone.height ?? 0;
+        if (dist === 0) return targetH;
+        const margin = zone.blendMargin ?? 400;
+        if (margin > 0 && dist < margin) {
+          const t = dist / margin;
+          const w = 1 - t * t * (3 - 2 * t);
+          if (w > bestW) {
+            bestW = w;
+            bestH = targetH * w + rawHeight * (1 - w);
+          }
+        }
+      }
+      return bestH;
+    }
+    function request(tx, ty) {
+      if (disposed) return "disposed";
+      const wy = Math.floor(ty);
+      if (wy < 0 || wy >= tilesAcross) return "out-of-bounds";
+      const wx = wrapX(Math.floor(tx));
+      const key = keyOf(wx, wy);
+      if (tiles.has(key)) {
+        const state = tiles.get(key);
+        if (state !== "failed") {
+          touch(key);
+          return state instanceof Float32Array ? state : "pending";
+        }
+        if (now() - (failedAt.get(key) || 0) < retryMs) return state;
+        tiles.delete(key);
+        failedAt.delete(key);
+      }
+      const pending = { pending: true };
+      tiles.set(key, pending);
+      while (tiles.size > cacheLimit) {
+        const evicted = tiles.keys().next().value;
+        tiles.delete(evicted);
+        failedAt.delete(evicted);
+      }
+      Promise.resolve().then(() => loadTile(zoom, wx, wy)).then((rgba) => {
+        if (disposed || tiles.get(key) !== pending) return;
+        tiles.set(key, decodeTerrarium(rgba));
+        failedAt.delete(key);
+      }).catch(() => {
+        if (disposed || tiles.get(key) !== pending) return;
+        tiles.set(key, "failed");
+        failedAt.set(key, now());
+      });
+      return "pending";
+    }
+    function pixel(data, px, py) {
+      const cx = Math.min(TILE_SIZE - 1, Math.max(0, px));
+      const cy = Math.min(TILE_SIZE - 1, Math.max(0, py));
+      return data[cy * TILE_SIZE + cx];
+    }
+    function sampleMsl(x, z, fetchMissing) {
+      const { lat, lon } = frame.toWgs84(x, z);
+      const { fx, fy } = lonLatToTilePixel(lat, lon, zoom);
+      const gx = (fx - Math.floor(fx)) * TILE_SIZE - 0.5;
+      const gy = (fy - Math.floor(fy)) * TILE_SIZE - 0.5;
+      const tx = wrapX(Math.floor(fx));
+      const ty = Math.floor(fy);
+      if (ty < 0 || ty >= tilesAcross) return null;
+      if (fetchMissing) request(tx, ty);
+      const key = keyOf(tx, ty);
+      const data = tiles.get(key);
+      if (!(data instanceof Float32Array)) return null;
+      touch(key);
+      const x0 = Math.floor(gx);
+      const y0 = Math.floor(gy);
+      const wx = gx - x0;
+      const wy = gy - y0;
+      const h00 = pixel(data, x0, y0);
+      const h10 = pixel(data, x0 + 1, y0);
+      const h01 = pixel(data, x0, y0 + 1);
+      const h11 = pixel(data, x0 + 1, y0 + 1);
+      return (h00 * (1 - wx) + h10 * wx) * (1 - wy) + (h01 * (1 - wx) + h11 * wx) * wy;
+    }
+    function ensureDatum(fetchMissing = true) {
+      if (datumM !== null) return true;
+      const h = sampleMsl(simOffset.x, simOffset.z, fetchMissing);
+      if (h === null) return false;
+      datumM = h;
+      return true;
+    }
+    const provider = {
+      kind: "terrarium",
+      zoom,
+      visualRoot: null,
+      getHeight(x, z) {
+        const hasDatum = ensureDatum(false);
+        if (!hasDatum && cacheLimit === 1) {
+          ensureDatum(true);
+          return null;
+        }
+        const h = sampleMsl(x, z, true);
+        if (!hasDatum && !ensureDatum(true)) return null;
+        return h === null ? null : applyFlatZones(x, z, h - datumM);
+      },
+      isReady(x, z) {
+        return ensureDatum(false) && sampleMsl(x, z, false) !== null;
+      },
+      isWater(x, z) {
+        if (!ensureDatum(false)) return false;
+        for (let i = 0; i < flatZones.length; i++) {
+          if (zoneDistance(x, z, flatZones[i]) === 0) return false;
+        }
+        const msl = sampleMsl(x, z, false);
+        return msl !== null && msl <= 0.1;
+      },
+      getNormal(x, z) {
+        const d = 30;
+        const hl = provider.getHeight(x - d, z);
+        const hr = provider.getHeight(x + d, z);
+        const hf = provider.getHeight(x, z - d);
+        const hb = provider.getHeight(x, z + d);
+        if ([hl, hr, hf, hb].some((v) => v === null)) return null;
+        const nx = hl - hr;
+        const nz = hf - hb;
+        const ny = 2 * d;
+        const len = Math.hypot(nx, ny, nz);
+        return { x: nx / len, y: ny / len, z: nz / len };
+      },
+      update(position) {
+        if (!position || disposed) return;
+        const hasDatum = ensureDatum(false);
+        if (!hasDatum && cacheLimit === 1) {
+          ensureDatum(true);
+          return;
+        }
+        const { lat, lon } = frame.toWgs84(position.x, position.z);
+        const { fx, fy } = lonLatToTilePixel(lat, lon, zoom);
+        const cx = Math.floor(fx);
+        const cy = Math.floor(fy);
+        const byKey = /* @__PURE__ */ new Map();
+        for (let dy = -radius; dy <= radius; dy++) {
+          const ny = cy + dy;
+          if (ny < 0 || ny >= tilesAcross) continue;
+          for (let dx = -radius; dx <= radius; dx++) {
+            const wx = wrapX(cx + dx);
+            const key = keyOf(wx, ny);
+            const distSq = dx * dx + dy * dy;
+            const prev = byKey.get(key);
+            if (!prev || distSq < prev.distSq) {
+              byKey.set(key, { wx, ny, key, distSq });
+            }
+          }
+        }
+        const candidates = [...byKey.values()].sort((a, b) => a.distSq - b.distSq);
+        let anchorKey = null;
+        if (!hasDatum) {
+          const anchorWgs = frame.toWgs84(simOffset.x, simOffset.z);
+          const anchorTp = lonLatToTilePixel(anchorWgs.lat, anchorWgs.lon, zoom);
+          const ax = wrapX(Math.floor(anchorTp.fx));
+          const ay = Math.floor(anchorTp.fy);
+          if (ay >= 0 && ay < tilesAcross) anchorKey = keyOf(ax, ay);
+        }
+        let selected = candidates.slice(0, cacheLimit);
+        const needsSeparateDatumSlot = !hasDatum && anchorKey !== null && !selected.some((c) => c.key === anchorKey);
+        if (needsSeparateDatumSlot && cacheLimit > 1) {
+          selected = candidates.slice(0, cacheLimit - 1);
+        }
+        if (needsSeparateDatumSlot) touch(anchorKey);
+        for (let i = selected.length - 1; i >= 0; i--) touch(selected[i].key);
+        for (let i = selected.length - 1; i >= 0; i--) {
+          request(selected[i].wx, selected[i].ny);
+        }
+        if (!hasDatum) {
+          ensureDatum(true);
+          if (selected.length > 0) touch(selected[0].key);
+        }
+      },
+      dispose() {
+        disposed = true;
+        tiles.clear();
+        failedAt.clear();
+      }
+    };
+    return provider;
   }
 
   // flightsim-core-bundle-entry.js

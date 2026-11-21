@@ -4,9 +4,18 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
+import * as THREE from 'three';
 
+globalThis.THREE = THREE;
+await import(pathToFileURL(resolve('web/js/flightsim_core_bundle.js')).href);
 await import(pathToFileURL(resolve('web/js/terrain_provider.js')).href);
 const TP = globalThis.TerrainProvider;
+
+test('terrain_provider.js exposes shared flightsim-core v0.2.0 implementations and browser tile loader', () => {
+  assert.equal(TP.createTerrariumProvider, globalThis.FlightSimCore.createTerrariumProvider);
+  assert.equal(TP.createGroundSurfaceQueries, globalThis.FlightSimCore.createGroundSurfaceQueries);
+  assert.equal(typeof TP.createBrowserTileLoader, 'function');
+});
 
 const ANCHOR = { lat: 35.1652, lon: 128.939, headingDeg: 353.9 };
 const GIMHAE_OFFSET = { x: 160, z: 1600 };
@@ -301,13 +310,13 @@ test('physics.js buildFlight3dEnvironment and checkGPWS integrate terrainProvide
   const sandbox = {
     THREE: { Vector3, Quaternion: class {}, Euler: class {}, MathUtils: { clamp: (v, a, b) => Math.max(a, Math.min(b, v)) } },
     AirplaneGame: { prototype: {} },
-    TerrainProvider: TP,
     Math,
   };
   sandbox.globalThis = sandbox;
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
+  vm.runInContext(readFileSync('web/js/terrain_provider.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/physics.js', 'utf8'), sandbox);
 
   const game = Object.create(sandbox.AirplaneGame.prototype);
