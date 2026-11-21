@@ -4687,7 +4687,7 @@
       targetAileron *= stiffness;
       targetRudder *= stiffness;
       const isFighter = aircraftId === "F16";
-      const maxElevatorRate = isFighter ? 3 : 0.55;
+      const maxElevatorRate = 0.55;
       const maxAileronRate = isFighter ? 4 : 0.85;
       const maxRudderRate = isFighter ? 2.5 : 0.6;
       const elevDelta = targetElevator - this.elevator;

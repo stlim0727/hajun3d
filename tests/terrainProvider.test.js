@@ -11,7 +11,7 @@ await import(pathToFileURL(resolve('web/js/flightsim_core_bundle.js')).href);
 await import(pathToFileURL(resolve('web/js/terrain_provider.js')).href);
 const TP = globalThis.TerrainProvider;
 
-test('terrain_provider.js exposes shared flightsim-core v0.2.0 implementations and browser tile loader', () => {
+test('terrain_provider.js exposes shared flightsim-core v0.2.1 implementations and browser tile loader', () => {
   assert.equal(TP.createTerrariumProvider, globalThis.FlightSimCore.createTerrariumProvider);
   assert.equal(TP.createGroundSurfaceQueries, globalThis.FlightSimCore.createGroundSurfaceQueries);
   assert.equal(typeof TP.createBrowserTileLoader, 'function');
