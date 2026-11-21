@@ -291,6 +291,44 @@ window.openHelp = function() {
   }
 };
 
+window.toggleFullscreen = function() {
+  if (!debounceAction('toggleFullscreen', 250)) return;
+  try {
+    const doc = document;
+    const activeEl = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+    if (activeEl) {
+      const exitFn = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+      if (typeof exitFn === 'function') {
+        const result = exitFn.call(doc);
+        if (result && typeof result.catch === 'function') result.catch(function() {});
+      }
+    } else {
+      const el = doc.documentElement;
+      const requestFn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (typeof requestFn === 'function') {
+        const result = requestFn.call(el);
+        if (result && typeof result.catch === 'function') result.catch(function() {});
+      }
+    }
+  } catch (err) {
+    console.warn('toggleFullscreen error:', err);
+  }
+};
+
+function syncFullscreenButton() {
+  const btn = document.getElementById('fullscreen-btn');
+  if (!btn) return;
+  const doc = document;
+  const isFullscreen = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+  btn.classList.toggle('active', isFullscreen);
+  const label = document.getElementById('fullscreen-text');
+  if (label) label.textContent = isFullscreen ? '화면 종료' : '전체 화면';
+}
+
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(function(evt) {
+  document.addEventListener(evt, syncFullscreenButton);
+});
+
 window.speakCaptainPreset = function(phrase) {
   if (!debounceAction('speakCaptainPreset', 300)) return;
   if (!window.airplaneGame) initGame();

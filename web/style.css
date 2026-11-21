@@ -172,6 +172,12 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   transform: scale(0.96);
 }
 
+#fullscreen-btn.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+}
+
 /* Flight Flight Instruments (Bottom Left) */
 .flight-instruments {
   position: absolute;
