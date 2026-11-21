@@ -60,6 +60,12 @@
     };
   }
 
+  function zoneDistance(x, z, zone) {
+    const dx = x < zone.minX ? zone.minX - x : x > zone.maxX ? x - zone.maxX : 0;
+    const dz = z < zone.minZ ? zone.minZ - z : z > zone.maxZ ? z - zone.maxZ : 0;
+    return Math.hypot(dx, dz);
+  }
+
   /**
    * Elevation-only provider backed by Terrarium tiles. `loadTile(z, x, y)` must
    * resolve to a Uint8ClampedArray of 256x256 RGBA pixels (or reject).
@@ -74,9 +80,32 @@
       zoom = DEFAULT_ZOOM,
       maxTiles = 24,
       prefetchRadius = 1,
+      flatZones = [],
     } = options;
     if (!anchor || typeof loadTile !== 'function') {
       throw new Error('createTerrariumProvider needs { anchor, loadTile }');
+    }
+
+    function applyFlatZones(x, z, rawHeight) {
+      if (!flatZones.length) return rawHeight;
+      let bestW = 0;
+      let bestH = rawHeight;
+      for (let i = 0; i < flatZones.length; i++) {
+        const zone = flatZones[i];
+        const dist = zoneDistance(x, z, zone);
+        const targetH = zone.height ?? 0;
+        if (dist === 0) return targetH;
+        const margin = zone.blendMargin ?? 400;
+        if (margin > 0 && dist < margin) {
+          const t = dist / margin;
+          const w = 1 - t * t * (3 - 2 * t);
+          if (w > bestW) {
+            bestW = w;
+            bestH = targetH * w + rawHeight * (1 - w);
+          }
+        }
+      }
+      return bestH;
     }
 
     const frame = createAnchorFrame(anchor, simOffset);
@@ -161,10 +190,18 @@
         // Always request the tile for (x, z), even while the datum tile is still loading.
         const h = sampleMsl(x, z, true);
         if (!ensureDatum()) return null;
-        return h === null ? null : h - datumM;
+        return h === null ? null : applyFlatZones(x, z, h - datumM);
       },
       isReady(x, z) {
         return ensureDatum() && sampleMsl(x, z, false) !== null;
+      },
+      isWater(x, z) {
+        if (!ensureDatum()) return false;
+        for (let i = 0; i < flatZones.length; i++) {
+          if (zoneDistance(x, z, flatZones[i]) === 0) return false;
+        }
+        const msl = sampleMsl(x, z, false);
+        return msl !== null && msl <= 0.1;
       },
       getNormal(x, z) {
         const d = 30;
@@ -197,6 +234,62 @@
       },
     };
     return provider;
+  }
+
+  function toNormalVector3(normal, Vector3Ctor) {
+    if (!normal) return null;
+    const { x, y, z } = normal;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    if (x * x + y * y + z * z <= 0.0001) return null;
+    if (normal.isVector3) return normal;
+    const Ctor = Vector3Ctor || root.THREE?.Vector3;
+    return typeof Ctor === 'function' ? new Ctor(x, y, z) : { x, y, z };
+  }
+
+  function sampleReady(provider, x, z) {
+    if (!provider?.isReady?.(x, z)) return null;
+    const h = provider.getHeight?.(x, z);
+    return Number.isFinite(h) ? h : null;
+  }
+
+  /**
+   * Paired ground height, normal, and water queries for physics so contact
+   * forces, normal slopes, and water ditching always describe the same surface.
+   */
+  function createGroundSurfaceQueries({
+    getProvider,
+    getFallbackHeight,
+    getFallbackNormal = () => null,
+    minHeight = -Infinity,
+    waterFloorHeight,
+    Vector3,
+  }) {
+    return {
+      getGroundHeight(x, z) {
+        const provider = getProvider();
+        const h = sampleReady(provider, x, z);
+        if (h !== null) {
+          if (Number.isFinite(waterFloorHeight) && provider.isWater?.(x, z)) {
+            return waterFloorHeight;
+          }
+          return Math.max(minHeight, h);
+        }
+        return getFallbackHeight(x, z);
+      },
+      getGroundNormal(x, z) {
+        const provider = getProvider();
+        if (sampleReady(provider, x, z) !== null) {
+          if (Number.isFinite(waterFloorHeight) && provider.isWater?.(x, z)) return null;
+          return toNormalVector3(provider.getNormal?.(x, z) ?? null, Vector3);
+        }
+        return toNormalVector3(getFallbackNormal(x, z), Vector3);
+      },
+      isWater(x, z) {
+        const provider = getProvider();
+        if (sampleReady(provider, x, z) === null) return null;
+        return Boolean(provider.isWater?.(x, z));
+      },
+    };
   }
 
   /**
@@ -236,6 +329,8 @@
     createAnchorFrame,
     createTerrariumProvider,
     createBrowserTileLoader,
+    toNormalVector3,
+    createGroundSurfaceQueries,
     resolveGroundHeight,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -415,12 +415,11 @@ class AirplaneGame {
     this.terrainProvider = TP.createTerrariumProvider({
       anchor: this.geoAnchor,
       simOffset: { x: 160, z: 1600 },
-      loadTile: TP.createBrowserTileLoader()
+      loadTile: TP.createBrowserTileLoader(),
+      flatZones: [
+        { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 }
+      ]
     });
-    this._resolveGroundHeightFn = (fallback, floorY) => {
-      const resolved = TP.resolveGroundHeight(() => this.terrainProvider, fallback);
-      return (x, z) => Math.max(floorY, resolved(x, z));
-    };
     return true;
   }
 

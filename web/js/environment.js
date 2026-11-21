@@ -1169,6 +1169,18 @@
   },
 
   getTerrainColliderHit(worldX, worldY, worldZ, clearance = 6.0) {
+    if (this.geoLayer) {
+      if (!this.terrainProvider?.isReady?.(worldX, worldZ) || this.terrainProvider.isWater?.(worldX, worldZ)) {
+        return null;
+      }
+      const simH = this.terrainProvider.getHeight(worldX, worldZ);
+      if (!Number.isFinite(simH) || simH <= 10.0) return null;
+      const terrainY = 2.12 + simH;
+      if (worldY <= terrainY) {
+        return { collider: { name: '산악 지형' }, terrainY };
+      }
+      return null;
+    }
     if (!this.terrainColliders || this.terrainColliders.length === 0) return null;
     for (let i = 0; i < this.terrainColliders.length; i++) {
       const c = this.terrainColliders[i];

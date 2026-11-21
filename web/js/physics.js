@@ -615,6 +615,9 @@
 
   resetFlight3dPhysics() {
     this._flight3dCore = null;
+    this._terrainSurfaceQueries = null;
+    this._terrainSurfaceSeaSimY = null;
+    this._terrainEnvironment = null;
     this._flightWarningsCore?.reset();
     return this.initFlight3dPhysics();
   },
@@ -695,26 +698,57 @@
     };
   },
 
+  ensureTerrainSurfaceQueries(seaSimY) {
+    const TP = globalThis.TerrainProvider;
+    const hasTP = Boolean(TP?.createGroundSurfaceQueries);
+    if (this._terrainSurfaceQueries && this._terrainSurfaceSeaSimY === seaSimY && this._terrainSurfaceHasTP === hasTP) {
+      return this._terrainSurfaceQueries;
+    }
+    this._terrainSurfaceSeaSimY = seaSimY;
+    this._terrainSurfaceHasTP = hasTP;
+    this._terrainEnvironment = null;
+    const fallbackHeight = (sx, sz) => {
+      const overAirport = typeof this.isOverAirport === 'function' ? this.isOverAirport(sx, sz) : true;
+      return overAirport ? 0.0 : this._terrainSurfaceSeaSimY - 45.0;
+    };
+    if (hasTP) {
+      this._terrainSurfaceQueries = TP.createGroundSurfaceQueries({
+        getProvider: () => this.terrainProvider,
+        getFallbackHeight: fallbackHeight,
+        getFallbackNormal: () => null,
+        minHeight: seaSimY - 45.0,
+        waterFloorHeight: seaSimY - 45.0,
+        Vector3: globalThis.THREE?.Vector3 || (typeof THREE !== 'undefined' ? THREE.Vector3 : null),
+      });
+    } else {
+      this._terrainSurfaceQueries = {
+        getGroundHeight: fallbackHeight,
+        getGroundNormal: () => null,
+        isWater: () => null,
+      };
+    }
+    return this._terrainSurfaceQueries;
+  },
+
   buildFlight3dEnvironment() {
     const seaWorldY = -1.5;
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
     const seaSimY = seaWorldY - (this.groundY || 6.84) + groundOffset;
-    const isOverAirportFn = typeof this.isOverAirport === 'function'
-      ? (sx, sz) => this.isOverAirport(sx, sz)
-      : () => true;
+    const surface = this.ensureTerrainSurfaceQueries(seaSimY);
+    if (this._terrainEnvironment) return this._terrainEnvironment;
 
-    return {
-      // Terrain provider (when enabled later) overrides the flat legacy model; read lazily.
-      getGroundHeight: (sx, sz) => {
-        const legacy = isOverAirportFn(sx, sz) ? 0.0 : seaSimY - 45.0;
-        return this._resolveGroundHeightFn
-          ? this._resolveGroundHeightFn(() => legacy, seaSimY - 45.0)(sx, sz)
-          : legacy;
-      },
-      getGroundNormal: () => null,
+    const isOverAirportFn = (sx, sz) => (typeof this.isOverAirport === 'function' ? this.isOverAirport(sx, sz) : true);
+    this._terrainEnvironment = {
+      getGroundHeight: surface.getGroundHeight,
+      getGroundNormal: surface.getGroundNormal,
       isOnRunway: (sx, sz) => isOverAirportFn(sx, sz),
       isRunwaySafetyArea: (sx, sz) => isOverAirportFn(sx, sz),
-      getWaterLevel: (sx, sz) => (isOverAirportFn(sx, sz) ? -100.0 : seaSimY),
+      getWaterLevel: (sx, sz) => {
+        const overWater = surface.isWater(sx, sz);
+        if (overWater === true) return this._terrainSurfaceSeaSimY;
+        if (overWater === false) return -100.0;
+        return isOverAirportFn(sx, sz) ? -100.0 : this._terrainSurfaceSeaSimY;
+      },
       getWindWorld: (pos, timeSeconds, out) => {
         if (this.currentEmergency === 'windshear') {
           const t = (Number.isFinite(timeSeconds) ? timeSeconds : 0) * 1.5;
@@ -730,6 +764,7 @@
         return out;
       },
     };
+    return this._terrainEnvironment;
   },
 
   handleFlight3dEvents(events, result) {
@@ -1370,12 +1405,19 @@
     }
 
     const pos = this.planeGroup.position;
-    const isOverWater = typeof this.isOverAirport === 'function'
+    let isOverWater = typeof this.isOverAirport === 'function'
       ? !this.isOverAirport(pos.x, pos.z)
       : Boolean(this._isOverWaterSurface);
     const isAmphibian = this.currentPlaneType === 'amphibian';
     const baseGroundY = this.groundY ?? 6.84;
-    const surfaceRefY = isOverWater ? Math.min(baseGroundY, -0.3) : baseGroundY;
+    let surfaceRefY = isOverWater ? Math.min(baseGroundY, -0.3) : baseGroundY;
+    const providerReady = Boolean(this.terrainProvider?.isReady?.(pos.x, pos.z));
+    if (providerReady) {
+      const simH = this.terrainProvider.getHeight(pos.x, pos.z);
+      const overSea = Boolean(this.terrainProvider.isWater?.(pos.x, pos.z));
+      isOverWater = overSea;
+      surfaceRefY = overSea ? Math.min(baseGroundY, -0.3) : (baseGroundY + (Number.isFinite(simH) ? simH : 0));
+    }
     const radioAltM = Math.max(0, pos.y - surfaceRefY); // 미터 단위 대지/대수면 고도
     const sinkRateMs = -(this.verticalSpeed || 0); // m/s 수직 하강 속도
 
@@ -1385,6 +1427,19 @@
 
     // 1순위: FlightSimCore.FlightWarningsCore 연속 항공역학 경보 평가
     if (this._flightWarningsCore) {
+      let terrainAheadSeconds = Infinity;
+      if (providerReady) {
+        const f3d = globalThis.FlightSimCore || globalThis.Flight3dPhysics;
+        if (f3d?.terrainConflictSeconds && this.velocity) {
+          const gpwsTerrain = this._gpwsTerrainProxy ??= {
+            getHeight: (x, z) => {
+              const h = this.terrainProvider?.isReady?.(x, z) ? this.terrainProvider.getHeight(x, z) : null;
+              return 2.12 + (Number.isFinite(h) ? h : 0);
+            }
+          };
+          terrainAheadSeconds = f3d.terrainConflictSeconds(pos, this.velocity, gpwsTerrain, isNormalRunwayTouchdown);
+        }
+      }
       const telemetry = {
         onGround: Boolean(this.isOnGround),
         radioAltFt: radioAltM * 3.28084,
@@ -1400,7 +1455,9 @@
         configurationOverspeed: this._flight3dCore?.telemetry?.configurationOverspeed,
         configurationDamage: this._flight3dCore?.telemetry?.configurationDamage,
       };
-      const result = this._flightWarningsCore.update(dt, telemetry);
+      const result = providerReady
+        ? this._flightWarningsCore.update(dt, telemetry, terrainAheadSeconds)
+        : this._flightWarningsCore.update(dt, telemetry);
       const activeWarnings = (result?.activeWarnings || []).filter((w) => {
         if (isAmphibian && isOverWater && (w.id === 'gear' || w.id === 'flaps')) {
           return false;
