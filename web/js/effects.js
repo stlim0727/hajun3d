@@ -1251,7 +1251,7 @@
   },
 
   // 3. 다단계 대폭발 & 기체 파쇄 분해 (Catastrophic Explosion Breakup)
-  triggerExplosion(cause = '추락 폭발') {
+  triggerExplosion(cause = '추락 폭발', options = {}) {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
     this.isPlaying = false;
@@ -1263,6 +1263,7 @@
     const impactKmh = Math.max(35, Math.round(this.speed * 280));
     const sinkRate = Math.abs(this.verticalSpeed);
     const report = this.analyzeCrashSeverity(cause, impactKmh, sinkRate);
+    if (options && options.finding) report.finding = options.finding;
 
     this.hullIntegrity = 0;
     this.speed = 0;

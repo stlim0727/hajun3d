@@ -87,12 +87,17 @@
       case 'tail_loss':
         this.triggerTailFinBreakoff();
         break;
+
+      case 'in_flight_breakup':
+        this.triggerInFlightBreakup();
+        break;
     }
   },
 
   resetTailstrikeState() {
     this.hasTakeoffTailstrike = false;
     this.tailFinDetached = false;
+    this.tailstrikeFailureMode = null;
     this.tailBulkheadTriggerAltM = 1600;
     if (Array.isArray(this._detachedTailNodes)) {
       for (const node of this._detachedTailNodes) {
@@ -132,7 +137,13 @@
     if (this.hasTakeoffTailstrike || this.tailFinDetached || this.isDestroyed) return false;
     this.hasTakeoffTailstrike = true;
     this.tailFinDetached = false;
-    this.tailBulkheadTriggerAltM = 1500 + Math.round(Math.random() * 400);
+    // 테일스트라이크 부실 수리/균열 진행 결과를 랜덤 결정 (플레이어에게는 비공개):
+    //  - 'tail_loss': JAL 123편식 격벽 파열 → 꼬리날개 이탈, 유압 상실 (비상착륙 시도 가능)
+    //  - 'breakup'  : CAL 611편식 금속 피로 균열 → 고고도에서 공중 분해 (생존 불가)
+    this.tailstrikeFailureMode = Math.random() < 0.5 ? 'tail_loss' : 'breakup';
+    this.tailBulkheadTriggerAltM = this.tailstrikeFailureMode === 'breakup'
+      ? 2000 + Math.round(Math.random() * 500)
+      : 1500 + Math.round(Math.random() * 400);
     if (typeof this.applyBodyDamageEvent === 'function') {
       this.applyBodyDamageEvent('tail', 'damaged');
     } else if (this.partDamage) {
@@ -146,14 +157,57 @@
 
   checkTailstrikeAltitudeFailure() {
     if (!this.hasTakeoffTailstrike || this.tailFinDetached || this.isDestroyed || this.isOnGround) return false;
+    if (this.currentEmergency === 'in_flight_breakup') return false;
     if (!this.planeGroup) return false;
     const altM = Math.max(0, this.planeGroup.position.y - (this.groundY || 6.84));
     const triggerAlt = this.tailBulkheadTriggerAltM || 1600;
     if (altM >= triggerAlt) {
-      this.triggerTailFinBreakoff();
+      if (this.tailstrikeFailureMode === 'breakup') this.triggerInFlightBreakup();
+      else this.triggerTailFinBreakoff();
       return true;
     }
     return false;
+  },
+
+  // 중화항공(CAL 611)식 공중 분해: 부실 수리된 꼬리 부위 피로 균열이 한계에 도달해
+  // 후방 동체가 떨어져 나간 뒤 기체가 연쇄 파괴된다. 짧은 분해 시퀀스 후 추락 처리.
+  triggerInFlightBreakup() {
+    if (this.isDestroyed || this.currentEmergency === 'in_flight_breakup') return false;
+    this.currentEmergency = 'in_flight_breakup';
+    this.emergencyTimer = 0;
+    this.emergencyBonusGiven = true; // 비상착륙 보너스 대상 아님
+    this.hasTakeoffTailstrike = true;
+    this.partDamage = this.partDamage || {
+      nose: 'normal', belly: 'normal', tail: 'normal',
+      wingL: 'normal', wingR: 'normal', engineL: 'normal', engineR: 'normal'
+    };
+    this.partDamage.tail = 'failed';
+    this.screenShake = Math.max(this.screenShake || 0, 1.8);
+
+    // 꼬리 구조물 분리 연출 (수직꼬리날개 절단 + 파편)
+    const detachResult = typeof this.detachVerticalTailFinGeometry === 'function'
+      ? this.detachVerticalTailFinGeometry()
+      : { removedTriangles: 0 };
+    this.spawnDetachedTailFinDebris(detachResult.removedTriangles > 0);
+
+    if (typeof this.playMetalCrunchSound === 'function') this.playMetalCrunchSound();
+    if (typeof this.playGPWSWhoopSiren === 'function') this.playGPWSWhoopSiren();
+    if (typeof this.triggerGPWS === 'function') {
+      this.triggerGPWS(
+        'EMERGENCY',
+        '💥 STRUCTURAL FAILURE! AFT FUSELAGE BREAKING UP!',
+        '꼬리 부위 피로 균열 파열! 기체가 공중 분해되고 있습니다!',
+        'danger'
+      );
+    }
+    if (typeof this.speakGPWS === 'function') this.speakGPWS('STRUCTURAL FAILURE');
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('💥 [공중 분해] 부실 수리된 꼬리 부위 금속 피로 파단! 기체가 분해됩니다!');
+    }
+    if (typeof this.triggerPassengerReaction === 'function') {
+      this.triggerPassengerReaction('emergency_engine_fire');
+    }
+    return true;
   },
 
   detachVerticalTailFinGeometry() {
@@ -483,6 +537,20 @@
         this.createEngineFireParticles();
         // 기체 미세 진동
         this.screenShake = Math.max(this.screenShake, 0.08);
+        break;
+
+      case 'in_flight_breakup':
+        // 공중 분해: 극심한 진동 후 약 1.6초 뒤 기체 완전 파괴 (폭발·잔해 분산)
+        this.screenShake = Math.max(this.screenShake, 1.2 + Math.min(0.8, this.emergencyTimer * 0.5));
+        if (typeof this.emitPartParticles === 'function') {
+          this.emitPartParticles('tail', 'spark', 3);
+          this.emitPartParticles('tail', 'smoke', 3);
+        }
+        if (this.emergencyTimer >= 1.6) {
+          this.triggerExplosion('고고도 압력 격벽 파열 공중 분해', {
+            finding: '이륙 중 꼬리 접촉 부위가 부실하게 수리되어 금속 피로 균열이 누적되었고, 고고도에서 후방 동체와 꼬리 구조가 떨어져 나가며 기체가 공중에서 연쇄 분해되었습니다. (중화항공 611편식 공중 분해)'
+          });
+        }
         break;
 
       case 'bird_strike':

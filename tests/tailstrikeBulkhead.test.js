@@ -85,7 +85,11 @@ test('Takeoff tailstrike triggers high-altitude tail fin separation without endi
   assert.equal(game.isDestroyed, false);
   assert.equal(game.isPlaying, true);
   assert.equal(game.partDamage.tail, 'damaged');
-  assert.ok(game.tailBulkheadTriggerAltM >= 1500 && game.tailBulkheadTriggerAltM <= 1900);
+  assert.ok(['tail_loss', 'breakup'].includes(game.tailstrikeFailureMode), 'Failure mode must be chosen at tailstrike');
+
+  // Pin the random outcome to the JAL 123 branch for this scenario (breakup is tested separately)
+  game.tailstrikeFailureMode = 'tail_loss';
+  game.tailBulkheadTriggerAltM = 1650;
 
   // 2. Climbing below trigger altitude keeps tail fin intact
   game.isOnGround = false;
@@ -258,4 +262,93 @@ test('detachVerticalTailFinGeometry slices the entire vertical tail fin from mer
   game.resetTailstrikeState();
   assert.equal(mesh.geometry.index.count, 18, 'Original merged geometry must be fully restored on reset');
   assert.equal(game.debrisPieces.length, 0, 'Detached fin debris must be removed on reset');
+});
+
+function makeBreakupGame() {
+  const { THREE, proto } = loadTailstrikeRuntime();
+  const game = Object.create(proto);
+  game.isPlaying = true;
+  game.isDestroyed = false;
+  game.isOnGround = true;
+  game.groundY = 6.84;
+  game.score = 0;
+  game.screenShake = 0;
+  game.partDamage = {
+    nose: 'normal', belly: 'normal', tail: 'normal',
+    wingL: 'normal', wingR: 'normal', engineL: 'normal', engineR: 'normal'
+  };
+  game.planeGroup = {
+    position: new THREE.Vector3(160, 6.84, -400),
+    quaternion: new THREE.Quaternion(),
+    traverse() {}
+  };
+  game.scene = { add() {}, remove() {} };
+  game.debrisPieces = [];
+  game.showPopup = () => {};
+  game.triggerGPWS = () => {};
+  game.speakGPWS = () => {};
+  game.triggerPassengerReaction = () => {};
+  return { THREE, game };
+}
+
+test('Tailstrike picks JAL 123 tail loss or CAL 611 in-flight breakup at random', () => {
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) {
+    const { game } = makeBreakupGame();
+    assert.equal(game.recordTakeoffTailstrike(), true);
+    seen.add(game.tailstrikeFailureMode);
+    if (game.tailstrikeFailureMode === 'breakup') {
+      assert.ok(game.tailBulkheadTriggerAltM >= 2000 && game.tailBulkheadTriggerAltM <= 2500);
+    } else {
+      assert.equal(game.tailstrikeFailureMode, 'tail_loss');
+      assert.ok(game.tailBulkheadTriggerAltM >= 1500 && game.tailBulkheadTriggerAltM <= 1900);
+    }
+  }
+  assert.deepEqual([...seen].sort(), ['breakup', 'tail_loss'], 'Both failure modes must occur');
+});
+
+test('CAL 611 style in-flight breakup disintegrates the aircraft and ends in a crash', () => {
+  const { game } = makeBreakupGame();
+  game.recordTakeoffTailstrike();
+  game.tailstrikeFailureMode = 'breakup';
+  game.tailBulkheadTriggerAltM = 2100;
+
+  const explosions = [];
+  game.triggerExplosion = (cause, options) => {
+    explosions.push({ cause, options });
+    game.isDestroyed = true;
+  };
+
+  game.isOnGround = false;
+  game.planeGroup.position.y = game.groundY + 2000;
+  assert.equal(game.checkTailstrikeAltitudeFailure(), false, 'Below trigger altitude nothing happens');
+
+  game.planeGroup.position.y = game.groundY + 2150;
+  assert.equal(game.checkTailstrikeAltitudeFailure(), true);
+  assert.equal(game.currentEmergency, 'in_flight_breakup');
+  assert.equal(game.tailFinDetached, false, 'Breakup is not the survivable tail-loss branch');
+  assert.equal(game.isDestroyed, false, 'Disintegration plays out before the crash');
+  assert.equal(explosions.length, 0);
+
+  // Re-checking must not retrigger the sequence
+  assert.equal(game.checkTailstrikeAltitudeFailure(), false);
+
+  // Disintegration sequence: shaking first, explosion after ~1.6 s
+  game.updateEmergency(0.5);
+  game.updateEmergency(0.5);
+  assert.equal(explosions.length, 0);
+  assert.ok(game.screenShake >= 1.2);
+  game.updateEmergency(0.8);
+  assert.equal(explosions.length, 1);
+  assert.ok(explosions[0].cause.includes('공중 분해'));
+  assert.ok(explosions[0].options.finding.includes('중화항공 611'));
+  assert.equal(game.score, 0, 'No heroic landing bonus for an unsurvivable breakup');
+
+  game.updateEmergency(0.5);
+  assert.equal(explosions.length, 1, 'Explosion must fire only once');
+});
+
+test('Emergency menu exposes the CAL 611 in-flight breakup scenario', () => {
+  const html = readFileSync('web/index.html', 'utf8');
+  assert.ok(html.includes("window.triggerEmergency('in_flight_breakup')"));
 });

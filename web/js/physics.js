@@ -1678,7 +1678,7 @@
         motionType = 'BIRD_STRIKE';
       } else if (this.currentEmergency === 'gear_failure' && !this.isOnGround && radioAlt < 350) {
         motionType = 'GEAR_FAILURE';
-      } else if (this.currentEmergency === 'tail_loss') {
+      } else if (this.currentEmergency === 'tail_loss' || this.currentEmergency === 'in_flight_breakup') {
         motionType = 'ENGINE_FIRE';
       }
     }
