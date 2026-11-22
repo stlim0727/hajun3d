@@ -17,7 +17,8 @@ window.GEO_ANCHOR = {
 // `old` is their previous compressed local position in the game world.
 window.GEO_POINTS = {
   haeundae: { lat: 35.1603056, lon: 129.1690, old: { x: -180, z: -28700 } },
-  incheon: { lat: 37.4690, lon: 126.4510, old: { x: 0, z: -45000 } }
+  incheon: { lat: 37.4690, lon: 126.4510, old: { x: 0, z: -45000 } },
+  jeju: { lat: 33.5141, lon: 126.5117, old: { x: 0, z: 0 } },
 };
 
 // Local-frame delta from a landmark's old compressed position to its real ENU
