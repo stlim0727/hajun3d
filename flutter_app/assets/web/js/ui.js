@@ -561,7 +561,7 @@
     const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
     if (this.jejuAirportGroup) this.jejuAirportGroup.visible = true;
     const streamReady = () => Boolean(this.geoLayer && this.geoLayer.stats && this.geoLayer.stats.tiles > 0);
-    if (tilesOn) {
+    if (tilesOn || this.geoLayer) {
       const syncFallbackVisibility = () => {
         if (!this.isJejuFlyover || !this.jejuAirportGroup) return;
         if (streamReady()) {
