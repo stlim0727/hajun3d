@@ -425,6 +425,7 @@ class AirplaneGame {
 
   enableGeoTiles(ionToken) {
     if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
+    const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken,
       lat: this.geoAnchor.lat,
@@ -434,6 +435,9 @@ class AirplaneGame {
       simAnchor: { x: 160, y: 0, z: 1600 },
       // Deeper tiles around Gimhae leave holes and intersect the runway.
       nearAnchorMaxDepth: 17,
+      focusAnchors: jejuFocus
+        ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
+        : [],
       scene: this.scene,
       camera: this.camera,
       renderer: this.renderer,

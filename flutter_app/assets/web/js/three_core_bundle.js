@@ -53165,6 +53165,7 @@ void main() {
       azimuth = 0,
       simAnchor = { x: -180, y: 0, z: -28700 },
       nearAnchorMaxDepth = 0,
+      focusAnchors = [],
       scene,
       camera,
       renderer,
@@ -53203,7 +53204,11 @@ void main() {
     function update() {
       tiles.errorTarget = 128;
       const nearAnchor = camera.position.y < simAnchor.y + 600 && Math.hypot(camera.position.x - simAnchor.x, camera.position.z - simAnchor.z) < 6e3;
-      tiles.maxDepth = nearAnchor ? nearAnchorMaxDepth : 0;
+      const nearFocusAnchor = focusAnchors.some((anchor) => {
+        const y2 = anchor.y ?? 0;
+        return camera.position.y < (anchor.maxAltitude ?? y2 + 600) && Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6e3);
+      });
+      tiles.maxDepth = nearAnchor || nearFocusAnchor ? nearAnchorMaxDepth : 0;
       tiles.setResolutionFromRenderer(camera, renderer);
       tiles.update();
     }
@@ -53216,7 +53221,8 @@ void main() {
         position: tiles.group.position.toArray(),
         quaternion: tiles.group.quaternion.toArray(),
         root: Boolean(tiles.root),
-        tiles: stats.tiles
+        tiles: stats.tiles,
+        maxDepth: tiles.maxDepth
       };
     }
     return { update, dispose, stats, debug };
