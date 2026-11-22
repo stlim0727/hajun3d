@@ -653,10 +653,37 @@
     const { islandRadius, runwayLength } = this.JEJU_AIRPORT;
     const group = new THREE.Group();
     group.name = 'jejuAirportGroup';
+    // 절차적 지형 텍스처 (지형 스트리밍 실패 시에도 농지/초원/해안 모래 패턴 유지)
+    const terrainTex = typeof this.createTerrainCanvasTexture === 'function' ? this.createTerrainCanvasTexture() : null;
+    if (terrainTex) {
+      terrainTex.repeat.set(120, 120); // 12km 섬에 약 100m 타일
+      terrainTex.needsUpdate = true;
+    }
+    const terrainNormal = typeof this.createTerrainNormalTexture === 'function' ? this.createTerrainNormalTexture() : null;
+    if (terrainNormal) {
+      terrainNormal.repeat.set(120, 120);
+      terrainNormal.needsUpdate = true;
+    }
+    const sandTex = typeof this.createSandCanvasTexture === 'function' ? this.createSandCanvasTexture() : null;
+    if (sandTex) {
+      sandTex.repeat.set(48, 4);
+      sandTex.needsUpdate = true;
+    }
 
+    const islandMat = new THREE.MeshStandardMaterial({
+      color: terrainTex ? 0xffffff : 0x4f7942,
+      map: terrainTex || null,
+      bumpMap: terrainTex || null,
+      bumpScale: terrainTex ? 0.55 : 0,
+      roughness: 0.92
+    });
+    if (terrainNormal) {
+      islandMat.normalMap = terrainNormal;
+      islandMat.normalScale = new THREE.Vector2(0.5, 0.5);
+    }
     const island = new THREE.Mesh(
       new THREE.CylinderGeometry(islandRadius, islandRadius * 0.86, 10, 64),
-      new THREE.MeshStandardMaterial({ color: 0x4f7942, roughness: 0.92 })
+      islandMat
     );
     island.position.set(jx, -5, jz);
     island.receiveShadow = true;
@@ -664,14 +691,30 @@
 
     const shore = new THREE.Mesh(
       new THREE.CylinderGeometry(islandRadius + 180, islandRadius, 3, 64),
-      new THREE.MeshStandardMaterial({ color: 0xc2b280, roughness: 0.95 })
+      new THREE.MeshStandardMaterial({
+        color: sandTex ? 0xffffff : 0xc2b280,
+        map: sandTex || null,
+        roughness: 0.95
+      })
     );
     shore.position.set(jx, -2.2, jz);
     group.add(shore);
 
+    const mountainTex = terrainTex ? terrainTex.clone() : null;
+    if (mountainTex) {
+      mountainTex.repeat.set(28, 28);
+      mountainTex.needsUpdate = true;
+    }
     const hallasan = new THREE.Mesh(
       new THREE.ConeGeometry(2100, 1050, 36),
-      new THREE.MeshStandardMaterial({ color: 0x527a54, roughness: 0.95, flatShading: true })
+      new THREE.MeshStandardMaterial({
+        color: mountainTex ? 0x9caf8a : 0x527a54,
+        map: mountainTex || null,
+        bumpMap: mountainTex || null,
+        bumpScale: mountainTex ? 0.8 : 0,
+        roughness: 0.95,
+        flatShading: true
+      })
     );
     hallasan.position.set(jx + 3100, 525, jz - 900);
     group.add(hallasan);
