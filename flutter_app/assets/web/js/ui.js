@@ -112,6 +112,27 @@
     this.planeToggleBtn = document.getElementById('plane-toggle-btn');
     this.targetArrow = document.querySelector('.target-indicator .arrow');
     this.targetDist = document.getElementById('target-dist');
+    this.airportIndicatorRows = [];
+    const airportRows = document.getElementById('airport-indicator-rows');
+    if (airportRows && window.AirportIndicators) {
+      for (const airport of window.AirportIndicators.airports) {
+        const row = document.createElement('div');
+        row.className = 'airport-indicator-row';
+        row.title = `${airport.name} · ${airport.runways.join(' / ')} · TWR ${airport.towerMHz} MHz · ELV ${airport.elevationM} m`;
+        const code = document.createElement('span');
+        code.className = 'apt-code';
+        code.textContent = airport.icao;
+        const name = document.createElement('span');
+        name.textContent = `${airport.iata} ${airport.short}`;
+        const dist = document.createElement('span');
+        dist.className = 'apt-dist';
+        const brg = document.createElement('span');
+        brg.className = 'apt-brg';
+        row.append(code, name, dist, brg);
+        airportRows.appendChild(row);
+        this.airportIndicatorRows.push({ icao: airport.icao, airport, row, dist, brg });
+      }
+    }
     this.emergencyPanel = document.getElementById('emergency-panel');
     this.timeToggleBtn = document.getElementById('time-toggle-btn');
     this.timeModeText = document.getElementById('time-mode-text');
@@ -130,7 +151,7 @@
   },
 
   // ----------------------------------------------------------------
-  // 장거리 200km 항로 배속 순항 토글 시스템 (Fast Cruise 1x/2x/4x)
+  // 장거리 340km 항로 배속 순항 토글 시스템 (Fast Cruise 1x/2x/4x)
   // ----------------------------------------------------------------
   toggleCruiseSpeed() {
     this.cruiseMultiplier = this.cruiseMultiplier === 1 ? 2 : (this.cruiseMultiplier === 2 ? 4 : 1);
@@ -143,7 +164,7 @@
       this.cruiseSpeedBtn.className = `icon-btn glass cruise-btn${this.cruiseMultiplier === 2 ? ' fast-2x' : (this.cruiseMultiplier === 4 ? ' fast-4x' : '')}`;
     }
     this.showPopup(this.cruiseMultiplier > 1 
-      ? `🚀 [${this.cruiseMultiplier}x 배속 순항 활성화] 200km 대륙 횡단 항로를 ${this.cruiseMultiplier}배 빠른 속도로 순항합니다!`
+      ? `🚀 [${this.cruiseMultiplier}x 배속 순항 활성화] 340km 대륙 횡단 항로를 ${this.cruiseMultiplier}배 빠른 속도로 순항합니다!`
       : '✈️ [1x 표준 순항 복귀] 일반 속도로 순항합니다.');
   },
 
@@ -713,19 +734,20 @@
 
     let targetPos = new THREE.Vector3(160, this.groundY, 0);
     let targetLabel = '활주로 36L';
+    const nav = window.AirportIndicators;
+    const zProgress = Math.min(1.0, Math.max(0, -this.planeGroup.position.z / 45000));
 
     if (this.flightPhase === 'TAXI_OUT') {
       targetPos = new THREE.Vector3(160, this.groundY, 800);
       targetLabel = '이륙 활주로 36L (150m)';
     } else if (this.flightPhase === 'CLIMB_CRUISE' || this.flightPhase === 'TAKEOFF_RUN') {
       targetPos = new THREE.Vector3(160, this.groundY, -45000);
-      // Z = 0 (출발지) ~ Z = -45,000 (인천공항 메인 활주로 16R) 구간을 200.0km 장거리 항로로 정밀 비례 매핑
-      const zProgress = Math.min(1.0, Math.max(0, -this.planeGroup.position.z / 45000));
-      const remKm = (200.0 * (1.0 - zProgress)).toFixed(1);
+      // Compressed world route maps to the real RKPK → RKSI great-circle distance.
+      const remKm = (nav.routeDistanceKm * (1.0 - zProgress)).toFixed(1);
 
       if (zProgress > 0.96) {
-        const distM = Math.round(this.planeGroup.position.distanceTo(targetPos) * 2);
-        targetLabel = `인천국제공항 16R 착륙 활주로 (${distM}m)`;
+        const remM = Math.round(nav.routeDistanceKm * (1.0 - zProgress) * 1000);
+        targetLabel = `인천국제공항 16R 착륙 활주로 (${remM}m)`;
       } else {
         const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x 배속순항]` : '';
         targetLabel = `인천국제공항 16R (${remKm}km)${speedTag}`;
@@ -737,6 +759,17 @@
     }
     this.targetDist.textContent = targetLabel;
 
+    if (this.airportIndicatorRows && this.airportIndicatorRows.length) {
+      const position = nav.positionAlongRoute(zProgress);
+      const activeIcao = (this.flightPhase === 'CLIMB_CRUISE' || this.flightPhase === 'TAKEOFF_RUN') ? 'RKSI' : 'RKPK';
+      for (const entry of this.airportIndicatorRows) {
+        const indicator = nav.indicatorFrom(position, entry.airport);
+        const dist = indicator.distanceKm;
+        entry.dist.textContent = `${dist < 10 ? dist.toFixed(1) : dist.toFixed(0)}km`;
+        entry.brg.textContent = `${String(Math.round(indicator.bearingDeg)).padStart(3, '0')}°`;
+        entry.row.classList.toggle('active', indicator.icao === activeIcao);
+      }
+    }
     const localVec = targetPos.clone();
     this.planeGroup.worldToLocal(localVec);
     const angle = Math.atan2(localVec.x, -localVec.z);
@@ -952,7 +985,7 @@
           <div style="text-align:left; background:rgba(15,23,42,0.65); padding:14px; border-radius:10px; border:1px solid rgba(56,189,248,0.3); margin-bottom:12px;">
             <div style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:8px;">🛫 대륙 횡단 비행 임무 성공!</div>
             <div style="font-size:13px; color:#e2e8f0; line-height:1.7;">
-              • <strong>운항 노선:</strong> 하준 해상 국제공항 (RKSI) ➔ 인천국제공항 (Incheon Int'l Airport Hub) [200km 대륙 횡단 정기편]<br>
+              • <strong>운항 노선:</strong> 김해국제공항 (RKPK/PUS) ➔ 인천국제공항 (RKSI/ICN) [${Math.round(window.AirportIndicators.routeDistanceKm)}km 대륙 횡단 정기편]<br>
               • <strong>운항 기종:</strong> ${planeName}<br>
               • <strong>비행 시간:</strong> ${m}분 ${s}초<br>
               • <strong>승객 수송:</strong> <span style="color:#10b981; font-weight:700;">285명 전원 안전 하선 완료 (만족도 100%)</span><br>

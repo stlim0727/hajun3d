@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <!-- Unified Three.js + GLTF/GLB pipeline + optional 3D Tiles (offline-safe local bundle) -->
   <script src="js/geo_config.js?v=20261120d"></script>
+  <script src="js/airport_indicators.js?v=20261122a"></script>
   <script src="js/three_core_bundle.js?v=20261120c"></script>
 </head>
 <body>
@@ -49,6 +50,12 @@
     <div id="target-indicator" class="target-indicator">
       <div class="arrow"></div>
       <span id="target-dist" class="dist-text">활주로 36L (150m)</span>
+    </div>
+
+    <!-- Real-world airport distance / true bearing indicators -->
+    <div id="airport-indicators" class="airport-indicators glass" aria-label="공항 거리 및 방위 지시기">
+      <div class="airport-indicators-title">AIRPORT INDICATORS <span>TRUE BRG</span></div>
+      <div id="airport-indicator-rows"></div>
     </div>
 
     <!-- Master Warning / GPWS Warning Banner -->
@@ -126,7 +133,7 @@
       <button id="mic-toggle-btn" class="icon-btn glass mic-btn pc-only-hud" title="기장 안내 방송 마이크 (단축키 M)" onclick="window.toggleMicrophone()">🎙️ <span id="mic-status-text">마이크 ON</span></button>
       <button id="engine-shutdown-btn" class="icon-btn glass engine-shutdown-btn pc-only-hud" title="엔진 정지 / 시동 (단축키 E)" onclick="window.toggleEngineShutdown()">🔴 <span id="engine-status-text">엔진 ON</span></button>
       <button id="deplane-quick-btn" class="icon-btn glass deplane-quick-btn hidden" title="승객 하선 시작 (단축키 Enter)" onclick="window.startDeplaning()">🚪 <span id="deplane-quick-text">하선 시작</span></button>
-      <button id="cruise-speed-btn" class="icon-btn glass cruise-btn pc-only-hud" title="200km 장거리 배속 순항 (단축키 X)" onclick="window.toggleCruiseSpeed()">🚀 <span id="cruise-speed-text">순항 1x</span></button>
+      <button id="cruise-speed-btn" class="icon-btn glass cruise-btn pc-only-hud" title="340km 장거리 배속 순항 (단축키 X)" onclick="window.toggleCruiseSpeed()">🚀 <span id="cruise-speed-text">순항 1x</span></button>
       <button id="time-toggle-btn" class="icon-btn glass time-toggle-btn pc-only-hud" title="낮/밤 모드 전환 (단축키 N)" onclick="window.toggleTimeOfDay()">☀️ <span id="time-mode-text">낮</span></button>
       <button id="emergency-btn" class="icon-btn glass emergency-top-btn pc-only-hud" title="비상 상황 시나리오" onclick="window.toggleEmergencyPanel()">🚨 <span id="emergency-text">비상 상황</span></button>
       <button id="glb-btn" class="icon-btn glass glb-btn pc-only-hud" title="GLB 3D 파일 불러오기 / 내보내기" onclick="window.toggleGLBMenu()">📦 <span id="glb-status-text">GLB 3D</span></button>
@@ -252,7 +259,7 @@
           </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.toggleCruiseSpeed(); window.toggleMobileMenu();">
             <span class="item-icon">🚀</span>
-            <div><strong>200km 배속 순항</strong><small id="mobile-cruise-status">1x</small></div>
+            <div><strong>340km 배속 순항</strong><small id="mobile-cruise-status">1x</small></div>
           </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.toggleTimeOfDay(); window.toggleMobileMenu();">
             <span class="item-icon">☀️/🌙</span>
@@ -548,7 +555,7 @@
         <div class="hotas-mapping-grid">
           <div class="map-chip"><span class="kbd-badge">Trigger (검지)</span> 역추진 제동 / 브레이크</div>
           <div class="map-chip"><span class="kbd-badge">Button B (2)</span> 랜딩 기어 토글 (G)</div>
-          <div class="map-chip"><span class="kbd-badge">Button A (3)</span> 200km 배속 순항 토글 (X)</div>
+          <div class="map-chip"><span class="kbd-badge">Button A (3)</span> 340km 배속 순항 토글 (X)</div>
           <div class="map-chip"><span class="kbd-badge">Button Y (4)</span> 카메라 1인칭/3인칭 전환 (C)</div>
           <div class="map-chip"><span class="kbd-badge">LB / RB (5,6)</span> 스로틀 출력 미세 감속 / 가속</div>
           <div class="map-chip"><span class="kbd-badge">LT / RT (7,8)</span> 방향타(Rudder) 좌우 미세 편향</div>
@@ -761,7 +768,7 @@
       </p>
       <p id="modal-desc">
         게이트에서 승객을 태우고, 유도로(Taxiway)를 따라 활주로로 이동해 이륙하세요!<br>
-        200km 대륙 횡단 항로를 비행하여 <strong>인천국제공항(메가 허브 공항)</strong>에 착륙 후 게이트까지 주행을 완료하세요.
+        340km 대륙 횡단 항로를 비행하여 <strong>인천국제공항(메가 허브 공항)</strong>에 착륙 후 게이트까지 주행을 완료하세요.
       </p>
 
       <!-- Airplane Model Selector -->
@@ -906,7 +913,7 @@
             </div>
             <div class="guide-item">
               <span class="key">🚀 X 키</span>
-              <span>200km 대륙 횡단 배속 순항 토글 (1x ➔ 2x ➔ 4x 고속 비행)</span>
+              <span>340km 대륙 횡단 배속 순항 토글 (1x ➔ 2x ➔ 4x 고속 비행)</span>
             </div>
             <div class="guide-item">
               <span class="key">🚨 E 키</span>

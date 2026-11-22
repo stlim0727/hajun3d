@@ -396,6 +396,58 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   letter-spacing: 0.5px;
 }
 
+/* Real-world airport distance / true bearing indicator list */
+.airport-indicators {
+  position: absolute;
+  top: 92px;
+  left: 20px;
+  min-width: 248px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.airport-indicators-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  margin-bottom: 4px;
+}
+
+.airport-indicators-title span {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.airport-indicator-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 58px 42px;
+  gap: 6px;
+  align-items: center;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.airport-indicator-row.active {
+  color: #facc15;
+  font-weight: 800;
+}
+
+.airport-indicator-row .apt-code {
+  color: #38bdf8;
+}
+
+.airport-indicator-row .apt-dist,
+.airport-indicator-row .apt-brg {
+  text-align: right;
+}
+
 /* Crosshair in Center */
 .crosshair {
   position: absolute;
@@ -2973,6 +3025,22 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     padding: 4px 10px !important;
   }
 
+  .airport-indicators {
+    top: 86px !important;
+    left: 10px !important;
+    min-width: 0 !important;
+    padding: 4px 6px !important;
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+  }
+  .airport-indicators-title {
+    font-size: 8px !important;
+  }
+  .airport-indicator-row {
+    grid-template-columns: 34px 1fr 44px 32px !important;
+    gap: 3px !important;
+  }
+
   /* Master Warning / GPWS Warning Banner Mobile Optimization: Compact, unobtrusive & semi-transparent */
   .gpws-banner {
     top: 14% !important;
@@ -3274,6 +3342,19 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     z-index: 52 !important;
+  }
+
+  .airport-indicators {
+    top: 76px !important;
+    left: 8px !important;
+    min-width: 0 !important;
+    padding: 3px 5px !important;
+    font-size: 8.5px !important;
+    line-height: 1.3 !important;
+  }
+  .airport-indicator-row {
+    grid-template-columns: 32px 1fr 42px 30px !important;
+    gap: 2px !important;
   }
 
   /* Passenger Reaction Box Toast: Centered notification toast in upper third — clear of controls & center view */
