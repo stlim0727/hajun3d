@@ -684,6 +684,13 @@
     const brakes = (this.keys.brake || this.isBellySliding) ? 1.0 : 0.0;
     const gearHandleDown = !this.isGearCollapsed && Boolean(this.gearExtended);
 
+    if (this.tailFinDetached) {
+      // 수직꼬리날개 이탈: 공중 방향타 상실 & 유압 저하로 피치/롤 응답 둔화 (비상착륙 조종은 가능)
+      if (!this.isOnGround) rudder = 0;
+      elevator *= 0.52;
+      aileron *= 0.62;
+    }
+
     return {
       elevator: THREE.MathUtils.clamp(elevator, -1, 1),
       aileron: THREE.MathUtils.clamp(aileron, -1, 1),
@@ -825,7 +832,9 @@
           this.collapseLandingGears();
         }
       } else if (ev.type === 'bodyDamage') {
-        if (typeof this.applyBodyDamageEvent === 'function') {
+        if (ev.id === 'tail' && (this.flightPhase === 'TAKEOFF_RUN' || this.isOnGround) && typeof this.recordTakeoffTailstrike === 'function') {
+          this.recordTakeoffTailstrike();
+        } else if (typeof this.applyBodyDamageEvent === 'function') {
           this.applyBodyDamageEvent(ev.id, ev.state);
         }
         if (ev.id === 'belly') this.isBellySliding = true;
@@ -833,6 +842,9 @@
           this.checkEmergencyLandingSuccess('belly_landing');
         }
       } else if (ev.type === 'bodyContact') {
+        if (ev.id === 'tail' && (this.flightPhase === 'TAKEOFF_RUN' || this.isOnGround) && typeof this.recordTakeoffTailstrike === 'function') {
+          this.recordTakeoffTailstrike();
+        }
         if (typeof this.applyBodyContactSparks === 'function') {
           this.applyBodyContactSparks(ev.id, ev.speed);
         }
@@ -929,6 +941,13 @@
     const environment = this.buildFlight3dEnvironment();
     const result = core.step(effectiveDt, inputs, environment);
 
+    if (this.tailFinDetached && !this.isOnGround && !this.isDestroyed && core.angularVelocity) {
+      const t = this.emergencyTimer || 0;
+      const speedFactor = Math.min(1.0, Math.hypot(result.linearVelocity.x, result.linearVelocity.z) / 140);
+      core.angularVelocity.y += Math.sin(t * 1.45) * 0.16 * speedFactor * effectiveDt;
+      core.angularVelocity.z += Math.cos(t * 1.45 + 0.6) * 0.11 * speedFactor * effectiveDt;
+    }
+
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
     if (this.planeGroup) {
       this.planeGroup.position.set(
@@ -1018,6 +1037,16 @@
     }
 
     this.handleFlight3dEvents(result.events, result);
+
+    // 이륙 활주 과도 기수 들림 테일스트라이크 감지 & 고고도 격벽 파열 체크
+    if (!this.isDestroyed) {
+      if (this.isOnGround && this.groundSpeed > 35 && this.pitch > 0.20 && typeof this.recordTakeoffTailstrike === 'function') {
+        this.recordTakeoffTailstrike();
+      }
+      if (this.hasTakeoffTailstrike && !this.tailFinDetached && typeof this.checkTailstrikeAltitudeFailure === 'function') {
+        this.checkTailstrikeAltitudeFailure();
+      }
+    }
 
     if (this.isOnGround && this.planeGroup) {
       const distDestGate = Math.hypot(this.planeGroup.position.x - (-235), this.planeGroup.position.z - (-45450));
@@ -1646,6 +1675,8 @@
         motionType = 'BIRD_STRIKE';
       } else if (this.currentEmergency === 'gear_failure' && !this.isOnGround && radioAlt < 350) {
         motionType = 'GEAR_FAILURE';
+      } else if (this.currentEmergency === 'tail_loss') {
+        motionType = 'ENGINE_FIRE';
       }
     }
 

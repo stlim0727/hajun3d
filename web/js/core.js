@@ -65,6 +65,10 @@ class AirplaneGame {
     };
     this.isWaterLanding = false; // 바다 비상착수 수면 활주/부유 상태
     this.waterBobPhase = 0.0;
+    this.hasTakeoffTailstrike = false; // 이륙 중 테일스트라이크 발생 여부
+    this.tailFinDetached = false;      // 고고도 압력 격벽 파열로 수직꼬리날개 이탈 여부
+    this.tailBulkheadTriggerAltM = 1600;
+    this._detachedTailNodes = [];
 
     // 비행 물리 및 항공역학 변수 (True 3D Vector Newtonian & Aerodynamic Mechanics)
     this.speed = 0.0;            // 전진 속도 단위 (1.0 = ~280 km/h)

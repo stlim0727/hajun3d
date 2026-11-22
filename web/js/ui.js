@@ -299,6 +299,7 @@
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
     this.emergencyBonusGiven = false;
     this.isEngineOff = false;
     this.isJetwayDocked = false;
@@ -362,6 +363,7 @@
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
     this.emergencyBonusGiven = false;
     this.isEngineOff = false;
     this.isJetwayDocked = false;
@@ -422,6 +424,7 @@
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
     this.emergencyBonusGiven = false;
     this.isEngineOff = false;
     this.isJetwayDocked = false;

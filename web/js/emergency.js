@@ -83,12 +83,146 @@
         this.showPopup('🛞 유압 시스템 고장으로 랜딩 기어가 전개되지 않습니다! 동체 비상 착륙을 시도하세요!');
         this.triggerPassengerReaction('emergency_gear_failure');
         break;
+
+      case 'tail_loss':
+        this.triggerTailFinBreakoff();
+        break;
     }
+  },
+
+  resetTailstrikeState() {
+    this.hasTakeoffTailstrike = false;
+    this.tailFinDetached = false;
+    this.tailBulkheadTriggerAltM = 1600;
+    if (Array.isArray(this._detachedTailNodes)) {
+      for (const node of this._detachedTailNodes) {
+        if (node) node.visible = true;
+      }
+    }
+    this._detachedTailNodes = [];
+  },
+
+  recordTakeoffTailstrike() {
+    if (this.hasTakeoffTailstrike || this.tailFinDetached || this.isDestroyed) return false;
+    this.hasTakeoffTailstrike = true;
+    this.tailFinDetached = false;
+    this.tailBulkheadTriggerAltM = 1500 + Math.round(Math.random() * 400);
+    if (typeof this.applyBodyDamageEvent === 'function') {
+      this.applyBodyDamageEvent('tail', 'damaged');
+    } else if (this.partDamage) {
+      this.partDamage.tail = 'damaged';
+    }
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('⚠️ [테일 스트라이크] 이륙 중 꼬리 지면 접촉! 후방 압력 격벽 균열 — 고고도 상승 시 파손 위험!');
+    }
+    return true;
+  },
+
+  checkTailstrikeAltitudeFailure() {
+    if (!this.hasTakeoffTailstrike || this.tailFinDetached || this.isDestroyed || this.isOnGround) return false;
+    if (!this.planeGroup) return false;
+    const altM = Math.max(0, this.planeGroup.position.y - (this.groundY || 6.84));
+    const triggerAlt = this.tailBulkheadTriggerAltM || 1600;
+    if (altM >= triggerAlt) {
+      this.triggerTailFinBreakoff();
+      return true;
+    }
+    return false;
+  },
+
+  spawnDetachedTailFinDebris() {
+    if (!this.scene || !this.planeGroup || typeof THREE === 'undefined') return;
+    const pos = this.planeGroup.position;
+    const quat = this.planeGroup.quaternion;
+    const tailOffset = new THREE.Vector3(0, 3.2, 16.0).applyQuaternion(quat);
+    const tailWorld = pos.clone().add(tailOffset);
+    const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat);
+
+    // 1. 떨어져 나가는 수직꼬리날개 파편 메쉬
+    if (typeof THREE.BoxGeometry === 'function' && typeof THREE.MeshStandardMaterial === 'function') {
+      const finGeo = new THREE.BoxGeometry(0.65, 5.8, 4.6);
+      const finMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.4 });
+      const finMesh = new THREE.Mesh(finGeo, finMat);
+      finMesh.position.copy(tailWorld);
+      finMesh.quaternion.copy(quat);
+      finMesh.velocity = backward.clone().multiplyScalar(22).add(new THREE.Vector3((Math.random() - 0.5) * 8, 4.5, 0));
+      finMesh.rotVel = new THREE.Vector3(1.8, 2.4, 3.1);
+      finMesh.life = 4.5;
+      if (Array.isArray(this.particles)) this.particles.push(finMesh);
+      this.scene.add(finMesh);
+    }
+
+    // 2. 고고도 급감압 백색 안개 & 기체 파편 파티클 분출
+    if (typeof this.emitPartParticles === 'function') {
+      this.emitPartParticles('tail', 'spark', 12);
+      this.emitPartParticles('tail', 'smoke', 10);
+    }
+  },
+
+  triggerTailFinBreakoff() {
+    if (this.tailFinDetached || this.isDestroyed) return false;
+    this.tailFinDetached = true;
+    this.currentEmergency = 'tail_loss';
+    this.emergencyTimer = 0;
+    this.emergencyBonusGiven = false;
+    this.partDamage = this.partDamage || {
+      nose: 'normal', belly: 'normal', tail: 'normal',
+      wingL: 'normal', wingR: 'normal', engineL: 'normal', engineR: 'normal'
+    };
+    this.partDamage.tail = 'failed';
+    this.hullIntegrity = Math.max(20, (this.hullIntegrity || 100) - 35);
+    this.screenShake = Math.max(this.screenShake || 0, 1.6);
+
+    // 수직꼬리날개 / 방향타 메쉬를 시각적으로 이탈 처리 (종료하지 않고 비행 계속 가능)
+    this._detachedTailNodes = this._detachedTailNodes || [];
+    const hideNode = (node) => {
+      if (!node || !node.visible) return;
+      node.visible = false;
+      this._detachedTailNodes.push(node);
+    };
+    if (this.glbMovingPartsController && Array.isArray(this.glbMovingPartsController.controlPanels)) {
+      for (const panel of this.glbMovingPartsController.controlPanels) {
+        if (panel && panel.control === 'rudder' && panel.pivot) hideNode(panel.pivot);
+      }
+    }
+    if (this.controlSurfaces && this.controlSurfaces.rudder) {
+      hideNode(this.controlSurfaces.rudder);
+    }
+    if (this.planeGroup && typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (obj && obj.isMesh && /rudder|vstab|vertical.*stab|tail.*fin/i.test(obj.name || '')) {
+          hideNode(obj);
+        }
+      });
+    }
+
+    this.spawnDetachedTailFinDebris();
+
+    if (typeof this.playMetalCrunchSound === 'function') this.playMetalCrunchSound();
+    if (typeof this.playGearSnapSound === 'function') this.playGearSnapSound();
+    if (typeof this.playGPWSWhoopSiren === 'function') this.playGPWSWhoopSiren();
+    if (typeof this.triggerGPWS === 'function') {
+      this.triggerGPWS(
+        'EMERGENCY',
+        '💥 TAIL FIN SEPARATED! HYDRAULIC LOSS!',
+        '테일스트라이크 격벽 파열로 꼬리날개 파손! 방향타 불능 — 스로틀과 롤로 비상착륙을 시도하십시오!',
+        'danger'
+      );
+    }
+    if (typeof this.speakGPWS === 'function') this.speakGPWS('HYDRAULIC FAILURE, TAIL DAMAGED');
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('💥 [고고도 격벽 파열] 꼬리날개가 떨어져 나갔습니다! 방향타 상실 — 비상착륙을 시도하세요!');
+    }
+    if (typeof this.triggerPassengerReaction === 'function') {
+      this.triggerPassengerReaction('emergency_engine_fire');
+    }
+    return true;
   },
 
   clearEmergency() {
     this.currentEmergency = null;
     this.emergencyTimer = 0;
+    this.resetTailstrikeState();
     this.isGearCollapsed = false;
     this.gearExtended = true;
     this.gearPhase = 'DOWN';
@@ -207,6 +341,16 @@
           this.landingGears.forEach(g => g.visible = false);
         }
         break;
+
+      case 'tail_loss':
+        // 꼬리날개 이탈 후 기체 떨림 및 감압 연기 지속 (조종 불능 종료 없이 비상착륙 시도 가능)
+        this.screenShake = Math.max(this.screenShake, 0.12);
+        if (!this._flight3dCore && !this.isOnGround && this.planeGroup) {
+          const osc = Math.sin(this.emergencyTimer * 1.45);
+          this.planeGroup.rotateY(osc * 0.0028);
+          this.planeGroup.rotateZ(Math.cos(this.emergencyTimer * 1.45) * 0.0022);
+        }
+        break;
     }
   },
 
@@ -221,7 +365,8 @@
       engine_fire: '🔥 1번 엔진 화재 극복 착륙',
       bird_strike: '🦅 버드 스트라이크 무동력 활공 착륙',
       windshear: '🌪️ 마이크로버스트 윈드시어 돌파 착륙',
-      gear_failure: '🛞 기어 고장 동체 비상착륙 (Belly Landing)'
+      gear_failure: '🛞 기어 고장 동체 비상착륙 (Belly Landing)',
+      tail_loss: '💥 꼬리날개 파손(테일스트라이크 격벽 파열) 기적의 비상착륙'
     };
     const emTitle = titles[this.currentEmergency] || '비상 상황 안전 착륙';
 
