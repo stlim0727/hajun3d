@@ -68,6 +68,7 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 
 /* HUD Overlay */
 #hud {
+  --hud-controls-width: clamp(340px, 38vw, 760px);
   position: absolute;
   top: 0;
   left: 0;
@@ -81,8 +82,8 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 .hud-top {
   position: absolute;
   top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 20px;
+  max-width: calc(100vw - var(--hud-controls-width) - 60px);
   display: flex;
   gap: 16px;
   pointer-events: auto;
@@ -136,7 +137,11 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   top: 20px;
   right: 20px;
   display: flex;
-  gap: 10px;
+  width: var(--hud-controls-width);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 6px 10px;
   pointer-events: auto;
 }
 
@@ -3038,6 +3043,12 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     top: 10px !important;
     right: 10px !important;
     gap: 6px !important;
+    width: auto !important;
+    max-width: calc(100vw - 170px) !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+    align-items: flex-start !important;
+    row-gap: 4px !important;
     z-index: 60 !important;
   }
   .hud-top-right .icon-btn {
@@ -3403,8 +3414,9 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   }
 
   .airport-indicators {
-    top: 76px !important;
-    left: 8px !important;
+    top: 112px !important;
+    right: 8px !important;
+    left: auto !important;
     min-width: 0 !important;
     padding: 3px 5px !important;
     font-size: 8.5px !important;
@@ -4128,4 +4140,17 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   font-size: 13px;
   font-weight: 600;
   color: #e2e8f0;
+}
+
+/* Phones: icon-only top controls keep a single row clear of the heading indicator */
+@media (max-width: 480px) {
+  .hud-top-right .icon-btn span {
+    display: none !important;
+  }
+}
+
+@media (max-width: 340px) and (orientation: portrait) {
+  .target-indicator {
+    left: 56% !important;
+  }
 }
