@@ -129,7 +129,26 @@ test('Flight3d-style camera modes: all 8 modes cycle, update, and clamp ground c
     assert.ok(Number.isFinite(game.camera.position.y), `${def.id} y finite`);
     assert.ok(Number.isFinite(game.camera.position.z), `${def.id} z finite`);
     assert.ok(game.camera.position.y >= 2.6, `${def.id} must not clip below runway (${game.camera.position.y})`);
+    const expectHidden = def.id === '1st' || def.id === 'hud';
+    assert.equal(game.planeGroup.visible, !expectHidden, `${def.id} airframe visibility`);
   }
+
+  // Destroyed airframe stays hidden even in exterior modes
+  game.isDestroyed = true;
+  game.setCameraMode('3rd');
+  game.updateCameraFromPhysics(0, 0.016);
+  assert.equal(game.planeGroup.visible, false);
+  game.isDestroyed = false;
+
+  // Per-aircraft cockpit camera offsets match aircraft nose/deck geometry
+  const a320Eye = game.getCockpitCameraOffset('a320', '1st');
+  const dc10Eye = game.getCockpitCameraOffset('dc10', '1st');
+  const a350Eye = game.getCockpitCameraOffset('a350', '1st');
+  const ancestorEye = game.getCockpitCameraOffset('ancestor', '1st');
+  assert.ok(dc10Eye.z < a320Eye.z, 'DC-10 cockpit must sit further forward than A320');
+  assert.ok(dc10Eye.y > a320Eye.y, 'DC-10 cockpit must sit higher than A320');
+  assert.ok(a350Eye.z < dc10Eye.z, 'A350 cockpit must sit further forward than DC-10');
+  assert.ok(ancestorEye.z > a320Eye.z, 'Ancestor cockpit must sit closer to center than A320');
 
   // Verify tower mode selects Incheon ATC tower when near Incheon (z < -22500)
   game.planeGroup.position.set(-155, 6.84, -45000);

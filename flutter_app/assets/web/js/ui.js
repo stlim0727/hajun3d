@@ -472,6 +472,11 @@
     const def = defs.find((d) => d.id === mode) || defs[0];
     this.cameraMode = def.id;
 
+    if (this.planeGroup) {
+      const hideAirframeForInteriorView = (def.id === '1st' || def.id === 'hud');
+      this.planeGroup.visible = !this.isDestroyed && !hideAirframeForInteriorView;
+    }
+
     const cs = typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState;
     if (cs) {
       cs.flybySet = false;

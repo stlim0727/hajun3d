@@ -1076,8 +1076,29 @@
     return this.cameraState;
   },
 
+  getCockpitCameraOffset(planeType, mode = '1st') {
+    const type = (planeType || this.currentPlaneType || 'a320').toLowerCase();
+    const offsets = {
+      a320:            [0, 2.15, -16.0],
+      a320_detailed:   [0, 2.15, -16.0],
+      a320_simplified: [0, 2.15, -16.0],
+      a350:            [0, 3.85, -29.4],
+      b747:            [0, 4.80, -30.3],
+      dc10:            [0, 3.60, -24.2],
+      md80:            [0, 2.00, -19.7],
+      concorde:        [0, 2.20, -22.3],
+      amphibian:       [0, 1.45, -7.4],
+      ancestor:        [0, 0.90, -2.8]
+    };
+    const base = offsets[type] || offsets.a320;
+    const zShift = mode === 'hud' ? -1.5 : 0;
+    return new THREE.Vector3(base[0], base[1], base[2] + zShift);
+  },
+
   updateCameraFromPhysics(currentKmh, dt) {
     if (!this.camera || !this.planeGroup) return;
+    const hideAirframeForInteriorView = (this.cameraMode === '1st' || this.cameraMode === 'hud');
+    this.planeGroup.visible = !this.isDestroyed && !hideAirframeForInteriorView;
     const cs = this.ensureCameraState();
     const safeDt = Math.max(0, Math.min(0.1, dt || 0.016));
     const planePos = this.planeGroup.position;
@@ -1146,9 +1167,7 @@
           buffetY = (Math.cos(t * 2.3) + Math.sin(t * 4.2)) * 0.015 * severity;
         }
 
-        const eyeLocal = isAncestor
-          ? new THREE.Vector3(0, 0.9, -2.8)
-          : new THREE.Vector3(0, 2.05, -14.2);
+        const eyeLocal = this.getCockpitCameraOffset(this.currentPlaneType, '1st');
         eyeLocal.y += cs.headGForceOffset + buffetY + cs.touchJoltOffset;
         eyeLocal.x += buffetX;
 
@@ -1316,9 +1335,7 @@
 
       case 'hud': {
         // 순수 HUD 전방 시점 (Fixed Boresight)
-        const hudLocal = isAncestor
-          ? new THREE.Vector3(0, 0.9, -3.5)
-          : new THREE.Vector3(0, 2.15, -16.5);
+        const hudLocal = this.getCockpitCameraOffset(this.currentPlaneType, 'hud');
         this.camera.position.copy(hudLocal.applyMatrix4(this.planeGroup.matrixWorld));
         this.camera.quaternion.copy(planeQuat);
         this.camera.up.set(0, 1, 0).applyQuaternion(planeQuat);
