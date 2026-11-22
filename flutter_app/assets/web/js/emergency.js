@@ -100,6 +100,32 @@
       }
     }
     this._detachedTailNodes = [];
+
+    if (Array.isArray(this._detachedTailGeometryBackups)) {
+      for (const entry of this._detachedTailGeometryBackups) {
+        if (!entry || !entry.mesh || !entry.mesh.geometry) continue;
+        const geom = entry.mesh.geometry;
+        geom.setIndex(entry.origIndex || null);
+        if (Array.isArray(entry.origGroups) && entry.origGroups.length > 0 && typeof geom.clearGroups === 'function') {
+          geom.clearGroups();
+          for (const g of entry.origGroups) {
+            geom.addGroup(g.start, g.count, g.materialIndex);
+          }
+        }
+      }
+    }
+    this._detachedTailGeometryBackups = [];
+
+    if (this._detachedTailDebrisGroup) {
+      if (this.scene && typeof this.scene.remove === 'function') {
+        this.scene.remove(this._detachedTailDebrisGroup);
+      }
+      if (Array.isArray(this.debrisPieces)) {
+        const idx = this.debrisPieces.indexOf(this._detachedTailDebrisGroup);
+        if (idx >= 0) this.debrisPieces.splice(idx, 1);
+      }
+      this._detachedTailDebrisGroup = null;
+    }
   },
 
   recordTakeoffTailstrike() {
@@ -130,7 +156,148 @@
     return false;
   },
 
-  spawnDetachedTailFinDebris() {
+  detachVerticalTailFinGeometry() {
+    if (!this.planeGroup || typeof THREE === 'undefined' || !THREE.Box3 || !THREE.Matrix4) {
+      return { removedTriangles: 0, detachedGroup: null };
+    }
+    this._detachedTailGeometryBackups = this._detachedTailGeometryBackups || [];
+    if (typeof this.planeGroup.updateMatrixWorld === 'function') {
+      this.planeGroup.updateMatrixWorld(true);
+    }
+    if (!this.planeGroup.matrixWorld) {
+      return { removedTriangles: 0, detachedGroup: null };
+    }
+
+    const planeInv = new THREE.Matrix4().copy(this.planeGroup.matrixWorld).invert();
+    const localBox = new THREE.Box3();
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const meshToPlane = new THREE.Matrix4();
+
+    const meshes = [];
+    if (typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.visible || !obj.geometry) return;
+        const posAttr = obj.geometry.attributes && obj.geometry.attributes.position;
+        if (!posAttr || posAttr.count < 3) return;
+        meshes.push(obj);
+        meshToPlane.multiplyMatrices(planeInv, obj.matrixWorld);
+        for (let i = 0; i < posAttr.count; i++) {
+          vA.fromBufferAttribute(posAttr, i).applyMatrix4(meshToPlane);
+          localBox.expandByPoint(vA);
+        }
+      });
+    }
+
+    if (localBox.isEmpty()) return { removedTriangles: 0, detachedGroup: null };
+
+    const length = localBox.max.z - localBox.min.z;
+    const height = localBox.max.y - localBox.min.y;
+    const span = localBox.max.x - localBox.min.x;
+
+    // Plane-local vertical stabilizer clip box (+Z = tail, +Y = up, X = 0 centerline).
+    // Slices off the entire vertical fin (like JAL 123) while keeping fuselage & horizontal stabilizers intact.
+    const type = (this.currentPlaneType || 'a320').toLowerCase();
+    const yRatio = type === 'b747' ? 0.46 : (type === 'dc10' ? 0.56 : 0.52);
+    const zMin = localBox.max.z - length * 0.28;
+    const yBase = localBox.max.y - height * yRatio;
+    const xMax = Math.max(1.6, span * 0.05);
+
+    const detachedGroup = typeof THREE.Group === 'function' ? new THREE.Group() : null;
+    let totalRemoved = 0;
+
+    for (const mesh of meshes) {
+      const geom = mesh.geometry;
+      const posAttr = geom.attributes.position;
+      const origIndex = geom.index;
+      const origGroups = Array.isArray(geom.groups)
+        ? geom.groups.map((g) => ({ start: g.start, count: g.count, materialIndex: g.materialIndex }))
+        : [];
+      const indexCount = origIndex ? origIndex.count : posAttr.count;
+      if (Math.floor(indexCount / 3) <= 0) continue;
+
+      meshToPlane.multiplyMatrices(planeInv, mesh.matrixWorld);
+      const kept = [];
+      const detached = [];
+      const newGroups = [];
+
+      const isFinTriangle = (ia, ib, ic) => {
+        vA.fromBufferAttribute(posAttr, ia).applyMatrix4(meshToPlane);
+        vB.fromBufferAttribute(posAttr, ib).applyMatrix4(meshToPlane);
+        vC.fromBufferAttribute(posAttr, ic).applyMatrix4(meshToPlane);
+        const cx = (vA.x + vB.x + vC.x) / 3;
+        const cy = (vA.y + vB.y + vC.y) / 3;
+        const cz = (vA.z + vB.z + vC.z) / 3;
+        const jagged = Math.sin(cz * 1.3) * 0.35;
+        return cz >= zMin && cy >= (yBase + jagged) && Math.abs(cx) <= xMax;
+      };
+
+      if (origGroups.length > 0 && Array.isArray(mesh.material)) {
+        for (const g of origGroups) {
+          const groupStart = kept.length;
+          const end = Math.min(indexCount, g.start + g.count);
+          for (let i = g.start; i + 2 < end; i += 3) {
+            const ia = origIndex ? origIndex.getX(i) : i;
+            const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+            const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+            if (isFinTriangle(ia, ib, ic)) detached.push(ia, ib, ic);
+            else kept.push(ia, ib, ic);
+          }
+          const groupCount = kept.length - groupStart;
+          if (groupCount > 0) {
+            newGroups.push({ start: groupStart, count: groupCount, materialIndex: g.materialIndex });
+          }
+        }
+      } else {
+        for (let i = 0; i + 2 < indexCount; i += 3) {
+          const ia = origIndex ? origIndex.getX(i) : i;
+          const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+          const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+          if (isFinTriangle(ia, ib, ic)) detached.push(ia, ib, ic);
+          else kept.push(ia, ib, ic);
+        }
+      }
+
+      if (detached.length === 0) continue;
+
+      totalRemoved += detached.length / 3;
+      this._detachedTailGeometryBackups.push({ mesh, origIndex, origGroups });
+
+      geom.setIndex(kept);
+      if (origGroups.length > 0 && Array.isArray(mesh.material) && typeof geom.clearGroups === 'function') {
+        geom.clearGroups();
+        for (const g of newGroups) geom.addGroup(g.start, g.count, g.materialIndex);
+      }
+
+      if (detachedGroup && typeof THREE.BufferGeometry === 'function' && typeof THREE.Mesh === 'function') {
+        const pieceGeom = new THREE.BufferGeometry();
+        for (const attrName of Object.keys(geom.attributes)) {
+          pieceGeom.setAttribute(attrName, geom.attributes[attrName]);
+        }
+        pieceGeom.setIndex(detached);
+        const pieceMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const pieceMesh = new THREE.Mesh(pieceGeom, pieceMat);
+        pieceMesh.applyMatrix4(meshToPlane);
+        detachedGroup.add(pieceMesh);
+      }
+    }
+
+    if (totalRemoved > 0 && detachedGroup && this.scene) {
+      detachedGroup.position.copy(this.planeGroup.position);
+      detachedGroup.quaternion.copy(this.planeGroup.quaternion);
+      const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
+      detachedGroup.velocity = backward.multiplyScalar(1.8).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.35, 0));
+      detachedGroup.angularVel = new THREE.Vector3(0.06, 0.09, 0.11);
+      if (Array.isArray(this.debrisPieces)) this.debrisPieces.push(detachedGroup);
+      this.scene.add(detachedGroup);
+      this._detachedTailDebrisGroup = detachedGroup;
+    }
+
+    return { removedTriangles: totalRemoved, detachedGroup: totalRemoved > 0 ? detachedGroup : null };
+  },
+
+  spawnDetachedTailFinDebris(skipBoxFallback = false) {
     if (!this.scene || !this.planeGroup || typeof THREE === 'undefined') return;
     const pos = this.planeGroup.position;
     const quat = this.planeGroup.quaternion;
@@ -138,24 +305,23 @@
     const tailWorld = pos.clone().add(tailOffset);
     const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat);
 
-    // 1. 떨어져 나가는 수직꼬리날개 파편 메쉬
-    if (typeof THREE.BoxGeometry === 'function' && typeof THREE.MeshStandardMaterial === 'function') {
+    // 1. 지오메트리 추출 파편이 없을 때만 폴백 수직꼬리날개 파편 메쉬 생성
+    if (!skipBoxFallback && typeof THREE.BoxGeometry === 'function' && typeof THREE.MeshStandardMaterial === 'function') {
       const finGeo = new THREE.BoxGeometry(0.65, 5.8, 4.6);
       const finMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.4 });
       const finMesh = new THREE.Mesh(finGeo, finMat);
       finMesh.position.copy(tailWorld);
       finMesh.quaternion.copy(quat);
-      finMesh.velocity = backward.clone().multiplyScalar(22).add(new THREE.Vector3((Math.random() - 0.5) * 8, 4.5, 0));
-      finMesh.rotVel = new THREE.Vector3(1.8, 2.4, 3.1);
-      finMesh.life = 4.5;
-      if (Array.isArray(this.particles)) this.particles.push(finMesh);
+      finMesh.velocity = backward.clone().multiplyScalar(1.8).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.35, 0));
+      finMesh.angularVel = new THREE.Vector3(0.06, 0.09, 0.11);
+      if (Array.isArray(this.debrisPieces)) this.debrisPieces.push(finMesh);
       this.scene.add(finMesh);
     }
 
     // 2. 고고도 급감압 백색 안개 & 기체 파편 파티클 분출
     if (typeof this.emitPartParticles === 'function') {
-      this.emitPartParticles('tail', 'spark', 12);
-      this.emitPartParticles('tail', 'smoke', 10);
+      this.emitPartParticles('tail', 'spark', 14);
+      this.emitPartParticles('tail', 'smoke', 12);
     }
   },
 
@@ -196,7 +362,9 @@
       });
     }
 
-    this.spawnDetachedTailFinDebris();
+    // GLB 통합 메쉬에서 수직꼬리날개 전체 삼각형을 완전히 절단·분리 (JAL 123 방식)
+    const detachResult = this.detachVerticalTailFinGeometry();
+    this.spawnDetachedTailFinDebris(detachResult.removedTriangles > 0);
 
     if (typeof this.playMetalCrunchSound === 'function') this.playMetalCrunchSound();
     if (typeof this.playGearSnapSound === 'function') this.playGearSnapSound();

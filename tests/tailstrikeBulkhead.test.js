@@ -125,3 +125,121 @@ test('Takeoff tailstrike triggers high-altitude tail fin separation without endi
   assert.equal(rudderPivot.visible, true);
   assert.equal(vstabMesh.visible, true);
 });
+
+test('detachVerticalTailFinGeometry slices the entire vertical tail fin from merged GLB mesh and restores on reset', () => {
+  class Vector3 {
+    constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+    clone() { return new Vector3(this.x, this.y, this.z); }
+    copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+    add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+    multiplyScalar(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
+    applyQuaternion() { return this; }
+    applyMatrix4() { return this; }
+    fromBufferAttribute(attr, i) {
+      this.x = attr.array[i * 3];
+      this.y = attr.array[i * 3 + 1];
+      this.z = attr.array[i * 3 + 2];
+      return this;
+    }
+  }
+  class Quaternion { copy() { return this; } }
+  class Matrix4 {
+    copy() { return this; }
+    invert() { return this; }
+    multiplyMatrices() { return this; }
+  }
+  class Box3 {
+    constructor() {
+      this.min = new Vector3(Infinity, Infinity, Infinity);
+      this.max = new Vector3(-Infinity, -Infinity, -Infinity);
+    }
+    expandByPoint(p) {
+      this.min.x = Math.min(this.min.x, p.x); this.min.y = Math.min(this.min.y, p.y); this.min.z = Math.min(this.min.z, p.z);
+      this.max.x = Math.max(this.max.x, p.x); this.max.y = Math.max(this.max.y, p.y); this.max.z = Math.max(this.max.z, p.z);
+      return this;
+    }
+    isEmpty() { return this.max.x < this.min.x; }
+  }
+  class BufferAttribute {
+    constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; this.count = array.length / itemSize; }
+    getX(i) { return this.array[i]; }
+  }
+  class BufferGeometry {
+    constructor() { this.attributes = {}; this.index = null; this.groups = []; }
+    setAttribute(name, attr) { this.attributes[name] = attr; }
+    setIndex(arr) {
+      if (!arr) { this.index = null; return; }
+      this.index = Array.isArray(arr) ? new BufferAttribute(arr, 1) : arr;
+    }
+    clearGroups() { this.groups = []; }
+    addGroup(start, count, materialIndex) { this.groups.push({ start, count, materialIndex }); }
+  }
+  class Mesh {
+    constructor(geometry, material) {
+      this.isMesh = true; this.visible = true; this.geometry = geometry; this.material = material;
+      this.matrixWorld = new Matrix4();
+    }
+    applyMatrix4() {}
+  }
+  class Group {
+    constructor() {
+      this.children = []; this.position = new Vector3(); this.quaternion = new Quaternion(); this.matrixWorld = new Matrix4();
+    }
+    add(c) { this.children.push(c); }
+    remove(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); }
+    updateMatrixWorld() {}
+    traverse(fn) { fn(this); for (const c of this.children) fn(c); }
+  }
+
+  const MOCK_THREE = { Vector3, Quaternion, Matrix4, Box3, BufferAttribute, BufferGeometry, Mesh, Group, Scene: Group };
+  const sandbox = {
+    THREE: MOCK_THREE,
+    AirplaneGame: { prototype: {} },
+    window: {},
+    document: { getElementById: () => null },
+    setTimeout: () => 0
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/emergency.js', 'utf8'), sandbox);
+  const game = Object.create(sandbox.AirplaneGame.prototype);
+
+  // Build a merged airliner geometry: fuselage (-18..18), wings (-17..17), h-stab (-6..6), vertical fin (y: 5.5..9, z: 13..18, x: 0)
+  const positions = new Float32Array([
+    // Tri 0: Fuselage nose
+    -1, 0, -18,   1, 0, -18,   0, 2, -14,
+    // Tri 1: Left wing
+    -17, 0, 0,   -2, 0, -2,   -2, 0, 2,
+    // Tri 2: Right wing
+    17, 0, 0,    2, 0, -2,    2, 0, 2,
+    // Tri 3: Left horizontal stabilizer (aft, low, wide)
+    -6, 1.5, 16,  -2.5, 1.5, 14,  -2.5, 1.5, 17,
+    // Tri 4: Vertical tail fin lower-mid (aft, high, centerline) -> MUST BE REMOVED
+    0, 5.5, 13,   0, 8.8, 17.5,   0, 5.5, 17.5,
+    // Tri 5: Vertical tail fin upper tip (aft, high, centerline) -> MUST BE REMOVED
+    0.2, 6.2, 14,  0.2, 9.0, 18,   -0.2, 6.2, 18
+  ]);
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setIndex([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+
+  const mesh = new Mesh(geom, {});
+  const planeGroup = new Group();
+  planeGroup.add(mesh);
+
+  game.scene = new Group();
+  game.planeGroup = planeGroup;
+  game.currentPlaneType = 'a320';
+  game.debrisPieces = [];
+  game.particles = [];
+
+  const res = game.detachVerticalTailFinGeometry();
+  assert.equal(res.removedTriangles, 2, 'Both vertical tail fin triangles must be sheared off');
+  assert.equal(mesh.geometry.index.count, 12, 'Remaining 4 airframe triangles (fuselage, wings, h-stab) must stay intact');
+  assert.equal(game.debrisPieces.length, 1, 'Detached vertical fin debris group must be spawned');
+  assert.ok(res.detachedGroup, 'Detached fin group must be returned');
+
+  // Reset restores original 6 triangles (18 indices) and cleans up debris
+  game.resetTailstrikeState();
+  assert.equal(mesh.geometry.index.count, 18, 'Original merged geometry must be fully restored on reset');
+  assert.equal(game.debrisPieces.length, 0, 'Detached fin debris must be removed on reset');
+});

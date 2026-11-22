@@ -942,10 +942,12 @@
     const result = core.step(effectiveDt, inputs, environment);
 
     if (this.tailFinDetached && !this.isOnGround && !this.isDestroyed && core.angularVelocity) {
+      // JAL 123 방식: 수직꼬리날개 완전 이탈 시 더치롤(좌우 요·롤 진동) + 푸고이드(상하 피치 흔들림)
       const t = this.emergencyTimer || 0;
       const speedFactor = Math.min(1.0, Math.hypot(result.linearVelocity.x, result.linearVelocity.z) / 140);
-      core.angularVelocity.y += Math.sin(t * 1.45) * 0.16 * speedFactor * effectiveDt;
-      core.angularVelocity.z += Math.cos(t * 1.45 + 0.6) * 0.11 * speedFactor * effectiveDt;
+      core.angularVelocity.x += Math.sin(t * 0.65) * 0.055 * speedFactor * effectiveDt;
+      core.angularVelocity.y += Math.sin(t * 1.45) * 0.22 * speedFactor * effectiveDt;
+      core.angularVelocity.z += Math.cos(t * 1.45 + 0.6) * 0.14 * speedFactor * effectiveDt;
     }
 
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
