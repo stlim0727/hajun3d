@@ -387,14 +387,10 @@ class AirplaneGame {
     hideMatching(this.airportGroup, [/^DepartureAirfieldGLB$/, /^RunwayShoulder$/]);
     const pavement = this.airportGroup?.getObjectByName('RunwayPavement');
     if (pavement) pavement.scale.x = 60 / pavement.geometry.parameters.width;
-    hideMatching(this.incheonAirportGroup, [
-      /Incheon_Airfield_And_Dual_Runways/,
-      /Incheon_Terminals_Concourse_And_Tower/
-    ]);
 
     if (this.obstacles) {
       this.obstacles = this.obstacles.filter(o =>
-        !['제1여객터미널', '항공정비 격납고', '관제탑', '인천국제공항 T1'].includes(o.name)
+        !['제1여객터미널', '항공정비 격납고', '관제탑'].includes(o.name)
       );
     }
   }
@@ -403,8 +399,6 @@ class AirplaneGame {
     if (!window.geoLocalDelta || !window.GEO_POINTS) return;
     const haeundae = window.geoLocalDelta(window.GEO_POINTS.haeundae);
     if (this.cityGroup) this.cityGroup.position.set(haeundae.x, haeundae.y, haeundae.z);
-    const incheon = window.geoLocalDelta(window.GEO_POINTS.incheon);
-    if (this.incheonAirportGroup) this.incheonAirportGroup.position.set(incheon.x, incheon.y, incheon.z);
   }
 
   // Physics ground height from Terrarium elevation tiles (visual layer is 3D Tiles only).
@@ -417,7 +411,8 @@ class AirplaneGame {
       simOffset: { x: 160, z: 1600 },
       loadTile: TP.createBrowserTileLoader(),
       flatZones: [
-        { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 }
+        { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 },
+        { minX: -1600, maxX: 1400, minZ: -47500, maxZ: -42500, height: 0, blendMargin: 600 }
       ]
     });
     return true;
