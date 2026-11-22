@@ -6,7 +6,7 @@
   <title>Sky Explorer 3D - 3D 비행기 게임</title>
   <link rel="stylesheet" href="style.css">
   <!-- Unified Three.js + GLTF/GLB pipeline + optional 3D Tiles (offline-safe local bundle) -->
-  <script src="js/geo_config.js?v=20261120d"></script>
+  <script src="js/geo_config.js?v=20261122a"></script>
   <script src="js/airport_indicators.js?v=20261122a"></script>
   <script src="js/three_core_bundle.js?v=20261120c"></script>
 </head>
@@ -268,6 +268,10 @@
           <button class="mobile-menu-item-btn" type="button" onclick="window.startHaeundaeFlight(); window.toggleMobileMenu();">
             <span class="item-icon">🌊</span>
             <div><strong>해운대 상공 비행</strong><small>Flying over Haeundae</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.startJejuFlyover(); window.toggleMobileMenu();">
+            <span class="item-icon">🏝️</span>
+            <div><strong>제주공항 상공 비행</strong><small>Flying over Jeju Airport</small></div>
           </button>
           <button class="mobile-menu-item-btn mic-btn" type="button" onclick="window.toggleMicrophone(); window.toggleMobileMenu();">
             <span class="item-icon">🎙️</span>
@@ -966,25 +970,25 @@
 
   <script src="glb_bundle.js?v=20261117i"></script>
   <!-- Modular Architecture for Clean Maintenance & Token Efficiency -->
-  <script src="js/core.js?v=20261120d"></script>
+  <script src="js/core.js?v=20261122a"></script>
   <script src="js/config.js?v=20261117i"></script>
   <script src="js/audio.js"></script>
-  <script src="js/environment.js?v=20261119h"></script>
-  <script src="js/airports.js?v=20261120c"></script>
+  <script src="js/environment.js?v=20261122a"></script>
+  <script src="js/airports.js?v=20261122a"></script>
   <script src="js/aircraft_builder.js"></script>
   <script src="js/glb_pipeline.js?v=20261120c"></script>
-  <script src="js/effects.js"></script>
+  <script src="js/effects.js?v=20261122a"></script>
   <!-- Headless 120 Hz 6-DOF Physics Core (@stlim0727/flightsim-core) -->
   <script src="js/flightsim_core_bundle.js?v=20261121b"></script>
   <script src="js/terrain_provider.js?v=20261121a"></script>
-  <script src="js/physics.js?v=20261117i"></script>
+  <script src="js/physics.js?v=20261122a"></script>
   <script src="js/input.js"></script>
   <script src="js/emergency.js"></script>
   <script src="js/speech.js"></script>
-  <script src="js/ui.js?v=20261120b"></script>
+  <script src="js/ui.js?v=20261122a"></script>
   <script src="js/build_info.js"></script>
   <script src="js/build_info_ui.js"></script>
-  <script src="game.js?v=20261120b"></script>
+  <script src="game.js?v=20261122a"></script>
   <script>
     window.addEventListener('load', () => {
       const p = new URLSearchParams(window.location.search);
