@@ -683,19 +683,20 @@
 
     const brakes = (this.keys.brake || this.isBellySliding) ? 1.0 : 0.0;
     const gearHandleDown = !this.isGearCollapsed && Boolean(this.gearExtended);
+    const activeThrottle = THREE.MathUtils.clamp(this.isEngineOff ? 0 : (this.throttle || 0), 0, 1);
 
     if (this.tailFinDetached) {
-      // 수직꼬리날개 이탈: 공중 방향타 상실 & 유압 저하로 피치/롤 응답 둔화 (비상착륙 조종은 가능)
+      // JAL 123 전 유압 상실: 요크 상하(승강타) 불능 → 엔진 출력(스로틀)으로 피치/고도 조종, 좌우 롤은 요크 유지
       if (!this.isOnGround) rudder = 0;
-      elevator *= 0.52;
-      aileron *= 0.62;
+      elevator = THREE.MathUtils.clamp((activeThrottle - 0.55) * 1.45, -0.75, 0.75);
+      aileron *= 0.78;
     }
 
     return {
       elevator: THREE.MathUtils.clamp(elevator, -1, 1),
       aileron: THREE.MathUtils.clamp(aileron, -1, 1),
       rudder: THREE.MathUtils.clamp(rudder, -1, 1),
-      throttle: THREE.MathUtils.clamp(this.isEngineOff ? 0 : (this.throttle || 0), 0, 1),
+      throttle: activeThrottle,
       brakes,
       pitchTrim: this.pitchTrim || 0,
       flapsIndex: this.flapIndex || 0,

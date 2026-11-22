@@ -372,14 +372,14 @@
     if (typeof this.triggerGPWS === 'function') {
       this.triggerGPWS(
         'EMERGENCY',
-        '💥 TAIL FIN SEPARATED! HYDRAULIC LOSS!',
-        '테일스트라이크 격벽 파열로 꼬리날개 파손! 방향타 불능 — 스로틀과 롤로 비상착륙을 시도하십시오!',
+        '💥 TOTAL HYDRAULIC LOSS! TAIL FIN GONE!',
+        '전 유압 상실 & 꼬리날개 이탈! 좌우는 요크, 상하(피치/고도)는 엔진 출력으로 조종해 비상착륙하십시오!',
         'danger'
       );
     }
     if (typeof this.speakGPWS === 'function') this.speakGPWS('HYDRAULIC FAILURE, TAIL DAMAGED');
     if (typeof this.showPopup === 'function') {
-      this.showPopup('💥 [고고도 격벽 파열] 꼬리날개가 떨어져 나갔습니다! 방향타 상실 — 비상착륙을 시도하세요!');
+      this.showPopup('💥 [전 유압 상실 · 꼬리날개 이탈] 요크 상하 불능! 좌우는 요크, 상하는 엔진 출력(스로틀)으로 조종하세요!');
     }
     if (typeof this.triggerPassengerReaction === 'function') {
       this.triggerPassengerReaction('emergency_engine_fire');

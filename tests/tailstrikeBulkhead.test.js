@@ -104,13 +104,29 @@ test('Takeoff tailstrike triggers high-altitude tail fin separation without endi
   assert.equal(game.isPlaying, true, 'Player must remain in flight to attempt emergency landing');
   assert.equal(rudderPivot.visible, false, 'Rudder panel should visually detach');
   assert.equal(vstabMesh.visible, false, 'Vertical fin mesh should visually detach');
-  assert.ok(gpwsAlerts.some((a) => a.title.includes('TAIL FIN SEPARATED')));
+  assert.ok(gpwsAlerts.some((a) => a.title.includes('TOTAL HYDRAULIC LOSS')));
 
-  // 4. Controls lose airborne rudder but retain degraded pitch & roll for emergency landing
-  const inputs = game.collectFlight3dInputs(0.016);
-  assert.equal(inputs.rudder, 0, 'Airborne rudder authority must be lost after tail fin separation');
-  assert.ok(inputs.elevator > 0 && inputs.elevator < 0.7, 'Pitch must be degraded yet controllable');
-  assert.ok(inputs.aileron > 0 && inputs.aileron < 0.8, 'Roll must be degraded yet controllable');
+  // 4. JAL 123 total hydraulic loss: yoke pitch is dead, throttle drives pitch, yoke roll still works
+  game.keys.up = true;
+  game.keys.down = false;
+  game.throttle = 1.0;
+  const fullThrottleInputs = game.collectFlight3dInputs(0.016);
+  assert.equal(fullThrottleInputs.rudder, 0, 'Airborne rudder authority must be lost after tail fin separation');
+  assert.ok(fullThrottleInputs.elevator > 0.5, 'Full throttle must pitch nose UP even when yoke pushes down');
+  assert.ok(fullThrottleInputs.aileron > 0.5, 'Left/right roll must remain controllable via yoke');
+
+  game.throttle = 0.55;
+  const cruiseThrottleInputs = game.collectFlight3dInputs(0.016);
+  assert.ok(Math.abs(cruiseThrottleInputs.elevator) < 1e-6, '55% throttle must hold neutral pitch');
+
+  game.keys.up = false;
+  game.keys.down = true;
+  game.throttle = 0.0;
+  const idleThrottleInputs = game.collectFlight3dInputs(0.016);
+  assert.ok(idleThrottleInputs.elevator < -0.5, 'Idle throttle must pitch nose DOWN even when yoke pulls up');
+
+  const html = readFileSync('web/index.html', 'utf8');
+  assert.ok(html.includes("window.triggerEmergency('tail_loss')"), 'Emergency menu must expose JAL 123 tail_loss option');
 
   // 5. Emergency landing succeeds and awards heroic bonus
   game.checkEmergencyLandingSuccess('runway_landing');
