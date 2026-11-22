@@ -89,8 +89,12 @@
     this.reverserBtn = document.getElementById('reverser-btn');
     this.reverserText = document.getElementById('reverser-text');
 
-    // 자세계(인공수평의), VSI, 실속 뱃지, GPWS 배너 바인딩
+    // 자세계(인공수평의), 헤딩, VSI, 실속 뱃지, GPWS 배너 바인딩
     this.attitudeHorizon = document.getElementById('attitude-horizon');
+    this.headingVal = document.getElementById('heading-val');
+    this.headingCardinal = document.getElementById('heading-cardinal');
+    this.destinationSelect = document.getElementById('destination-select');
+    this.selectedDestinationIcao = this.selectedDestinationIcao || 'RKSI';
     this.speedBadge = document.getElementById('speed-status-badge');
     this.vsiVal = document.getElementById('vsi-val');
     this.gpwsBanner = document.getElementById('gpws-banner');
@@ -129,9 +133,15 @@
         const brg = document.createElement('span');
         brg.className = 'apt-brg';
         row.append(code, name, dist, brg);
+        row.addEventListener('click', () => {
+          this.setDestinationAirport(airport.icao);
+        });
         airportRows.appendChild(row);
         this.airportIndicatorRows.push({ icao: airport.icao, airport, row, dist, brg });
       }
+    }
+    if (this.destinationSelect && this.selectedDestinationIcao) {
+      this.destinationSelect.value = this.selectedDestinationIcao;
     }
     this.emergencyPanel = document.getElementById('emergency-panel');
     this.timeToggleBtn = document.getElementById('time-toggle-btn');
@@ -727,41 +737,27 @@
     if (this.scoreDisplay) this.scoreDisplay.textContent = this.score;
     if (this.paxDisplay) this.paxDisplay.textContent = `${this.passengers}명`;
 
+    // 현재 항공기 진방위(True Heading) 갱신 (PFD 계기판 하단)
+    if (this.headingVal || this.headingCardinal) {
+      const hdg = this.getAircraftHeadingDeg();
+      if (this.headingVal) this.headingVal.textContent = `${String(hdg).padStart(3, '0')}°`;
+      if (this.headingCardinal) this.headingCardinal.textContent = this.getCardinalDirection(hdg);
+    }
+
     const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
     const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
     const s = String(elapsed % 60).padStart(2, '0');
     this.timeDisplay.textContent = `${m}:${s}`;
 
-    let targetPos = new THREE.Vector3(160, this.groundY, 0);
-    let targetLabel = '활주로 36L';
     const nav = window.AirportIndicators;
     const zProgress = Math.min(1.0, Math.max(0, -this.planeGroup.position.z / 45000));
+    const navState = this.getDestinationNavigationState(zProgress);
+    const targetPos = navState.targetPos;
+    this.targetDist.textContent = navState.targetLabel;
 
-    if (this.flightPhase === 'TAXI_OUT') {
-      targetPos = new THREE.Vector3(160, this.groundY, 800);
-      targetLabel = '이륙 활주로 36L (150m)';
-    } else if (this.flightPhase === 'CLIMB_CRUISE' || this.flightPhase === 'TAKEOFF_RUN') {
-      targetPos = new THREE.Vector3(160, this.groundY, -45000);
-      // Compressed world route maps to the real RKPK → RKSI great-circle distance.
-      const remKm = (nav.routeDistanceKm * (1.0 - zProgress)).toFixed(1);
-
-      if (zProgress > 0.96) {
-        const remM = Math.round(nav.routeDistanceKm * (1.0 - zProgress) * 1000);
-        targetLabel = `인천국제공항 16R 착륙 활주로 (${remM}m)`;
-      } else {
-        const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x 배속순항]` : '';
-        targetLabel = `인천국제공항 16R (${remKm}km)${speedTag}`;
-      }
-    } else if (this.flightPhase === 'TAXI_IN' || this.flightPhase === 'DEPLANING' || this.flightPhase === 'MISSION_COMPLETE') {
-      targetPos = new THREE.Vector3(-330, this.groundY, -45000);
-      const gateDistM = Math.round(this.planeGroup.position.distanceTo(targetPos) * 2);
-      targetLabel = `인천공항 T1 탑승교 1번 게이트 (${gateDistM}m)`;
-    }
-    this.targetDist.textContent = targetLabel;
-
-    if (this.airportIndicatorRows && this.airportIndicatorRows.length) {
-      const position = nav.positionAlongRoute(zProgress);
-      const activeIcao = (this.flightPhase === 'CLIMB_CRUISE' || this.flightPhase === 'TAKEOFF_RUN') ? 'RKSI' : 'RKPK';
+    if (nav && this.airportIndicatorRows && this.airportIndicatorRows.length) {
+      const position = navState.position;
+      const activeIcao = navState.activeIcao;
       for (const entry of this.airportIndicatorRows) {
         const indicator = nav.indicatorFrom(position, entry.airport);
         const dist = indicator.distanceKm;
@@ -774,6 +770,121 @@
     this.planeGroup.worldToLocal(localVec);
     const angle = Math.atan2(localVec.x, -localVec.z);
     this.targetArrow.style.transform = `rotate(${angle}rad)`;
+  },
+
+  getAircraftHeadingDeg() {
+    const anchorHeading = (this.geoAnchor && Number.isFinite(this.geoAnchor.headingDeg))
+      ? this.geoAnchor.headingDeg
+      : (typeof window !== 'undefined' && window.GEO_ANCHOR && Number.isFinite(window.GEO_ANCHOR.headingDeg)
+          ? window.GEO_ANCHOR.headingDeg
+          : 353.9);
+    let relDeg = 0;
+    if (this.planeGroup && this.planeGroup.quaternion) {
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+      if (Math.hypot(fwd.x, fwd.z) > 1e-4) {
+        relDeg = Math.atan2(fwd.x, -fwd.z) * (180 / Math.PI);
+      }
+    } else if (Number.isFinite(this.yaw)) {
+      relDeg = -this.yaw * (180 / Math.PI);
+    }
+    const normalized = ((anchorHeading + relDeg) % 360 + 360) % 360;
+    const rounded = Math.round(normalized) % 360;
+    return rounded === 0 ? 360 : rounded;
+  },
+
+  getCardinalDirection(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const idx = Math.round((((deg % 360) + 360) % 360) / 45) % 8;
+    return dirs[idx];
+  },
+
+  setDestinationAirport(icao) {
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const key = (icao || 'RKSI').toUpperCase();
+    const airport = (nav && nav.byIcao && nav.byIcao[key]) ? nav.byIcao[key] : (nav ? nav.destination : null);
+    this.selectedDestinationIcao = airport ? airport.icao : 'RKSI';
+
+    if (this.destinationSelect && this.destinationSelect.value !== this.selectedDestinationIcao) {
+      this.destinationSelect.value = this.selectedDestinationIcao;
+    }
+
+    if (this.airportIndicatorRows && this.airportIndicatorRows.length) {
+      for (const entry of this.airportIndicatorRows) {
+        entry.row.classList.toggle('active', entry.icao === this.selectedDestinationIcao);
+      }
+    }
+
+    if (airport && typeof this.showPopup === 'function') {
+      const pos = this.planeGroup ? this.planeGroup.position : { x: 160, z: 0 };
+      const curLatLon = (typeof window !== 'undefined' && typeof window.geoLocalToLatLon === 'function')
+        ? window.geoLocalToLatLon(pos.x - 160, pos.z)
+        : (nav ? nav.origin : { lat: 35.165, lon: 128.939 });
+      const ind = nav ? nav.indicatorFrom(curLatLon, airport) : null;
+      const info = ind ? ` (${ind.distanceKm.toFixed(0)}km · BRG ${String(Math.round(ind.bearingDeg)).padStart(3, '0')}°)` : '';
+      this.showPopup(`🎯 목적지 설정: ${airport.name} [${airport.iata}]${info}`);
+    }
+    return this.selectedDestinationIcao;
+  },
+
+  getDestinationNavigationState(zProgress) {
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const destIcao = this.selectedDestinationIcao || 'RKSI';
+    const destAirport = (nav && nav.byIcao && nav.byIcao[destIcao]) || (nav ? nav.destination : null);
+    const groundY = this.groundY || 6.84;
+    const pos = this.planeGroup ? this.planeGroup.position : new THREE.Vector3(160, groundY, 0);
+
+    let targetPos = new THREE.Vector3(160, groundY, 0);
+    let targetLabel = '활주로 36L';
+    const isDefaultIncheon = destIcao === 'RKSI';
+
+    // Default RKPK -> RKSI compressed corridor uses positionAlongRoute;
+    // custom destinations use live Gimhae-anchored geodetic coordinates.
+    const position = (isDefaultIncheon || typeof window === 'undefined' || typeof window.geoLocalToLatLon !== 'function')
+      ? (nav ? nav.positionAlongRoute(zProgress) : { lat: 35.165, lon: 128.939 })
+      : window.geoLocalToLatLon(pos.x - 160, pos.z);
+
+    if (this.flightPhase === 'TAXI_OUT') {
+      targetPos = new THREE.Vector3(160, groundY, 800);
+      targetLabel = '이륙 활주로 36L (150m)';
+    } else if (isDefaultIncheon && (this.flightPhase === 'TAXI_IN' || this.flightPhase === 'DEPLANING' || this.flightPhase === 'MISSION_COMPLETE')) {
+      targetPos = new THREE.Vector3(-330, groundY, -45000);
+      const gateDistM = Math.round(pos.distanceTo(targetPos) * 2);
+      targetLabel = `인천공항 T1 탑승교 1번 게이트 (${gateDistM}m)`;
+    } else if (isDefaultIncheon) {
+      targetPos = new THREE.Vector3(160, groundY, -45000);
+      const routeKm = nav ? nav.routeDistanceKm : 339.5;
+      const remKm = (routeKm * (1.0 - zProgress)).toFixed(1);
+      if (zProgress > 0.96) {
+        const remM = Math.round(routeKm * (1.0 - zProgress) * 1000);
+        targetLabel = `인천국제공항 16R 착륙 활주로 (${remM}m)`;
+      } else {
+        const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x 배속순항]` : '';
+        targetLabel = `인천국제공항 16R (${remKm}km)${speedTag}`;
+      }
+    } else if (destIcao === 'RKPK') {
+      targetPos = new THREE.Vector3(160, groundY, 0);
+      const distM = Math.round(Math.hypot(pos.x - 160, pos.z));
+      const distText = distM >= 1000 ? `${(distM / 1000).toFixed(1)}km` : `${distM}m`;
+      const brg = nav ? String(Math.round(nav.bearingDeg(position, destAirport))).padStart(3, '0') : '174';
+      targetLabel = `김해국제공항 36L (${distText} · BRG ${brg}°)`;
+    } else if (destAirport) {
+      if (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function') {
+        const local = window.geoLocalDelta({ lat: destAirport.lat, lon: destAirport.lon, old: { x: 0, z: 0 } }).local;
+        targetPos = new THREE.Vector3(local.x + 160, groundY, local.z);
+      } else {
+        targetPos = new THREE.Vector3(160, groundY, -45000);
+      }
+      const ind = nav ? nav.indicatorFrom(position, destAirport) : { distanceKm: 0, bearingDeg: 0 };
+      const distText = ind.distanceKm < 1
+        ? `${Math.round(ind.distanceKm * 1000)}m`
+        : `${ind.distanceKm.toFixed(1)}km`;
+      const brg = String(Math.round(ind.bearingDeg)).padStart(3, '0');
+      const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x]` : '';
+      targetLabel = `${destAirport.name} (${destAirport.iata} · ${distText} · BRG ${brg}°)${speedTag}`;
+    }
+
+    const activeIcao = (this.flightPhase === 'TAXI_OUT') ? 'RKPK' : destIcao;
+    return { targetPos, targetLabel, activeIcao, position };
   },
 
   // ----------------------------------------------------------------

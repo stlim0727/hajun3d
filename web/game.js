@@ -217,6 +217,13 @@ window.setCameraMode = function(mode) {
   }
 };
 
+window.setDestinationAirport = function(icao) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setDestinationAirport === 'function') {
+    window.airplaneGame.setDestinationAirport(icao);
+  }
+};
+
 window.toggleCameraMenu = function() {
   if (!debounceAction('toggleCameraMenu', 140)) return;
   if (!window.airplaneGame) initGame();

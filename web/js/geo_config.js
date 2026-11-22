@@ -39,3 +39,17 @@ window.geoLocalDelta = function (point) {
     local: { x, z }
   };
 };
+
+// Inverse of geoLocalDelta: maps local game-frame (x, z) back to approximate WGS84 (lat, lon).
+window.geoLocalToLatLon = function (x, z) {
+  const a = window.GEO_ANCHOR;
+  const r = a.headingDeg * Math.PI / 180;
+  const cos = Math.cos(r);
+  const sin = Math.sin(r);
+  const east = x * cos - z * sin;
+  const north = -x * sin - z * cos;
+  const lat = a.lat + north / 110540;
+  const latMid = (a.lat + lat) * 0.5 * Math.PI / 180;
+  const lon = a.lon + east / (111320 * Math.cos(latMid));
+  return { lat, lon };
+};

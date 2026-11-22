@@ -52,9 +52,20 @@
       <span id="target-dist" class="dist-text">활주로 36L (150m)</span>
     </div>
 
-    <!-- Real-world airport distance / true bearing indicators -->
+    <!-- Real-world airport distance / true bearing indicators & destination selector -->
     <div id="airport-indicators" class="airport-indicators glass" aria-label="공항 거리 및 방위 지시기">
-      <div class="airport-indicators-title">AIRPORT INDICATORS <span>TRUE BRG</span></div>
+      <div class="airport-indicators-title">
+        <span>목적지 / AIRPORTS</span>
+        <select id="destination-select" class="dest-select" aria-label="목적지 공항 선택" onchange="window.setDestinationAirport(this.value)">
+          <option value="RKSI" selected>ICN 인천</option>
+          <option value="RKPK">PUS 김해</option>
+          <option value="RKSS">GMP 김포</option>
+          <option value="RKPC">CJU 제주</option>
+          <option value="RKTN">TAE 대구</option>
+          <option value="RKJK">KUV 군산</option>
+          <option value="RJFF">FUK 후쿠오카</option>
+        </select>
+      </div>
       <div id="airport-indicator-rows"></div>
     </div>
 
@@ -87,6 +98,11 @@
             <div class="symbol-dot"></div>
             <div class="symbol-wing right"></div>
           </div>
+        </div>
+        <div class="pfd-heading-readout" title="현재 항공기 진방위 (True Heading)">
+          <span class="hdg-label">HDG</span>
+          <span id="heading-val" class="hdg-value">354°</span>
+          <span id="heading-cardinal" class="hdg-cardinal">N</span>
         </div>
       </div>
 
