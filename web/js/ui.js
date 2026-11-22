@@ -562,9 +562,15 @@
     if (this.jejuAirportGroup) this.jejuAirportGroup.visible = true;
     const streamReady = () => Boolean(this.geoLayer && this.geoLayer.stats && this.geoLayer.stats.tiles > 0);
     if (tilesOn) {
-      setTimeout(() => {
-        if (this.isJejuFlyover && streamReady() && this.jejuAirportGroup) this.jejuAirportGroup.visible = false;
-      }, 4000);
+      const syncFallbackVisibility = () => {
+        if (!this.isJejuFlyover || !this.jejuAirportGroup) return;
+        if (streamReady()) {
+          this.jejuAirportGroup.visible = false;
+        } else {
+          setTimeout(syncFallbackVisibility, 1000);
+        }
+      };
+      syncFallbackVisibility();
     }
     this.showPopup('🏝️ 제주공항 상공 비행 시작! 제주도 경관과 3,000m 활주로를 조망하세요. (Flying over Jeju Airport)');
     this.startJetSound();
