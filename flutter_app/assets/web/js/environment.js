@@ -799,6 +799,7 @@
 
     // 모든 공항, 인천공항, 지형/대양/산맥, 해운대 메트로폴리스를 GLB 모델로 즉각 마운트
     this.loadAllRealGLBModels();
+    this.initJejuAirport();
   },
 
   initCollisionBoxes() {

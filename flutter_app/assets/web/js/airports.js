@@ -7,6 +7,16 @@
   'use strict';
 
   Object.assign(AirplaneGame.prototype, {
+  // 제주공항 상공 비행 (Gimhae-anchored local frame, offline fallback)
+  JEJU_AIRPORT: Object.freeze({ islandRadius: 6200, runwayLength: 3000, fallbackX: -241243, fallbackZ: 157770 }),
+
+  getJejuLocalPosition() {
+    if (typeof window !== 'undefined' && window.geoLocalDelta && window.GEO_POINTS && window.GEO_POINTS.jeju) {
+      return window.geoLocalDelta(window.GEO_POINTS.jeju).local;
+    }
+    return { x: this.JEJU_AIRPORT.fallbackX, z: this.JEJU_AIRPORT.fallbackZ };
+  },
+
   createRunwayAsphaltTexture(repeatY = 380) {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
@@ -630,6 +640,76 @@
 
     this.scene.add(this.airportGroup);
 
+  },
+
+  // ----------------------------------------------------------------
+  // 제주국제공항 & 제주도 지형 (Flying over Jeju Airport scenic mode)
+  // - 지형 스트리밍이 꺼진 빌드에서도 비행 가능한 최소 절차적 경관
+  // ----------------------------------------------------------------
+  initJejuAirport() {
+    const center = this.getJejuLocalPosition();
+    const jx = center.x;
+    const jz = center.z;
+    const { islandRadius, runwayLength } = this.JEJU_AIRPORT;
+    const group = new THREE.Group();
+    group.name = 'jejuAirportGroup';
+
+    const island = new THREE.Mesh(
+      new THREE.CylinderGeometry(islandRadius, islandRadius * 0.86, 10, 64),
+      new THREE.MeshStandardMaterial({ color: 0x4f7942, roughness: 0.92 })
+    );
+    island.position.set(jx, -5, jz);
+    island.receiveShadow = true;
+    group.add(island);
+
+    const shore = new THREE.Mesh(
+      new THREE.CylinderGeometry(islandRadius + 180, islandRadius, 3, 64),
+      new THREE.MeshStandardMaterial({ color: 0xc2b280, roughness: 0.95 })
+    );
+    shore.position.set(jx, -2.2, jz);
+    group.add(shore);
+
+    const hallasan = new THREE.Mesh(
+      new THREE.ConeGeometry(2100, 1050, 36),
+      new THREE.MeshStandardMaterial({ color: 0x527a54, roughness: 0.95, flatShading: true })
+    );
+    hallasan.position.set(jx + 3100, 525, jz - 900);
+    group.add(hallasan);
+
+    const apron = new THREE.Mesh(
+      new THREE.BoxGeometry(620, 4, 2200),
+      new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 })
+    );
+    apron.position.set(jx - 230, -0.25, jz);
+    apron.receiveShadow = true;
+    group.add(apron);
+
+    const whiteMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
+    this.addRunwayVisualDetails(group, jx, jz, runwayLength, whiteMat);
+
+    const terminalGlass = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8, roughness: 0.2, metalness: 0.7,
+      transparent: true, opacity: 0.9
+    });
+    const terminal = new THREE.Mesh(new THREE.BoxGeometry(110, 42, 380), terminalGlass);
+    terminal.position.set(jx - 300, 21, jz);
+    group.add(terminal);
+
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.6 });
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(11, 14, 80, 12), towerMat);
+    tower.position.set(jx - 270, 40, jz + 700);
+    group.add(tower);
+    const towerCab = new THREE.Mesh(new THREE.BoxGeometry(36, 12, 36), terminalGlass);
+    towerCab.position.set(jx - 270, 84, jz + 700);
+    group.add(towerCab);
+
+    this.jejuAirportGroup = group;
+    this.scene.add(group);
   },
 
   // ----------------------------------------------------------------

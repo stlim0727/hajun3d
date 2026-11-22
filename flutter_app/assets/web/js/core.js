@@ -244,6 +244,7 @@ class AirplaneGame {
 
     // 인천공항 스타일 메가 허브 공항, 터미널 버스 및 주기 항공기 시스템
     this.incheonAirportGroup = null;
+    this.jejuAirportGroup = null;
     this.aiAircraft = [];
     this.airportBuses = [];
     this.cruiseMultiplier = 1;

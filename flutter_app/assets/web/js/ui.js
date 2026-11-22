@@ -233,6 +233,7 @@
     };
     toggleNightGroup(this.airportGroup);
     toggleNightGroup(this.destAirportGroup);
+    toggleNightGroup(this.jejuAirportGroup);
 
     // 6. 비행기 객실 창문 야간 골든 글로우 & 항법등 & 프로시저럴 그래픽 텍스처 업데이트
     if (this.updateFuselageTexture) {
@@ -289,6 +290,7 @@
   // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 김해 3200m 활주로 중앙 정렬)
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
+    this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -353,6 +355,7 @@
   // 모드 2: 게이트 탑승 & 유도로 주행 (Full Gate Departure - 1번 게이트 정지선)
   startGateDeparture() {
     this.overlay.classList.add('hidden');
+    this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -416,6 +419,7 @@
   // 시나리오: 해운대 상공 비행 (Haeundae overhead flight)
   startHaeundaeFlight() {
     this.overlay.classList.add('hidden');
+    this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -485,6 +489,84 @@
     this.showPopup(tilesOn
       ? '🌊 해운대 상공 비행 시작! 실제 스트리밍 지형이 표시됩니다. (Flying over Haeundae)'
       : '🌊 해운대 상공 비행 시작! 이 빌드에는 지형 토큰이 없어 기존 절차적 경관이 표시됩니다. (Flying over Haeundae)');
+    this.startJetSound();
+  },
+
+  // 시나리오: 제주공항 상공 비행 (Flying over Jeju Airport)
+  startJejuFlyover() {
+    this.overlay.classList.add('hidden');
+    this.showGateActionPrompt(false);
+    this.isJejuFlyover = true;
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.throttle = 0.78;
+    this.n1 = 86.0;
+    this.targetN1 = 86.0;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
+
+    this.buildAircraft(this.currentPlaneType);
+    const jeju = this.getJejuLocalPosition();
+    this.planeGroup.position.set(jeju.x, 900, jeju.z + 4200);
+    this.yaw = 0;
+    this.pitch = 0;
+    this.roll = 0;
+    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    this.planeGroup.visible = true;
+
+    this.velocity.set(0, 0, -85);
+    this.speed = 1.0;
+    this.groundSpeed = 85;
+    this.verticalSpeed = 0;
+    this.isOnGround = false;
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = '제주공항 상공 비행 (Jeju Flyover)';
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = window.GEO_ION_TOKEN || '';
+      try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    }
+    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    if (this.jejuAirportGroup) this.jejuAirportGroup.visible = true;
+    const streamReady = () => Boolean(this.geoLayer && this.geoLayer.stats && this.geoLayer.stats.tiles > 0);
+    if (tilesOn) {
+      setTimeout(() => {
+        if (this.isJejuFlyover && streamReady() && this.jejuAirportGroup) this.jejuAirportGroup.visible = false;
+      }, 4000);
+    }
+    this.showPopup('🏝️ 제주공항 상공 비행 시작! 제주도 경관과 3,000m 활주로를 조망하세요. (Flying over Jeju Airport)');
     this.startJetSound();
   },
 
@@ -846,7 +928,11 @@
       ? (nav ? nav.positionAlongRoute(zProgress) : { lat: 35.165, lon: 128.939 })
       : window.geoLocalToLatLon(pos.x - 160, pos.z);
 
-    if (this.flightPhase === 'TAXI_OUT') {
+    if (this.isJejuFlyover) {
+      const jeju = this.getJejuLocalPosition();
+      targetPos = new THREE.Vector3(jeju.x, groundY, jeju.z);
+      targetLabel = `제주국제공항 (${Math.round(pos.distanceTo(targetPos))}m)`;
+    } else if (this.flightPhase === 'TAXI_OUT') {
       targetPos = new THREE.Vector3(160, groundY, 800);
       targetLabel = '이륙 활주로 36L (150m)';
     } else if (isDefaultIncheon && (this.flightPhase === 'TAXI_IN' || this.flightPhase === 'DEPLANING' || this.flightPhase === 'MISSION_COMPLETE')) {

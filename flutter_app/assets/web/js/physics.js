@@ -779,6 +779,7 @@
     if (!events || !events.length) return;
     for (const ev of events) {
       if (ev.type === 'liftoff') {
+        if (this.isJejuFlyover) continue; // 공중에서 시작하는 상공 비행은 이륙 콜아웃 없음
         this.isOnGround = false;
         this.flightPhase = 'CLIMB_CRUISE';
         if (this.phaseDisplay) this.phaseDisplay.textContent = '상승 및 순항 비행';

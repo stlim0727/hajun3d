@@ -1301,6 +1301,9 @@
     if (x >= -700 && x <= 700 && z >= -2200 && z <= 2200) return true;
     // 2. 목적지 거대 대륙 육지 전체 (Z <= -28000): 드넓은 대륙 평야 및 육지 공항
     if (z <= -28000 && x >= -25000 && x <= 25000) return true;
+    // 3. 제주공항 섬 (Flying over Jeju Airport)
+    const jeju = this.getJejuLocalPosition ? this.getJejuLocalPosition() : null;
+    if (jeju && Math.hypot(x - jeju.x, z - jeju.z) <= this.JEJU_AIRPORT.islandRadius) return true;
     return false;
   },
 

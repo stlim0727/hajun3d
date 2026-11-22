@@ -118,6 +118,28 @@ window.startHaeundaeFlight = function() {
   }
 };
 
+window.startJejuFlyover = function() {
+  const overlay = document.getElementById('overlay-screen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.style.display = 'none';
+  }
+  const gateAction = document.getElementById('gate-action-container');
+  if (gateAction) gateAction.classList.add('hidden');
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startJejuFlyover();
+    }
+  } catch (err) {
+    console.error('startJejuFlyover error:', err);
+  }
+};
+
 window.toggleEmergencyPanel = function() {
   if (!debounceAction('toggleEmergencyPanel', 180)) return;
   if (!window.airplaneGame) initGame();
