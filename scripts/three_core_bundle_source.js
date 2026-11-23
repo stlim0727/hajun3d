@@ -27,8 +27,11 @@ export function create(options = {}) {
     height = 0,
     azimuth = 0,
     simAnchor = { x: -180, y: 0, z: -28700 },
+    worldAnchor = options.simAnchorBase || simAnchor,
+    simAnchorRender = options.simAnchorRender || simAnchor,
     nearAnchorMaxDepth = 0,
     focusAnchors = [],
+    focusAnchorsRender = options.focusAnchorsRender || focusAnchors,
     scene,
     camera,
     renderer,
@@ -46,12 +49,49 @@ export function create(options = {}) {
   // Korea has no photogrammetric high-LOD tiles; request coarser available levels.
   tiles.errorTarget = 128;
 
+  // Position root tileset in scene simulation space.
   tiles.addEventListener('load-root-tileset', () => {
-    tiles.group.position.x += simAnchor.x;
-    tiles.group.position.y += simAnchor.y;
-    tiles.group.position.z += simAnchor.z;
+    tiles.group.position.x += worldAnchor.x;
+    tiles.group.position.y += worldAnchor.y;
+    tiles.group.position.z += worldAnchor.z;
     tiles.group.updateMatrixWorld();
   });
+
+  // Neutral backing plane and ocean: Google 3D Tiles has coverage gaps, missing LODs,
+  // and steep skirts over Korea. A large backing plane and water prevent sky voids
+  // from showing under the runway or through missing tile boundaries.
+  const fallbackGround = new THREE.Mesh(
+    new THREE.PlaneGeometry(1200000, 1200000),
+    new THREE.MeshStandardMaterial({
+      color: 0x526046,
+      roughness: 0.95,
+      metalness: 0.05,
+      polygonOffset: true,
+      polygonOffsetFactor: 4,
+      polygonOffsetUnits: 4,
+    })
+  );
+  fallbackGround.name = 'GeoFallbackGround';
+  fallbackGround.rotation.x = -Math.PI / 2;
+  fallbackGround.position.set(worldAnchor.x, -2.0, worldAnchor.z);
+  fallbackGround.receiveShadow = true;
+  scene.add(fallbackGround);
+
+  const fallbackWater = new THREE.Mesh(
+    new THREE.PlaneGeometry(1200000, 1200000),
+    new THREE.MeshStandardMaterial({
+      color: 0x1d4e6d,
+      roughness: 0.15,
+      metalness: 0.1,
+      polygonOffset: true,
+      polygonOffsetFactor: 6,
+      polygonOffsetUnits: 6,
+    })
+  );
+  fallbackWater.name = 'GeoFallbackWater';
+  fallbackWater.rotation.x = -Math.PI / 2;
+  fallbackWater.position.set(worldAnchor.x, -3.5, worldAnchor.z);
+  scene.add(fallbackWater);
 
   scene.add(tiles.group);
   tiles.setCamera(camera);
@@ -70,21 +110,33 @@ export function create(options = {}) {
     container.appendChild(credit);
   }
 
-  const renderCameraPos = new THREE.Vector3();
   function update() {
     // GoogleCloudAuthPlugin resets this on init; keep Korean LOD requests available.
     tiles.errorTarget = 128;
-    // core.js translates the scene by -renderOrigin while camera.position stays in
-    // world metres; compare against render-relative anchors in the same frame.
-    renderCameraPos.copy(camera.position);
-    if (scene && scene.position) renderCameraPos.add(scene.position);
+
+    // Both camera.position and simAnchorRender/focusAnchorsRender are in render-space.
+    // Fall back to scene-offset compensation if explicit render anchors are omitted.
+    const activeAnchor = simAnchorRender || (scene && scene.position ? {
+      x: worldAnchor.x + scene.position.x,
+      y: worldAnchor.y + scene.position.y,
+      z: worldAnchor.z + scene.position.z,
+    } : worldAnchor);
+    const activeFocus = focusAnchorsRender && focusAnchorsRender.length > 0
+      ? focusAnchorsRender
+      : (scene && scene.position ? focusAnchors.map(a => ({
+          ...a,
+          x: a.x + scene.position.x,
+          y: (a.y ?? 0) + scene.position.y,
+          z: a.z + scene.position.z,
+        })) : focusAnchors);
+
     // Keep the available parent tiles around Gimhae during ground operations.
-    const nearAnchor = renderCameraPos.y < simAnchor.y + 600 &&
-      Math.hypot(renderCameraPos.x - simAnchor.x, renderCameraPos.z - simAnchor.z) < 6000;
-    const nearFocusAnchor = focusAnchors.some((anchor) => {
+    const nearAnchor = camera.position.y < activeAnchor.y + 600 &&
+      Math.hypot(camera.position.x - activeAnchor.x, camera.position.z - activeAnchor.z) < 6000;
+    const nearFocusAnchor = activeFocus.some((anchor) => {
       const y = anchor.y ?? 0;
-      return renderCameraPos.y < (anchor.maxAltitude ?? y + 600) &&
-        Math.hypot(renderCameraPos.x - anchor.x, renderCameraPos.z - anchor.z) < (anchor.radius ?? 6000);
+      return camera.position.y < (anchor.maxAltitude ?? y + 600) &&
+        Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6000);
     });
     tiles.maxDepth = (nearAnchor || nearFocusAnchor) ? nearAnchorMaxDepth : 0;
     tiles.setResolutionFromRenderer(camera, renderer);
@@ -94,6 +146,16 @@ export function create(options = {}) {
   function dispose() {
     tiles.dispose();
     scene.remove(tiles.group);
+    if (fallbackGround) {
+      scene.remove(fallbackGround);
+      fallbackGround.geometry.dispose();
+      fallbackGround.material.dispose();
+    }
+    if (fallbackWater) {
+      scene.remove(fallbackWater);
+      fallbackWater.geometry.dispose();
+      fallbackWater.material.dispose();
+    }
   }
 
   function debug() {
