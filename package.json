@@ -11,6 +11,7 @@
     "build:info": "node scripts/generate-build-info.mjs",
     "build:geo-tiles": "esbuild scripts/three_core_bundle_source.js --bundle --format=iife --global-name=HajunGeoTiles --outfile=web/js/three_core_bundle.js --target=es2020 --platform=browser && cp web/js/three_core_bundle.js flutter_app/assets/web/js/three_core_bundle.js",
     "wt:new": "node scripts/agent-workflow.mjs wt:new",
+    "tmp:clean": "node scripts/clean-temp-profiles.mjs",
     "audio:departure": "node scripts/build-gemini-departure-radio.mjs",
     "audio:check": "node scripts/build-gemini-departure-radio.mjs --check",
     "screens:capture": "node scripts/capture-all-ui-screens.mjs",
