@@ -140,6 +140,17 @@ window.startJejuFlyover = function() {
   }
 };
 
+window.downloadProblemReport = function() {
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame && typeof window.airplaneGame.downloadProblemReport === 'function') {
+      window.airplaneGame.downloadProblemReport();
+    }
+  } catch (err) {
+    console.error('Problem report error:', err);
+  }
+};
+
 window.toggleEmergencyPanel = function() {
   if (!debounceAction('toggleEmergencyPanel', 180)) return;
   if (!window.airplaneGame) initGame();
