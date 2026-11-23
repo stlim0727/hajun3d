@@ -434,6 +434,39 @@
   },
 
 
+  setupAirborneCruiseState(posX, posY, posZ) {
+    const type = (this.currentPlaneType || 'a320').toLowerCase();
+    const isSmallProp = (type === 'ancestor' || type === 'c172');
+    const isAmphibian = (type === 'amphibian' || type === 'cl215');
+    const cruiseSpeedMs = isSmallProp ? 55 : (isAmphibian ? 75 : 118);
+    const cruisePitchRad = isSmallProp ? 0.05 : (isAmphibian ? 0.09 : 0.078);
+    const cruiseTrimDeg = isSmallProp ? 2.0 : (isAmphibian ? 6.0 : 4.0);
+    const cruiseThrottle = isSmallProp ? 0.70 : (isAmphibian ? 0.65 : 0.58);
+    const cruiseN1 = isSmallProp ? 75.0 : (isAmphibian ? 72.0 : 70.0);
+
+    this.throttle = cruiseThrottle;
+    this.n1 = cruiseN1;
+    this.targetN1 = cruiseN1;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(cruiseThrottle);
+
+    this.planeGroup.position.set(posX, posY, posZ);
+    this.yaw = 0;
+    this.pitch = cruisePitchRad;
+    this.roll = 0;
+    this.pitchTrim = cruiseTrimDeg;
+
+    const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
+    this.planeGroup.quaternion.copy(qYaw).multiply(qPitch);
+    this.planeGroup.visible = true;
+
+    this.velocity.set(0, 0, -cruiseSpeedMs);
+    this.speed = cruiseSpeedMs / 77.777;
+    this.groundSpeed = cruiseSpeedMs;
+    this.verticalSpeed = 0;
+    this.isOnGround = false;
+  },
+
   // 시나리오: 해운대 상공 비행 (Haeundae overhead flight)
   startHaeundaeFlight() {
     this.overlay.classList.add('hidden');
@@ -466,28 +499,13 @@
     this.flapIndex = 0;
     this.spoilerExtended = false;
     this.reverseThrustActive = false;
-    this.throttle = 0.78;
-    this.n1 = 86.0;
-    this.targetN1 = 86.0;
-    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
 
     this.buildAircraft(this.currentPlaneType);
     // Haeundae LCT in the Gimhae-anchored frame; start 800 m south over the sea.
     const haeundae = window.geoLocalDelta
       ? window.geoLocalDelta(window.GEO_POINTS.haeundae).local
       : { x: -180, z: -28700 };
-    this.planeGroup.position.set(haeundae.x, 900, haeundae.z + 800);
-    this.yaw = 0;
-    this.pitch = 0;
-    this.roll = 0;
-    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
-    this.planeGroup.visible = true;
-
-    this.velocity.set(0, 0, -78);
-    this.speed = 1.0;
-    this.groundSpeed = 78;
-    this.verticalSpeed = 0;
-    this.isOnGround = false;
+    this.setupAirborneCruiseState(haeundae.x, 1100, haeundae.z + 800);
     this.flightPhase = 'CLIMB_CRUISE';
     this.phaseDisplay.textContent = '해운대 상공 비행 (Haeundae)';
     this.startTime = Date.now();
@@ -543,25 +561,10 @@
     this.flapIndex = 0;
     this.spoilerExtended = false;
     this.reverseThrustActive = false;
-    this.throttle = 0.78;
-    this.n1 = 86.0;
-    this.targetN1 = 86.0;
-    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
 
     this.buildAircraft(this.currentPlaneType);
     const jeju = this.getJejuLocalPosition();
-    this.planeGroup.position.set(jeju.x, 900, jeju.z + 4200);
-    this.yaw = 0;
-    this.pitch = 0;
-    this.roll = 0;
-    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
-    this.planeGroup.visible = true;
-
-    this.velocity.set(0, 0, -85);
-    this.speed = 1.0;
-    this.groundSpeed = 85;
-    this.verticalSpeed = 0;
-    this.isOnGround = false;
+    this.setupAirborneCruiseState(jeju.x, 1100, jeju.z + 4200);
     this.flightPhase = 'CLIMB_CRUISE';
     this.phaseDisplay.textContent = '제주공항 상공 비행 (Jeju Flyover)';
     this.startTime = Date.now();
@@ -682,27 +685,12 @@
     this.flapIndex = 0;
     this.spoilerExtended = false;
     this.reverseThrustActive = false;
-    this.throttle = 0.78;
-    this.n1 = 86.0;
-    this.targetN1 = 86.0;
-    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
 
     this.buildAircraft(this.currentPlaneType);
     const local = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
       ? window.geoLocalDelta({ lat: place.lat, lon: place.lon, old: { x: 0, z: 0 } }).local
       : { x: 0, z: 0 };
-    this.planeGroup.position.set(local.x, 900 + (Number(place.elevationM) || 0), local.z);
-    this.yaw = 0;
-    this.pitch = 0;
-    this.roll = 0;
-    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
-    this.planeGroup.visible = true;
-
-    this.velocity.set(0, 0, -78);
-    this.speed = 1.0;
-    this.groundSpeed = 78;
-    this.verticalSpeed = 0;
-    this.isOnGround = false;
+    this.setupAirborneCruiseState(local.x, 1100 + (Number(place.elevationM) || 0), local.z);
     this.flightPhase = 'CLIMB_CRUISE';
     this.phaseDisplay.textContent = `${place.name} 상공 비행 (Selected Place)`;
     this.startTime = Date.now();

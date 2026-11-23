@@ -379,6 +379,7 @@
   },
 
   syncTouchThrottleUI(clamped) {
+    if (typeof document === 'undefined') return;
     const pct = Math.round(clamped * 100);
     const throttleReadout = document.getElementById('touch-thr-val');
     if (throttleReadout) {

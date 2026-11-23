@@ -590,6 +590,7 @@
     core.aero.flapsIndex = Math.max(0, Math.min(core.aero.flapAngles.length - 1, this.flapIndex || 0));
     core.aero.currentFlapAngle = core.aero.flapAngles[core.aero.flapsIndex] || 0;
     core.aero.spoilers = this.spoilerExtended ? 1.0 : 0.0;
+    core.aero.pitchTrim = this.pitchTrim || 0;
     core.gear.gearState = this.gearExtended ? 1.0 : 0.0;
     core.gear.targetGearState = this.gearExtended ? 1.0 : 0.0;
     core.engines.setThrottle(this.throttle || 0);
@@ -816,6 +817,13 @@
           this.showPopup('🚨 하드 랜딩 경고 (HARD LANDING)! 기체 및 랜딩 기어 점검이 필요합니다.');
           this.score += 200;
         } else if (landingRating.rating === 'crash') {
+          const isCatastrophic = (ev.sinkRate || 0) > 4.5 || contactG >= 3.2
+            || (this.gearPhase === 'UP' && this.currentEmergency !== 'gear_failure' && (ev.sinkRate || 0) > 2.8)
+            || this.pitch < -0.15 || Math.abs(this.roll) > 0.55;
+          if (isCatastrophic && typeof this.triggerExplosion === 'function') {
+            this.triggerExplosion((ev.sinkRate || 0) > 4.5 ? '과도한 강하율 지면 격돌 추락' : '지면 과충격 파쇄 추락');
+            return;
+          }
           this.showPopup('💥 과도한 충격 접지 (CRASH LANDING)!');
         }
 
@@ -839,11 +847,38 @@
         } else if (typeof this.applyBodyDamageEvent === 'function') {
           this.applyBodyDamageEvent(ev.id, ev.state);
         }
+        if (ev.id === 'nose') {
+          const currentKmh = (this.speed || 0) * 280;
+          if (currentKmh > 55 || Math.abs(this.verticalSpeed || 0) > 3.0 || this.pitch < -0.15) {
+            if (typeof this.triggerExplosion === 'function') {
+              this.triggerExplosion('기수 지면 급강하 격돌 추락');
+              return;
+            }
+          }
+        }
+        if (ev.id === 'wingL' || ev.id === 'wingR') {
+          const currentKmh = (this.speed || 0) * 280;
+          if (currentKmh > 100 && Math.abs(this.roll) > 0.45) {
+            if (typeof this.triggerExplosion === 'function') {
+              this.triggerExplosion('주익 지면 접촉 전복 추락');
+              return;
+            }
+          }
+        }
         if (ev.id === 'belly') this.isBellySliding = true;
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('belly_landing');
         }
       } else if (ev.type === 'bodyContact') {
+        if (ev.id === 'nose') {
+          const currentKmh = (this.speed || 0) * 280;
+          if (currentKmh > 70 || Math.abs(this.verticalSpeed || 0) > 4.0 || this.pitch < -0.20) {
+            if (typeof this.triggerExplosion === 'function') {
+              this.triggerExplosion('기수 지면 급강하 격돌 추락');
+              return;
+            }
+          }
+        }
         if (ev.id === 'tail' && (this.flightPhase === 'TAKEOFF_RUN' || this.isOnGround) && typeof this.recordTakeoffTailstrike === 'function') {
           this.recordTakeoffTailstrike();
         }
@@ -1049,6 +1084,16 @@
       }
       if (this.hasTakeoffTailstrike && !this.tailFinDetached && typeof this.checkTailstrikeAltitudeFailure === 'function') {
         this.checkTailstrikeAltitudeFailure();
+      }
+      if (this.isOnGround && this.isPlaying) {
+        const currentKmh = (this.speed || 0) * 280;
+        const isExtremeAttitude = (this.pitch < -0.45 || Math.abs(this.roll) > 1.35);
+        if (isExtremeAttitude && (currentKmh > 35 || Math.abs(this.verticalSpeed || 0) > 2.0)) {
+          if (typeof this.triggerExplosion === 'function') {
+            this.triggerExplosion('기체 전복 지면 격돌 추락');
+            return;
+          }
+        }
       }
     }
 
@@ -1645,7 +1690,7 @@
       window.speechSynthesis.cancel();
     }
     this.lastSpokenPhrase = null;
-    this.stopGPWSSiren();
+    if (typeof this.stopGPWSSiren === 'function') this.stopGPWSSiren();
   },
 
   // ----------------------------------------------------------------
