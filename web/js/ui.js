@@ -398,6 +398,22 @@
   // 모드 2: 게이트 탑승 & 유도로 주행 (Full Gate Departure - 1번 게이트 정지선)
   startGateDeparture() {
     this.overlay.classList.add('hidden');
+    // If a place is selected from the place selector, start airborne at that place
+    if (this.placeSelect && this.placeSelect.selectedOptions && this.placeSelect.selectedOptions.length > 0) {
+      const option = this.placeSelect.selectedOptions[0];
+      const lat = Number(option.dataset.lat);
+      const lon = Number(option.dataset.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        this.startAtPlace({
+          id: option.value,
+          name: option.textContent || option.value,
+          lat,
+          lon,
+          elevationM: Number(option.dataset.elev) || 0
+        });
+        return;
+      }
+    }
     this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
