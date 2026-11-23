@@ -1,0 +1,46 @@
+{
+  "source": "docs/development/geo-tiles-architecture.md",
+  "attribution": "Cesium ion / Google Photorealistic 3D Tiles — personal, non-commercial use; attribution required",
+  "screens": [
+    {
+      "id": "haeundae_close_3dtiles",
+      "category": "region",
+      "file": "haeundae_close_3dtiles.png",
+      "title_ko": "해운대 근거리 3D Tiles",
+      "title_en": "Haeundae close-range 3D Tiles",
+      "description_ko": "근거리에서는 평면 영상만 표시되어 한국 지역 3D 건물 데이터가 필요함을 보여줍니다.",
+      "description_en": "Close range shows flat imagery only, motivating a Korean 3D building source.",
+      "selector": "ion asset 2275207"
+    },
+    {
+      "id": "haeundae_high_3dtiles",
+      "category": "region",
+      "file": "haeundae_high_3dtiles.png",
+      "title_ko": "해운대 고고도 지형",
+      "title_en": "Haeundae high-altitude terrain",
+      "description_ko": "해안선, 지형 융기, 도시 텍스처가 정상적으로 스트리밍됩니다.",
+      "description_en": "Coastline, relief and city texture stream correctly at altitude.",
+      "selector": "ion asset 2275207"
+    },
+    {
+      "id": "tokyo_control_3dtiles",
+      "category": "control",
+      "file": "tokyo_control_3dtiles.png",
+      "title_ko": "도쿄 대조군 (포토그래메트리)",
+      "title_en": "Tokyo control (photogrammetry)",
+      "description_ko": "동일 파이프라인으로 완전한 3D 건물이 표시되어 데이터 커버리지 문제임을 확인합니다.",
+      "description_en": "Full buildings through the same pipeline confirm a data-coverage gap, not a code defect.",
+      "selector": "ion asset 2275207"
+    },
+    {
+      "id": "seoul_control_3dtiles",
+      "category": "gap",
+      "file": "seoul_control_3dtiles.png",
+      "title_ko": "서울 커버리지 공백",
+      "title_en": "Seoul coverage gap",
+      "description_ko": "한국 전역에서 3D 건물 메시가 없어 평면 영상과 지형만 표시됩니다.",
+      "description_en": "No 3D building meshes across Korea — only flat imagery and terrain.",
+      "selector": "ion asset 2275207"
+    }
+  ]
+}

@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hajun Plane 3D — Terrain Provider Lab</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #0a111c;
+      --surface: #111d2e;
+      --card: #162438;
+      --card-hover: #1c2e47;
+      --border: #24354c;
+      --text: #f0f6fc;
+      --muted: #8b9bb4;
+      --dim: #64748b;
+      --accent: #38bdf8;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+    a { color: var(--accent); }
+    header {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(17, 29, 46, 0.94);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+    }
+    .header-top, .controls, main, footer { max-width: 1500px; margin: 0 auto; }
+    .header-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .back-link {
+      padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--card); text-decoration: none; font-size: .85rem; white-space: nowrap;
+    }
+    h1 { font-size: 1.25rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .badge {
+      font-size: .7rem; font-weight: 600; padding: 3px 9px; border-radius: 99px;
+      background: #1e3a5f; color: #7dd3fc; white-space: nowrap;
+    }
+    .subtitle { color: var(--muted); font-size: .82rem; margin-top: 4px; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 12px; }
+    .control { display: flex; flex-direction: column; gap: 4px; min-width: 210px; }
+    .control label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    select, input[type="search"] {
+      appearance: none; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px;
+      font: inherit; font-size: .86rem; min-height: 38px;
+    }
+    select:focus, input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    main { padding: 22px 28px 40px; display: grid; grid-template-columns: minmax(320px, 460px) 1fr; gap: 24px; align-items: start; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .panel h2 { font-size: 1rem; margin-bottom: 4px; }
+    .panel-note { color: var(--muted); font-size: .78rem; margin-bottom: 14px; }
+    .canvas-wrap { position: relative; width: 100%; aspect-ratio: 1; background: #101927; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; image-rendering: auto; }
+    .canvas-tag {
+      position: absolute; left: 10px; top: 10px; padding: 4px 8px; border-radius: 6px;
+      background: rgba(10, 17, 28, .78); color: var(--muted); font-size: .7rem; pointer-events: none;
+    }
+    .legend { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--muted); font-size: .72rem; }
+    .legend-bar {
+      flex: 1; height: 8px; border-radius: 99px;
+      background: linear-gradient(90deg, #164e63, #22d3ee, #4ade80, #a3a36b, #f8fafc);
+    }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; }
+    .stat span { display: block; color: var(--muted); font-size: .7rem; }
+    .stat strong { font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .status { margin-top: 12px; font-size: .78rem; color: var(--warn); min-height: 1.2em; }
+    .status.ready { color: var(--good); }
+    .gallery-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .gallery-head h2 { font-size: 1rem; }
+    .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill {
+      background: var(--card); border: 1px solid var(--border); color: var(--muted);
+      border-radius: 99px; padding: 5px 11px; cursor: pointer; font: inherit; font-size: .75rem;
+    }
+    .pill.active { color: var(--accent); border-color: var(--accent); background: #1e3a5f; }
+    .search { margin-left: auto; min-width: 190px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+      cursor: pointer; transition: border-color .15s, transform .15s;
+    }
+    .card:hover, .card:focus-visible { border-color: var(--accent); transform: translateY(-2px); }
+    .card img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: var(--surface); }
+    .card-body { padding: 12px; }
+    .card-body .badge { font-size: .62rem; }
+    .card h3 { font-size: .9rem; margin: 8px 0 2px; }
+    .card p { color: var(--muted); font-size: .76rem; }
+    .empty { color: var(--muted); padding: 30px; text-align: center; }
+    footer { padding: 0 28px 30px; color: var(--dim); font-size: .75rem; }
+    .lightbox { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(4, 9, 16, .92); padding: 24px; }
+    .lightbox.active { display: flex; flex-direction: column; }
+    .lightbox-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 12px; }
+    .lightbox-head h3 { font-size: 1.05rem; }
+    .lightbox-head p { color: var(--muted); font-size: .8rem; }
+    .lightbox-actions { display: flex; gap: 8px; }
+    .lightbox-actions a, .lightbox-actions button, .nav-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit; text-decoration: none;
+    }
+    .lightbox-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .lightbox-stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      .control { min-width: 150px; flex: 1; }
+      .search { margin-left: 0; width: 100%; }
+      header, main, footer { padding-left: 14px; padding-right: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <a class="back-link" href="./index.html">← Hajun Plane 3D</a>
+      <div>
+        <h1>Terrain Provider Lab <span class="badge" id="capture-count">0 captures</span></h1>
+        <div class="subtitle">Live Terrarium DEM inspector + streamed-terrain evidence gallery</div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="control">
+        <label for="region-select">Region / anchor</label>
+        <select id="region-select"></select>
+      </div>
+      <div class="control">
+        <label for="altitude-select">Aircraft altitude</label>
+        <select id="altitude-select">
+          <option value="0">0 m — ground</option>
+          <option value="500">500 m</option>
+          <option value="1500" selected>1,500 m</option>
+          <option value="5000">5,000 m</option>
+          <option value="10000">10,000 m</option>
+        </select>
+      </div>
+      <div class="control">
+        <label for="options-select">Provider options</label>
+        <select id="options-select">
+          <option value="balanced" selected>Balanced — z11, 24 tiles, 3×3</option>
+          <option value="wide">Wide — z11, 48 tiles, 5×5</option>
+          <option value="coarse">Coarse — z9, 16 tiles, 3×3</option>
+          <option value="airport">Airport flat zones — z11, 3×3</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" aria-labelledby="inspector-title">
+      <h2 id="inspector-title">Live DEM inspector</h2>
+      <p class="panel-note">
+        <code>terrain_provider.js</code> + <code>tile_engine.js</code> sampling AWS Terrarium tiles.
+        Center crosshair is the selected region; altitude drives the AGL readout.
+      </p>
+      <div class="canvas-wrap">
+        <canvas id="terrain-canvas" width="72" height="72" aria-label="Terrain elevation map"></canvas>
+        <div class="canvas-tag" id="canvas-tag">loading…</div>
+      </div>
+      <div class="legend"><span>Low</span><div class="legend-bar"></div><span>High</span></div>
+      <div class="stats" id="stats"></div>
+      <div class="status" id="status" role="status"></div>
+    </section>
+
+    <section aria-labelledby="gallery-title">
+      <div class="gallery-head">
+        <h2 id="gallery-title">Streamed terrain captures</h2>
+        <div class="filter-pills" id="filters">
+          <button class="pill active" data-category="all" type="button">All</button>
+          <button class="pill" data-category="region" type="button">Region</button>
+          <button class="pill" data-category="control" type="button">Control</button>
+          <button class="pill" data-category="gap" type="button">Coverage gap</button>
+        </div>
+        <input class="search" id="search" type="search" placeholder="Search captures…" autocomplete="off" aria-label="Search captures">
+      </div>
+      <div class="grid" id="grid"></div>
+    </section>
+  </main>
+
+  <footer>
+    Terrarium elevation: AWS Open Data · 3D Tiles captures: Cesium ion / Google (personal, non-commercial; attribution required).
+  </footer>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="lightbox-head">
+      <div><h3 id="lightbox-title"></h3><p id="lightbox-desc"></p></div>
+      <div class="lightbox-actions">
+        <a id="lightbox-raw" href="#" target="_blank" rel="noopener" title="Open image">↗</a>
+        <button id="lightbox-close" type="button" title="Close (Esc)">✕</button>
+      </div>
+    </div>
+    <div class="lightbox-stage">
+      <button class="nav-btn" id="lightbox-prev" type="button" aria-label="Previous">‹</button>
+      <img id="lightbox-img" alt="Terrain capture preview">
+      <button class="nav-btn" id="lightbox-next" type="button" aria-label="Next">›</button>
+    </div>
+  </div>
+
+  <script src="js/geodesy.js"></script>
+  <script src="js/geo_config.js"></script>
+  <script src="js/airport_indicators.js"></script>
+  <script src="js/three_core_bundle.js"></script>
+  <script src="js/flightsim_core_bundle.js"></script>
+  <script src="js/tile_engine.js"></script>
+  <script src="js/terrain_provider.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const CATALOG_URL = 'screenshots/geo-tiles-eval/catalog.json';
+      const IMAGE_BASE = 'screenshots/geo-tiles-eval/';
+      const FALLBACK_SCREENS = [
+        {
+          id: 'haeundae_close_3dtiles', category: 'region', file: 'haeundae_close_3dtiles.png',
+          title_ko: '해운대 근거리 3D Tiles', title_en: 'Haeundae close-range 3D Tiles',
+          description_ko: '근거리에서는 평면 영상만 표시되어 한국 지역 3D 건물 데이터가 필요함을 보여줍니다.',
+          description_en: 'Close range shows flat imagery only, motivating a Korean 3D building source.',
+          selector: 'ion asset 2275207'
+        },
+        {
+          id: 'haeundae_high_3dtiles', category: 'region', file: 'haeundae_high_3dtiles.png',
+          title_ko: '해운대 고고도 지형', title_en: 'Haeundae high-altitude terrain',
+          description_ko: '해안선, 지형 융기, 도시 텍스처가 정상적으로 스트리밍됩니다.',
+          description_en: 'Coastline, relief and city texture stream correctly at altitude.',
+          selector: 'ion asset 2275207'
+        },
+        {
+          id: 'tokyo_control_3dtiles', category: 'control', file: 'tokyo_control_3dtiles.png',
+          title_ko: '도쿄 대조군 (포토그래메트리)', title_en: 'Tokyo control (photogrammetry)',
+          description_ko: '동일 파이프라인으로 완전한 3D 건물이 표시되어 데이터 커버리지 문제임을 확인합니다.',
+          description_en: 'Full buildings through the same pipeline confirm a data-coverage gap, not a code defect.',
+          selector: 'ion asset 2275207'
+        },
+        {
+          id: 'seoul_control_3dtiles', category: 'gap', file: 'seoul_control_3dtiles.png',
+          title_ko: '서울 커버리지 공백', title_en: 'Seoul coverage gap',
+          description_ko: '한국 전역에서 3D 건물 메시가 없어 평과 지형만 표시됩니다.',
+          description_en: 'No 3D building meshes across Korea — only flat imagery and terrain.',
+          selector: 'ion asset 2275207'
+        }
+      ];
+
+      const PRESETS = {
+        balanced: { zoom: 11, maxTiles: 24, prefetchRadius: 1, flatZones: [] },
+        wide: { zoom: 11, maxTiles: 48, prefetchRadius: 2, flatZones: [] },
+        coarse: { zoom: 9, maxTiles: 16, prefetchRadius: 1, flatZones: [] },
+        airport: {
+          zoom: 11, maxTiles: 24, prefetchRadius: 1,
+          flatZones: [{ minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 }]
+        }
+      };
+      const GRID = 72;
+      const escapeHtml = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
+
+      let screens = FALLBACK_SCREENS.slice();
+      let visibleScreens = screens.slice();
+      let activeSlide = 0;
+      let provider = null;
+      let engine = null;
+      let timer = null;
+      let ticks = 0;
+      let missing = 0;
+
+      function buildRegions() {
+        const select = document.getElementById('region-select');
+        const options = [];
+        const airports = window.AirportIndicators && window.AirportIndicators.airports;
+        if (Array.isArray(airports)) {
+          for (const airport of airports) {
+            options.push({ id: airport.icao, label: `${airport.icao} ${airport.short} · ${airport.name}`, lat: airport.lat, lon: airport.lon });
+          }
+        }
+        const points = window.GEO_POINTS || {};
+        for (const [name, point] of Object.entries(points)) {
+          options.push({ id: name, label: `${name} landmark · ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}`, lat: point.lat, lon: point.lon });
+        }
+        if (!options.length) {
+          options.push({ id: 'gimhae', label: 'Gimhae RKPK', lat: 35.165199, lon: 128.938995 });
+        }
+        for (const option of options) {
+          const el = document.createElement('option');
+          el.value = option.id;
+          el.textContent = option.label;
+          select.appendChild(el);
+        }
+        select.value = options[0].id;
+      }
+
+      function currentRegion() {
+        const id = document.getElementById('region-select').value;
+        const airports = window.AirportIndicators && window.AirportIndicators.airports;
+        const airport = Array.isArray(airports) && airports.find((a) => a.icao === id);
+        if (airport) return { lat: airport.lat, lon: airport.lon };
+        const point = (window.GEO_POINTS || {})[id];
+        if (point) return { lat: point.lat, lon: point.lon };
+        return { lat: 35.165199, lon: 128.938995 };
+      }
+
+      function elevationColor(height, min, max) {
+        if (!Number.isFinite(height)) return [23, 34, 52];
+        const t = max > min ? Math.max(0, Math.min(1, (height - min) / (max - min))) : 0.5;
+        const stops = [
+          [0, [22, 78, 99]], [0.25, [34, 211, 238]], [0.5, [74, 222, 128]],
+          [0.75, [163, 163, 107]], [1, [248, 250, 252]]
+        ];
+        for (let i = 1; i < stops.length; i++) {
+          if (t <= stops[i][0]) {
+            const [p0, c0] = stops[i - 1];
+            const [p1, c1] = stops[i];
+            const f = (t - p0) / (p1 - p0);
+            return c0.map((value, idx) => Math.round(value + (c1[idx] - value) * f));
+          }
+        }
+        return stops[stops.length - 1][1];
+      }
+
+      function drawTerrain(heights, min, max) {
+        const canvas = document.getElementById('terrain-canvas');
+        const ctx = canvas.getContext('2d');
+        const image = ctx.createImageData(GRID, GRID);
+        for (let i = 0; i < heights.length; i++) {
+          const color = elevationColor(heights[i], min, max);
+          image.data[i * 4] = color[0];
+          image.data[i * 4 + 1] = color[1];
+          image.data[i * 4 + 2] = color[2];
+          image.data[i * 4 + 3] = 255;
+        }
+        ctx.putImageData(image, 0, 0);
+        ctx.strokeStyle = 'rgba(255,255,255,.75)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(GRID / 2, 0); ctx.lineTo(GRID / 2, GRID);
+        ctx.moveTo(0, GRID / 2); ctx.lineTo(GRID, GRID / 2);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = '7px sans-serif';
+        ctx.fillText('N', GRID / 2 + 3, 9);
+      }
+
+      function updateStats(centerHeight, preset) {
+        const engineStats = engine && typeof engine.stats === 'function' ? engine.stats() : {};
+        const altitude = Number(document.getElementById('altitude-select').value);
+        const agl = Number.isFinite(centerHeight) ? altitude - centerHeight : null;
+        const region = currentRegion();
+        const rows = [
+          ['Region', `${region.lat.toFixed(4)}, ${region.lon.toFixed(4)}`],
+          ['Provider', provider ? provider.kind || 'terrarium' : '—'],
+          ['Zoom / tiles', `${preset.zoom} / ${engineStats.tiles ?? 0}`],
+          ['Cache', `${((engineStats.bytes || 0) / 1048576).toFixed(1)} MiB`],
+          ['Center MSL', Number.isFinite(centerHeight) ? `${centerHeight.toFixed(1)} m` : 'loading…'],
+          ['Altitude / AGL', `${altitude} m / ${agl === null ? '—' : agl.toFixed(1) + ' m'}`],
+          ['Hits / misses', `${engineStats.hits ?? 0} / ${engineStats.misses ?? 0}`],
+          ['Evictions / errors', `${engineStats.evictions ?? 0} / ${engineStats.errors ?? 0}`]
+        ];
+        document.getElementById('stats').innerHTML = rows.map(([label, value]) =>
+          `<div class="stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
+        ).join('');
+        const status = document.getElementById('status');
+        const ready = missing === 0;
+        status.classList.toggle('ready', ready);
+        status.textContent = ready ? 'Ready — sampled tiles are cached.' : `Loading ${missing} uncovered samples…`;
+      }
+
+      function sample() {
+        if (!provider) return;
+        const preset = PRESETS[document.getElementById('options-select').value];
+        const altitude = Number(document.getElementById('altitude-select').value);
+        provider.update({ x: 0, y: altitude, z: 0 });
+        const span = 12000 * 2 ** (11 - preset.zoom);
+        const heights = new Array(GRID * GRID);
+        let min = Infinity;
+        let max = -Infinity;
+        missing = 0;
+        for (let row = 0; row < GRID; row++) {
+          const z = (row / (GRID - 1) - 0.5) * span;
+          for (let col = 0; col < GRID; col++) {
+            const x = (col / (GRID - 1) - 0.5) * span;
+            const height = provider.getHeight(x, z);
+            heights[row * GRID + col] = height;
+            if (Number.isFinite(height)) {
+              min = Math.min(min, height);
+              max = Math.max(max, height);
+            } else {
+              missing++;
+            }
+          }
+        }
+        drawTerrain(heights, min, max);
+        const centerHeight = provider.getHeight(0, 0);
+        updateStats(centerHeight, preset);
+        document.getElementById('canvas-tag').textContent = `${(span / 1000).toFixed(1)} km span · ${preset.zoom}`;
+        ticks++;
+        if (ticks < 60 && (missing > 0 || ticks < 4)) timer = setTimeout(sample, 250);
+      }
+
+      function rebuild() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (provider && typeof provider.dispose === 'function') provider.dispose();
+        provider = null;
+        engine = null;
+        ticks = 0;
+        missing = 0;
+        const TP = window.TerrainProvider;
+        const region = currentRegion();
+        const presetName = document.getElementById('options-select').value;
+        const preset = PRESETS[presetName];
+        const status = document.getElementById('status');
+        if (!TP || !window.Geodesy || !window.FlightSimCore) {
+          status.textContent = 'Terrain provider modules are unavailable.';
+          return;
+        }
+        const anchor = {
+          lat: region.lat, lon: region.lon,
+          headingDeg: (window.GEO_ANCHOR && window.GEO_ANCHOR.headingDeg) || 0,
+          height: 0
+        };
+        const loader = TP.createBrowserTileLoader();
+        engine = loader.engine || null;
+        provider = TP.createExactFrameTerrariumProvider(Object.assign({
+          anchor, simOffset: { x: 0, z: 0 }, loadTile: loader
+        }, preset));
+        if (engine && typeof engine.setCamera === 'function') engine.setCamera(region.lat, region.lon, preset.zoom);
+        status.textContent = 'Requesting terrain tiles…';
+        sample();
+      }
+
+      function renderGrid() {
+        const grid = document.getElementById('grid');
+        const query = document.getElementById('search').value.trim().toLowerCase();
+        const category = document.querySelector('.pill.active').dataset.category;
+        visibleScreens = screens.filter((screen) => {
+          const matchesCategory = category === 'all' || screen.category === category;
+          const matchesQuery = !query || [screen.title_ko, screen.title_en, screen.description_ko, screen.description_en, screen.file]
+            .some((value) => value && value.toLowerCase().includes(query));
+          return matchesCategory && matchesQuery;
+        });
+        document.getElementById('capture-count').textContent = `${visibleScreens.length}/${screens.length} captures`;
+        if (!visibleScreens.length) {
+          grid.innerHTML = '<div class="empty">No matching captures.</div>';
+          return;
+        }
+        grid.innerHTML = visibleScreens.map((screen, index) => `
+          <article class="card" tabindex="0" data-index="${index}">
+            <img src="${escapeHtml(IMAGE_BASE + screen.file)}" alt="${escapeHtml(screen.title_en)}" loading="lazy">
+            <div class="card-body">
+              <span class="badge">${escapeHtml(screen.category)}</span>
+              <h3>${escapeHtml(screen.title_ko)}</h3>
+              <p>${escapeHtml(screen.description_ko)}</p>
+            </div>
+          </article>
+        `).join('');
+        for (const card of grid.querySelectorAll('.card')) {
+          const open = () => openLightbox(Number(card.dataset.index));
+          card.addEventListener('click', open);
+          card.addEventListener('keydown', (event) => { if (event.key === 'Enter') open(); });
+        }
+      }
+
+      function openLightbox(index) {
+        if (index < 0 || index >= visibleScreens.length) return;
+        activeSlide = index;
+        const screen = visibleScreens[index];
+        const src = IMAGE_BASE + screen.file;
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox-title').textContent = screen.title_ko;
+        document.getElementById('lightbox-desc').textContent = `${screen.title_en} — ${screen.description_en}`;
+        document.getElementById('lightbox-raw').href = src;
+        document.getElementById('lightbox').classList.add('active');
+        document.getElementById('lightbox').setAttribute('aria-hidden', 'false');
+      }
+
+      function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+        document.getElementById('lightbox').setAttribute('aria-hidden', 'true');
+      }
+
+      function bindGallery() {
+        for (const pill of document.querySelectorAll('.pill')) {
+          pill.addEventListener('click', () => {
+            for (const other of document.querySelectorAll('.pill')) other.classList.remove('active');
+            pill.classList.add('active');
+            renderGrid();
+          });
+        }
+        document.getElementById('search').addEventListener('input', renderGrid);
+        document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+        document.getElementById('lightbox-prev').addEventListener('click', () => openLightbox((activeSlide - 1 + visibleScreens.length) % visibleScreens.length));
+        document.getElementById('lightbox-next').addEventListener('click', () => openLightbox((activeSlide + 1) % visibleScreens.length));
+        window.addEventListener('keydown', (event) => {
+          const lightbox = document.getElementById('lightbox');
+          if (!lightbox.classList.contains('active')) return;
+          if (event.key === 'Escape') closeLightbox();
+          else if (event.key === 'ArrowLeft') openLightbox((activeSlide - 1 + visibleScreens.length) % visibleScreens.length);
+          else if (event.key === 'ArrowRight') openLightbox((activeSlide + 1) % visibleScreens.length);
+        });
+      }
+
+      async function loadCatalog() {
+        try {
+          const response = await fetch(CATALOG_URL);
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data.screens) && data.screens.length) screens = data.screens;
+          }
+        } catch (_) {
+          // Embedded fallback covers file:// and offline use.
+        }
+        renderGrid();
+      }
+
+      buildRegions();
+      bindGallery();
+      loadCatalog();
+      document.getElementById('region-select').addEventListener('change', rebuild);
+      document.getElementById('options-select').addEventListener('change', rebuild);
+      document.getElementById('altitude-select').addEventListener('change', () => {
+        if (provider) { ticks = 0; sample(); }
+      });
+      if (window.TerrainProvider) rebuild();
+      else document.getElementById('status').textContent = 'Terrain provider modules failed to load.';
+    })();
+  </script>
+</body>
+</html>
