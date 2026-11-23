@@ -112,3 +112,10 @@ test('HajunGeoTiles update compares camera against render-frame anchors without 
 
   layer.dispose();
 });
+
+test('three_core_bundle embeds a single unified Three.js instance with no duplicate three.core.js', () => {
+  const bundleSrc = readFileSync('web/js/three_core_bundle.js', 'utf8');
+  const coreMatches = bundleSrc.match(/\/\/ .*three\/build\/three\.core\.js/g) || [];
+  assert.equal(coreMatches.length, 1, `Expected exactly 1 three.core.js in bundle, found ${coreMatches.length}: ${coreMatches.join(', ')}`);
+  assert.ok(!bundleSrc.includes('var REVISION2 ='), 'Bundle must not contain duplicate Three.js REVISION2');
+});
