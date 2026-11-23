@@ -119,3 +119,58 @@ test('three_core_bundle embeds a single unified Three.js instance with no duplic
   assert.equal(coreMatches.length, 1, `Expected exactly 1 three.core.js in bundle, found ${coreMatches.length}: ${coreMatches.join(', ')}`);
   assert.ok(!bundleSrc.includes('var REVISION2 ='), 'Bundle must not contain duplicate Three.js REVISION2');
 });
+
+test('HajunGeoTiles.update refreshes scene and camera world matrices after floating-origin shift following camera.lookAt', () => {
+  const { HajunGeoTiles, THREE } = loadTiles();
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(72, 384 / 646, 1.2, 70000);
+  const renderer = {
+    getPixelRatio: () => 1,
+    getDrawingBufferSize: (v) => v.set(384, 646),
+    getSize: (v) => v.set(384, 646),
+  };
+
+  const worldAnchor = { x: 160, y: 0, z: 1600 };
+  const layer = HajunGeoTiles.create({
+    ionToken: 'test-token',
+    lat: 35.165199,
+    lon: 128.938995,
+    height: 33.25,
+    azimuth: 173.9,
+    simAnchor: worldAnchor,
+    worldAnchor,
+    nearAnchorMaxDepth: 17,
+    scene,
+    camera,
+    renderer,
+  });
+
+  // Simulate updateCameraFromPhysics() calling camera.lookAt() in world space,
+  // which bakes world-space position into camera.matrixWorld / matrixWorldInverse.
+  camera.position.set(160, 111.5, -1061);
+  camera.lookAt(160, 113.5, -1150);
+  assert.equal(Math.round(camera.matrixWorld.elements[14]), -1061);
+
+  // Simulate applyFloatingOrigin() shifting scene and camera into render space.
+  scene.position.set(-160, -109, 1110);
+  camera.position.set(0, 2.5, 49);
+
+  // layer.update() must refresh world matrices before TilesRenderer traversal.
+  layer.update();
+
+  assert.ok(Math.abs(camera.matrixWorld.elements[12] - 0) < 1e-6);
+  assert.ok(Math.abs(camera.matrixWorld.elements[13] - 2.5) < 1e-6);
+  assert.ok(Math.abs(camera.matrixWorld.elements[14] - 49) < 1e-6);
+
+  const tilesGroup = scene.children.find((c) => c && c.isTilesGroup);
+  assert.ok(tilesGroup, 'TilesGroup should be in scene');
+  assert.ok(Math.abs(tilesGroup.matrixWorld.elements[14] - 1110) < 1e-6);
+
+  const coreSrc = readFileSync('web/js/core.js', 'utf8');
+  const applyStart = coreSrc.indexOf('applyFloatingOrigin() {');
+  const applySlice = coreSrc.slice(applyStart, applyStart + 1800);
+  assert.ok(applySlice.includes('this.scene.updateMatrixWorld()'), 'applyFloatingOrigin must refresh scene.matrixWorld');
+  assert.ok(applySlice.includes('this.camera.updateMatrixWorld()'), 'applyFloatingOrigin must refresh camera.matrixWorld');
+
+  layer.dispose();
+});

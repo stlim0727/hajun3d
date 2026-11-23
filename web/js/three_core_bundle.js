@@ -53254,6 +53254,8 @@ void main() {
         return camera.position.y < (anchor.maxAltitude ?? y2 + 600) && Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6e3);
       });
       tiles.maxDepth = nearAnchor || nearFocusAnchor ? nearAnchorMaxDepth : 0;
+      if (scene && typeof scene.updateMatrixWorld === "function") scene.updateMatrixWorld();
+      if (camera && typeof camera.updateMatrixWorld === "function") camera.updateMatrixWorld();
       tiles.setResolutionFromRenderer(camera, renderer);
       tiles.update();
     }

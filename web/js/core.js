@@ -673,6 +673,17 @@ class AirplaneGame {
         render.z = base.z - this.renderOrigin.z;
       }
     }
+    // Sync scene & camera world matrices immediately after floating-origin shift.
+    // updateCameraFromPhysics() calls camera.lookAt() in world space, which bakes
+    // world-space coordinates into camera.matrixWorld / matrixWorldInverse; without
+    // refreshing here, TilesRenderer.prepareForTraversal() sees a 2x-shifted frustum
+    // and culls foreground 3D tiles prematurely.
+    if (this.scene && typeof this.scene.updateMatrixWorld === 'function') {
+      this.scene.updateMatrixWorld();
+    }
+    if (this.camera && typeof this.camera.updateMatrixWorld === 'function') {
+      this.camera.updateMatrixWorld();
+    }
   }
 
   // ----------------------------------------------------------------
