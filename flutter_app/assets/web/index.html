@@ -831,18 +831,6 @@
             <option value="ancestor">1903 조상 비행기</option>
           </select>
         </label>
-        <label class="setup-field">
-          <span class="setup-label">스킨</span>
-          <select id="skin-select" aria-label="항공사 스킨 선택" onchange="window.setAirlineSkin(this.value)">
-            <option value="default">기본 스카이젯</option>
-            <option value="jeju" selected>제주항공</option>
-            <option value="jin">진에어</option>
-            <option value="eastar">이스타항공</option>
-            <option value="korean">대한항공</option>
-            <option value="asiana">아시아나항공</option>
-            <option value="tway">티웨이항공</option>
-          </select>
-        </label>
       </div>
 
       <p class="lobby-hint">
@@ -853,10 +841,11 @@
       <div class="modal-actions lobby-actions">
         <button id="takeoff-direct-btn" class="btn-primary lobby-primary" type="button" onclick="window.startDirectTakeoff()">🛫 비행 시작</button>
         <button id="start-btn" class="btn-secondary lobby-secondary" type="button" onclick="window.startGateDeparture()">🏢 게이트 탑승 & 유도로 주행하기</button>
+        <button id="place-picker-btn" class="btn-secondary lobby-secondary" type="button" onclick="window.openPlacePicker()">📍 장소 선택 비행</button>
       </div>
 
       <details class="lobby-more">
-        <summary>기종 전체 보기 · 다른 비행 모드 · 설정</summary>
+        <summary>기종 · 스킨 전체 보기 · 다른 비행 모드 · 설정</summary>
         <div class="lobby-more-body">
           <div class="plane-selector-box">
             <label class="plane-select-label">조종할 제트 여객기 선택</label>
@@ -933,7 +922,6 @@
           <div class="modal-actions lobby-extra-actions">
             <button id="haeundae-flight-btn" class="btn-secondary" type="button" onclick="window.startHaeundaeFlight()">🌊 해운대 상공 비행</button>
             <button id="jeju-flyover-btn" class="btn-secondary" type="button" onclick="window.startJejuFlyover()">🏝️ 제주공항 상공 비행</button>
-            <button id="place-picker-btn" class="btn-secondary" type="button" onclick="window.openPlacePicker()">📍 장소 선택 비행</button>
             <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()">🔍 3D GLB 모델 갤러리</button>
             <button id="glb-import-btn" class="btn-secondary" type="button" onclick="window.triggerGLBFileSelect()">📦 커스텀 GLB 불러오기</button>
             <button id="problem-report-btn" class="btn-secondary" type="button" onclick="window.downloadProblemReport()">🧾 문제 보고서 다운로드</button>
