@@ -4174,6 +4174,7 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 
 /* Selectable spawn-place picker (interim Gimhae-frame presets) */
 .place-picker-panel {
+  z-index: 1250 !important;
   border-color: rgba(56, 189, 248, 0.45);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2);
 }

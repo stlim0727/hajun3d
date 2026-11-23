@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sky Explorer 3D - 3D 비행기 게임</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261123a">
   <!-- Unified Three.js + GLTF/GLB pipeline + optional 3D Tiles (offline-safe local bundle) -->
   <script src="js/geo_config.js?v=20261122a"></script>
   <script src="js/airport_indicators.js?v=20261122a"></script>
@@ -419,18 +419,6 @@
       </div>
     </div>
 
-    <!-- Selectable spawn-place picker (interim presets in the Gimhae-anchored frame) -->
-    <div id="place-picker-panel" class="emergency-panel glass hidden place-picker-panel">
-      <div class="emergency-panel-header">
-        <span class="emergency-title">📍 장소 선택 비행 (SELECT PLACE)</span>
-        <button id="place-picker-close-btn" class="close-btn" type="button" onclick="window.closePlacePicker()">✕</button>
-      </div>
-      <select id="place-select" class="place-picker-select" aria-label="비행 시작 장소 선택"></select>
-      <div id="place-coords" class="place-picker-coords">—</div>
-      <p class="place-picker-note">김해 기준 프레임에 고정된 프리셋입니다. 먼 지역은 지형·거리 정밀도가 낮아질 수 있습니다.</p>
-      <button id="place-picker-start-btn" class="btn-secondary" type="button" onclick="window.startAtSelectedPlace()">✈️ 선택한 장소 상공에서 시작</button>
-    </div>
-
     <!-- GLB 3D Model Control Modal Panel -->
     <div id="glb-modal" class="glb-modal glass hidden">
       <div class="glb-modal-header">
@@ -807,6 +795,17 @@
       </div>
     </div>
   </div>
+  <!-- Selectable spawn-place picker (interim presets in the Gimhae-anchored frame) -->
+  <div id="place-picker-panel" class="emergency-panel glass hidden place-picker-panel">
+    <div class="emergency-panel-header">
+      <span class="emergency-title">📍 장소 선택 비행 (SELECT PLACE)</span>
+      <button id="place-picker-close-btn" class="close-btn" type="button" onclick="window.closePlacePicker()">✕</button>
+    </div>
+    <select id="place-select" class="place-picker-select" aria-label="비행 시작 장소 선택"></select>
+    <div id="place-coords" class="place-picker-coords">—</div>
+    <p class="place-picker-note">김해 기준 프레임에 고정된 프리셋입니다. 먼 지역은 지형·거리 정밀도가 낮아질 수 있습니다.</p>
+    <button id="place-picker-start-btn" class="btn-secondary" type="button" onclick="window.startAtSelectedPlace()">✈️ 선택한 장소 상공에서 시작</button>
+  </div>
 
   <!-- Start / Game Over Modal -->
   <div id="overlay-screen" class="overlay">
@@ -1008,10 +1007,10 @@
   <script src="js/input.js"></script>
   <script src="js/emergency.js"></script>
   <script src="js/speech.js"></script>
-  <script src="js/ui.js?v=20261122e"></script>
+  <script src="js/ui.js?v=20261123a"></script>
   <script src="js/build_info.js"></script>
   <script src="js/build_info_ui.js"></script>
-  <script src="game.js?v=20261122a"></script>
+  <script src="game.js?v=20261123a"></script>
   <script>
     window.addEventListener('load', () => {
       const p = new URLSearchParams(window.location.search);
