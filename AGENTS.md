@@ -58,6 +58,3 @@ npm test
   - `logarithmicDepthBuffer: false` is maintained for hardware Early-Z culling.
   - Near camera clipping is $1.2\text{m}$, Far clipping is $70,000\text{m}$.
   - Zero-GC particle pooling and 2-frame HUD update throttling must be preserved.
-- **Flutter WebView & Offline Bundle Compatibility**:
-  - `web/glb_bundle.js` enables zero-CORS local `file://` playback on mobile WebView.
-  - Never add external network CDN dependencies without fallback.
