@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from '
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT_FILES = ['index.html', 'glb-viewer.html', 'style.css', 'game.js', 'glb_bundle.js'];
+const ROOT_FILES = ['index.html', 'glb-viewer.html', 'style.css', 'game.js', 'glb_bundle.js', 'tile_decode_worker.js'];
 export const DYNAMIC_FILES = new Set(['js/build_info.js']);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

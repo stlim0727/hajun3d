@@ -141,6 +141,18 @@ still maps compressed `z` onto the great circle and keeps its mesh endpoints at
 distance/bearing, from-destination and landing phase thresholds now read this
 model, so raw `z` is only a fallback when the module is unavailable.
 
+## Terrain tile engine
+
+`web/js/tile_engine.js` sits between `terrain_provider.js` and the Terrarium
+HTTP source. It bounds RGBA cache bytes (32 MiB default), deduplicates
+in-flight tile requests, caps concurrent decodes at four, and orders queued
+tiles by distance to the camera tile. `web/tile_decode_worker.js` performs
+PNG→RGBA decode off the main thread; if Workers are unavailable or fail, the
+browser loader falls back to the original main-thread decode. Both files are
+mirrored into the Flutter WebView assets. The vendored `flightsim-core`
+provider keeps its own small tile cache and is unchanged.
+
+
 
 
 ## Airfield cleanup and flat buildings

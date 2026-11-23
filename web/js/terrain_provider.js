@@ -15,10 +15,16 @@
     throw new Error('terrain_provider.js requires flightsim_core_bundle.js to load first');
   }
 
-  /** Browser tile loader: fetch PNG -> RGBA pixels. */
-  function createBrowserTileLoader(urlTemplate) {
+  /** Browser tile loader: bounded cache + Worker decode when available. */
+  function createBrowserTileLoader(urlTemplate, options = {}) {
     const template = urlTemplate
       || 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+    if (root.TileEngine && typeof root.TileEngine.create === 'function') {
+      const engine = root.TileEngine.create({ urlTemplate: template, ...options });
+      const loader = (z, x, y) => engine.loadTile(z, x, y);
+      loader.engine = engine;
+      return loader;
+    }
     return async function loadTile(z, x, y) {
       const url = template.replace('{z}', z).replace('{x}', x).replace('{y}', y);
       const response = await fetch(url, { mode: 'cors' });
