@@ -1046,6 +1046,7 @@
       }
     }
     const localVec = targetPos.clone();
+    if (this.renderOrigin) localVec.sub(this.renderOrigin);
     this.planeGroup.worldToLocal(localVec);
     const angle = Math.atan2(localVec.x, -localVec.z);
     this.targetArrow.style.transform = `rotate(${angle}rad)`;

@@ -342,6 +342,12 @@ class AirplaneGame {
     };
     this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
     this.floatingOrigin = window.FloatingOrigin ? window.FloatingOrigin.create() : null;
+    this.renderOrigin = new THREE.Vector3();
+    this.renderOriginApplied = new THREE.Vector3();
+    this.geoSimAnchorBase = null;
+    this.geoRenderSimAnchor = null;
+    this.geoFocusBases = null;
+    this.geoRenderFocusAnchors = null;
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance'
@@ -427,18 +433,26 @@ class AirplaneGame {
     if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
     this.geoIonToken = ionToken;
     const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+    const worldSimAnchor = { x: 160, y: 0, z: 1600 };
+    const renderSimAnchor = { ...worldSimAnchor };
+    const focusBase = jejuFocus
+      ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
+      : [];
+    this.geoSimAnchorBase = { ...worldSimAnchor };
+    this.geoRenderSimAnchor = renderSimAnchor;
+    this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
+    const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
+    this.geoRenderFocusAnchors = renderFocusAnchors;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken,
       lat: this.geoAnchor.lat,
       lon: this.geoAnchor.lon,
       height: this.geoAnchor.height,
       azimuth: this.geoAzimuth,
-      simAnchor: { x: 160, y: 0, z: 1600 },
+      simAnchor: renderSimAnchor,
       // Deeper tiles around Gimhae leave holes and intersect the runway.
       nearAnchorMaxDepth: 17,
-      focusAnchors: jejuFocus
-        ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
-        : [],
+      focusAnchors: renderFocusAnchors,
       scene: this.scene,
       camera: this.camera,
       renderer: this.renderer,
@@ -471,7 +485,10 @@ class AirplaneGame {
     if (![next.lat, next.lon, next.headingDeg, next.height].every(Number.isFinite)) return false;
 
     const pos = this.planeGroup && this.planeGroup.position;
-    const simAnchor = options.simAnchor || { x: pos ? pos.x : 0, y: 0, z: pos ? pos.z : 0 };
+    const worldSimAnchor = options.simAnchor || { x: pos ? pos.x : 0, y: 0, z: pos ? pos.z : 0 };
+    const renderSimAnchor = { ...worldSimAnchor };
+    this.geoSimAnchorBase = { ...worldSimAnchor };
+    this.geoRenderSimAnchor = renderSimAnchor;
 
     if (this.geoLayer && typeof this.geoLayer.dispose === 'function') this.geoLayer.dispose();
     this.geoLayer = null;
@@ -487,17 +504,21 @@ class AirplaneGame {
     this.geoIonToken = token;
 
     const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+    const focusBase = jejuFocus
+      ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
+      : [];
+    this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
+    const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
+    this.geoRenderFocusAnchors = renderFocusAnchors;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken: token,
       lat: next.lat,
       lon: next.lon,
       height: next.height,
       azimuth: this.geoAzimuth,
-      simAnchor,
+      simAnchor: renderSimAnchor,
       nearAnchorMaxDepth: 17,
-      focusAnchors: jejuFocus
-        ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
-        : [],
+      focusAnchors: renderFocusAnchors,
       scene: this.scene,
       camera: this.camera,
       renderer: this.renderer,
@@ -505,12 +526,38 @@ class AirplaneGame {
     });
     if (!this.geoLayer) return false;
 
-    this.enableTerrainProvider({ simOffset: simAnchor, flatZones: [] });
+    this.enableTerrainProvider({ simOffset: worldSimAnchor, flatZones: [] });
     ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
       if (this[name]) this[name].visible = false;
     });
     this.applyAirfieldMinimalism();
     return true;
+  }
+
+  // Translate the scene/camera into a camera-relative render frame while all
+  // simulation, provider and HUD math keeps using world metres.
+  applyFloatingOrigin() {
+    if (!this.renderOrigin || !this.planeGroup) return;
+    if (this.camera && this.renderOriginApplied) this.camera.position.add(this.renderOriginApplied);
+    this.renderOrigin.copy(this.planeGroup.position);
+    if (this.scene) this.scene.position.set(-this.renderOrigin.x, -this.renderOrigin.y, -this.renderOrigin.z);
+    if (this.camera && this.renderOriginApplied) {
+      this.camera.position.sub(this.renderOrigin);
+      this.renderOriginApplied.copy(this.renderOrigin);
+    }
+    if (this.geoSimAnchorBase && this.geoRenderSimAnchor) {
+      this.geoRenderSimAnchor.x = this.geoSimAnchorBase.x - this.renderOrigin.x;
+      this.geoRenderSimAnchor.y = this.geoSimAnchorBase.y - this.renderOrigin.y;
+      this.geoRenderSimAnchor.z = this.geoSimAnchorBase.z - this.renderOrigin.z;
+    }
+    if (this.geoFocusBases && this.geoRenderFocusAnchors) {
+      for (let i = 0; i < this.geoFocusBases.length; i++) {
+        const base = this.geoFocusBases[i];
+        const render = this.geoRenderFocusAnchors[i];
+        render.x = base.x - this.renderOrigin.x;
+        render.z = base.z - this.renderOrigin.z;
+      }
+    }
   }
 
   // ----------------------------------------------------------------
@@ -617,6 +664,7 @@ class AirplaneGame {
       const camLatLon = window.geoLocalToLatLon(this.planeGroup.position.x - 160, this.planeGroup.position.z);
       this.floatingOrigin.rebase(camLatLon.lat, camLatLon.lon);
     }
+    this.applyFloatingOrigin();
     if (this.geoLayer) this.geoLayer.update();
     if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
     this.renderer.render(this.scene, this.camera);
