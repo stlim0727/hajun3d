@@ -295,6 +295,9 @@ test('environment.js getTerrainColliderHit skips hidden procedural hills when ge
   assert.equal(mountainHit.collider.name, '산악 지형');
   assert.ok(Math.abs(mountainHit.terrainY - 302.12) < 1e-6);
   assert.equal(game.getTerrainColliderHit(160, 310, -9000, 6.0), null);
+  // A stale isGeoPlaceFlyover flag must not suppress provider-backed contacts.
+  game.isGeoPlaceFlyover = true;
+  assert.ok(game.getTerrainColliderHit(160, 250, -9000, 6.0));
 });
 
 test('physics.js buildFlight3dEnvironment and checkGPWS integrate terrainProvider normals, land/sea, and GPWS conflict', () => {

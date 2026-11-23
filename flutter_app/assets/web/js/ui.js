@@ -308,7 +308,6 @@
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
     this.isJejuFlyover = false;
-    this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -374,7 +373,6 @@
   startGateDeparture() {
     this.overlay.classList.add('hidden');
     this.isJejuFlyover = false;
-    this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -472,7 +470,6 @@
   startHaeundaeFlight() {
     this.overlay.classList.add('hidden');
     this.isJejuFlyover = false;
-    this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -535,7 +532,6 @@
     this.overlay.classList.add('hidden');
     this.showGateActionPrompt(false);
     this.isJejuFlyover = true;
-    this.isGeoPlaceFlyover = false;
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
@@ -661,7 +657,6 @@
     if (this.overlay) this.overlay.classList.add('hidden');
     this.showGateActionPrompt(false);
     this.isJejuFlyover = false;
-    this.isGeoPlaceFlyover = true;
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
@@ -705,14 +700,15 @@
 
     let token = typeof window !== 'undefined' ? (window.GEO_ION_TOKEN || '') : '';
     try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
-    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    const tilesOn = typeof this.retargetGeo === 'function'
+      && this.retargetGeo(
+        { lat: place.lat, lon: place.lon, height: Number(place.elevationM) || 0 },
+        { ionToken: token, simAnchor: { x: local.x, y: 0, z: local.z } }
+      );
     const tilesActive = Boolean(this.geoLayer) || Boolean(tilesOn);
-    const ll = (typeof window !== 'undefined' && typeof window.geoLocalToLatLon === 'function')
-      ? window.geoLocalToLatLon(local.x, local.z)
-      : { lat: place.lat, lon: place.lon };
     this.showPopup(tilesActive
-      ? `📍 ${place.name} 상공 비행 시작! (${ll.lat.toFixed(4)}°, ${ll.lon.toFixed(4)}°) · 김해 기준 타일 프레임`
-      : `📍 ${place.name} 상공 비행 시작! (${ll.lat.toFixed(4)}°, ${ll.lon.toFixed(4)}°) · 오프라인 폴백(해수면) 경고`);
+      ? `📍 ${place.name} 상공 비행 시작! (${place.lat.toFixed(4)}°, ${place.lon.toFixed(4)}°) · 선택 지점 기준 타일 프레임`
+      : `📍 ${place.name} 상공 비행 시작! (${place.lat.toFixed(4)}°, ${place.lon.toFixed(4)}°) · 타일 프레임 사용 불가`);
     this.startJetSound();
   },
 

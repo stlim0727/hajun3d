@@ -23,34 +23,18 @@ window.GEO_POINTS = {
 
 // Local-frame delta from a landmark's old compressed position to its real ENU
 // position. Game frame: +X right, -Z forward along the runway heading.
+// Exact WGS84/ECEF projection comes from geodesy.js, loaded before this file.
 window.geoLocalDelta = function (point) {
-  const a = window.GEO_ANCHOR;
-  const r = a.headingDeg * Math.PI / 180;
-  const cos = Math.cos(r);
-  const sin = Math.sin(r);
-  const latMid = (a.lat + point.lat) * 0.5 * Math.PI / 180;
-  const east = (point.lon - a.lon) * 111320 * Math.cos(latMid);
-  const north = (point.lat - a.lat) * 110540;
-  const x = east * cos - north * sin;
-  const z = -(east * sin + north * cos);
+  const local = window.Geodesy.wgs84ToGame(point.lat, point.lon, window.GEO_ANCHOR);
   return {
-    x: x - point.old.x,
+    x: local.x - point.old.x,
     y: 0,
-    z: z - point.old.z,
-    local: { x, z }
+    z: local.z - point.old.z,
+    local
   };
 };
 
-// Inverse of geoLocalDelta: maps local game-frame (x, z) back to approximate WGS84 (lat, lon).
+// Inverse of geoLocalDelta: maps local game-frame (x, z) back to WGS84 (lat, lon).
 window.geoLocalToLatLon = function (x, z) {
-  const a = window.GEO_ANCHOR;
-  const r = a.headingDeg * Math.PI / 180;
-  const cos = Math.cos(r);
-  const sin = Math.sin(r);
-  const east = x * cos - z * sin;
-  const north = -x * sin - z * cos;
-  const lat = a.lat + north / 110540;
-  const latMid = (a.lat + lat) * 0.5 * Math.PI / 180;
-  const lon = a.lon + east / (111320 * Math.cos(latMid));
-  return { lat, lon };
+  return window.Geodesy.gameToWgs84(x, z, window.GEO_ANCHOR);
 };

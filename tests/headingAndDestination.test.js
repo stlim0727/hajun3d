@@ -40,6 +40,7 @@ function loadUiRuntime() {
     }
   };
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/geodesy.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/geo_config.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/airport_indicators.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/ui.js', 'utf8'), sandbox);

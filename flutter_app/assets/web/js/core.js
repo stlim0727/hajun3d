@@ -405,23 +405,26 @@ class AirplaneGame {
 
   // Physics ground height from Terrarium elevation tiles (visual layer is 3D Tiles only).
   // Falls back to the legacy flat model while tiles load or if they fail.
-  enableTerrainProvider() {
+  enableTerrainProvider(options = {}) {
     const TP = window.TerrainProvider;
-    if (!TP || this.terrainProvider) return false;
-    this.terrainProvider = TP.createTerrariumProvider({
+    if (!TP || (this.terrainProvider && !options.force)) return false;
+    const simOffset = options.simOffset || { x: 160, z: 1600 };
+    const flatZones = options.flatZones ?? [
+      { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 },
+      { minX: -1600, maxX: 1400, minZ: -47500, maxZ: -42500, height: 0, blendMargin: 600 }
+    ];
+    this.terrainProvider = TP.createExactFrameTerrariumProvider({
       anchor: this.geoAnchor,
-      simOffset: { x: 160, z: 1600 },
+      simOffset,
       loadTile: TP.createBrowserTileLoader(),
-      flatZones: [
-        { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 },
-        { minX: -1600, maxX: 1400, minZ: -47500, maxZ: -42500, height: 0, blendMargin: 600 }
-      ]
+      flatZones
     });
     return true;
   }
 
   enableGeoTiles(ionToken) {
     if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
+    this.geoIonToken = ionToken;
     const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken,
@@ -448,6 +451,65 @@ class AirplaneGame {
       this.applyAirfieldMinimalism();
     }
     return Boolean(this.geoLayer);
+  }
+
+  // Re-anchor streamed tiles and terrain physics to an arbitrary place spawn.
+  // Legacy GLB scenery keeps its original coordinates; at 70 km far clipping
+  // it stays outside the new local view.
+  retargetGeo(anchor, options = {}) {
+    const token = options.ionToken || this.geoIonToken || window.GEO_ION_TOKEN || '';
+    if (!token || !window.HajunGeoTiles || !this.scene) return false;
+    const next = {
+      lat: Number(anchor && anchor.lat),
+      lon: Number(anchor && anchor.lon),
+      headingDeg: Number.isFinite(anchor && anchor.headingDeg)
+        ? anchor.headingDeg : this.geoAnchor.headingDeg,
+      height: Number.isFinite(anchor && anchor.height)
+        ? anchor.height : (Number(anchor && anchor.elevationM) || 0)
+    };
+    if (![next.lat, next.lon, next.headingDeg, next.height].every(Number.isFinite)) return false;
+
+    const pos = this.planeGroup && this.planeGroup.position;
+    const simAnchor = options.simAnchor || { x: pos ? pos.x : 0, y: 0, z: pos ? pos.z : 0 };
+
+    if (this.geoLayer && typeof this.geoLayer.dispose === 'function') this.geoLayer.dispose();
+    this.geoLayer = null;
+    if (this.terrainProvider && typeof this.terrainProvider.dispose === 'function') {
+      this.terrainProvider.dispose();
+    }
+    this.terrainProvider = null;
+
+    Object.assign(this.geoAnchor, next);
+    if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, next);
+    else window.GEO_ANCHOR = { ...next };
+    this.geoAzimuth = (next.headingDeg + 180) % 360;
+    this.geoIonToken = token;
+
+    const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+    this.geoLayer = window.HajunGeoTiles.create({
+      ionToken: token,
+      lat: next.lat,
+      lon: next.lon,
+      height: next.height,
+      azimuth: this.geoAzimuth,
+      simAnchor,
+      nearAnchorMaxDepth: 17,
+      focusAnchors: jejuFocus
+        ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
+        : [],
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      container: this.container
+    });
+    if (!this.geoLayer) return false;
+
+    this.enableTerrainProvider({ simOffset: simAnchor, flatZones: [] });
+    ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+      if (this[name]) this[name].visible = false;
+    });
+    this.applyAirfieldMinimalism();
+    return true;
   }
 
   // ----------------------------------------------------------------

@@ -95,30 +95,30 @@ streamed terrain covers the whole map without overlap.
 Known limit: other procedural scenery along the old corridor is not yet
 georeferenced; only Gimhae, Haeundae and Incheon are placed at real coordinates.
 
-Phase 0 foundation: `web/js/geodesy.js` provides exact WGS84↔ECEF↔ENU and
-game-frame transforms with round-trip tests. `geo_config.js` still uses the
-legacy flat-Earth approximation for `geoLocalDelta()` on purpose: the vendored
-`flightsim-core` terrain provider uses the same approximation, so changing only
-the landmark helper would move Incheon by ~4.8 km relative to provider terrain.
-Migrate the helper, provider anchor frame and tile datum together.
+Phase 0 frame migration: `web/js/geodesy.js` provides exact WGS84↔ECEF↔ENU and
+game-frame transforms, and `geo_config.js` now uses them for `geoLocalDelta()` /
+`geoLocalToLatLon()`. `terrain_provider.js` exposes
+`createExactFrameTerrariumProvider()`, which converts sim coordinates into the
+vendored flat frame before delegating to `flightsim-core`; `core.js` uses it so
+tile lookup and flat zones stay aligned with the exact landmark frame. The
+vendored bundle itself is untouched.
 
-## Selectable spawn-place picker — interim scope and next step
+## Selectable spawn-place picker — retargeted tiles and physics
 
-The start menu and mobile drawer now expose **📍 장소 선택 비행 (Select spawn place)**.
+The start menu and mobile drawer expose **📍 장소 선택 비행 (Select spawn place)**.
 It offers the real-airport presets from `airport_indicators.js` plus the Haeundae
-landmark, converts the chosen WGS84 point into the **existing Gimhae-anchored**
-local frame with `geoLocalDelta()`, and spawns airborne at ~900 m above the preset elevation. No tile or
-terrain-provider re-anchoring happens: the 3D Tiles layer and terrain datum stay
-fixed at Gimhae, so distant presets have reduced positional accuracy and may fall
-back to the procedural/sea-floor surface when tiles are unavailable.
+landmark. `startAtPlace()` converts the chosen WGS84 point into the current
+Gimhae-anchored local frame with `geoLocalDelta()`, spawns airborne above the
+preset elevation, then calls `retargetGeo(anchor, { simAnchor })`. That disposes
+the old 3D Tiles layer and terrain provider, re-anchors `HajunGeoTiles.create()`
+at the selected lat/lon with the aircraft position as `simAnchor`, updates the
+active `GEO_ANCHOR`, and creates a frame-aligned provider with no legacy flat
+zones. The removed `isGeoPlaceFlyover` escape means terrain colliders now come
+from the provider; only the older `isJejuFlyover` exception remains.
 
-**Next step (deferred):** true arbitrary-place spawning requires a runtime
-`retargetGeo(anchor)` — dispose/recreate `HajunGeoTiles.create()` around the
-selected lat/lon, recreate the terrain provider with spawn-relative flat zones,
-generalize `geoLocalDelta()`/`geoLocalToLatLon()` to the active anchor, replace
-the `isGeoPlaceFlyover` collision escape with full provider-backed ground
-queries, and hide legacy Gimhae/Incheon GLB scenery outside the old corridor.
-Until then this picker is a preset-only stopgap.
+Legacy Gimhae/Incheon GLB scenery keeps its original world coordinates; the
+70 km far clip keeps it out of view at distant presets. Without an ion token
+the picker still falls back to the procedural/sea-floor surface.
 
 
 ## Airfield cleanup and flat buildings
