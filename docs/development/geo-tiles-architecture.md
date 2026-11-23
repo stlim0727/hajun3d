@@ -95,6 +95,13 @@ streamed terrain covers the whole map without overlap.
 Known limit: other procedural scenery along the old corridor is not yet
 georeferenced; only Gimhae, Haeundae and Incheon are placed at real coordinates.
 
+Phase 0 foundation: `web/js/geodesy.js` provides exact WGS84↔ECEF↔ENU and
+game-frame transforms with round-trip tests. `geo_config.js` still uses the
+legacy flat-Earth approximation for `geoLocalDelta()` on purpose: the vendored
+`flightsim-core` terrain provider uses the same approximation, so changing only
+the landmark helper would move Incheon by ~4.8 km relative to provider terrain.
+Migrate the helper, provider anchor frame and tile datum together.
+
 ## Selectable spawn-place picker — interim scope and next step
 
 The start menu and mobile drawer now expose **📍 장소 선택 비행 (Select spawn place)**.
