@@ -648,7 +648,12 @@ class AirplaneGame {
     if (!this.geoLayer) return false;
     this._captureGeoTilesGroup(prevSceneChildren);
 
-    this.enableTerrainProvider({ simOffset: worldSimAnchor, flatZones: [] });
+    const flatZones = options.flatZones !== undefined
+      ? options.flatZones
+      : ((this.defaultGeoAnchor && Math.abs(next.lat - this.defaultGeoAnchor.lat) < 1e-4 && Math.abs(next.lon - this.defaultGeoAnchor.lon) < 1e-4)
+          ? undefined
+          : []);
+    this.enableTerrainProvider({ simOffset: worldSimAnchor, flatZones });
     ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
       if (this[name]) this[name].visible = false;
     });

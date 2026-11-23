@@ -69,6 +69,14 @@ test('retargetGeo disposes the old layer/provider and re-anchors tiles and physi
   assert.equal(game.geoAnchor.lon, 126.5117);
   assert.deepEqual(providerConfig.simOffset, simAnchor);
   assert.equal(providerConfig.flatZones.length, 0);
+
+  // Re-anchoring to default anchor restores flatZones
+  game.defaultGeoAnchor = { ...window.GEO_ANCHOR, lat: 35.165199, lon: 128.938995 };
+  assert.equal(game.retargetGeo(
+    game.defaultGeoAnchor,
+    { ionToken: 'test-token', simAnchor: { x: 160, y: 0, z: 1600 } }
+  ), true);
+  assert.equal(providerConfig.flatZones.length, 2);
 });
 
 test('retargetGeo refuses to re-anchor without a tile token', () => {

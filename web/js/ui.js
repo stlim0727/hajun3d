@@ -332,7 +332,13 @@
     }
     if (this.defaultGeoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
       if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
-        this.retargetGeo(this.defaultGeoAnchor, { simAnchor: { x: 160, y: 0, z: 1600 } });
+        this.retargetGeo(this.defaultGeoAnchor, {
+          simAnchor: { x: 160, y: 0, z: 1600 },
+          flatZones: [
+            { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+            { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+          ]
+        });
       } else {
         Object.assign(this.geoAnchor, this.defaultGeoAnchor);
         if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
@@ -427,7 +433,13 @@
     }
     if (this.defaultGeoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
       if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
-        this.retargetGeo(this.defaultGeoAnchor, { simAnchor: { x: 160, y: 0, z: 1600 } });
+        this.retargetGeo(this.defaultGeoAnchor, {
+          simAnchor: { x: 160, y: 0, z: 1600 },
+          flatZones: [
+            { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+            { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+          ]
+        });
       } else {
         Object.assign(this.geoAnchor, this.defaultGeoAnchor);
         if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
