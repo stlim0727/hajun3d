@@ -31,6 +31,20 @@
       border-bottom: 1px solid var(--border);
       padding: 14px 28px;
     }
+    header.is-collapsed { padding: 8px 20px; }
+    header.is-collapsed .controls, header.is-collapsed .subtitle { display: none; }
+    header.is-collapsed h1 { font-size: 1rem; }
+    .fold-btn {
+      display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 7px 12px; cursor: pointer; font: inherit; font-size: .8rem;
+      white-space: nowrap;
+    }
+    .fold-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .fold-icon { display: inline-block; transition: transform .2s; }
+    header.is-collapsed .fold-icon { transform: rotate(180deg); }
+    .compact-summary { display: none; color: var(--muted); font-size: .75rem; font-weight: 400; margin-left: 8px; }
+    header.is-collapsed .compact-summary { display: inline; }
     .header-top, .controls, main, footer { max-width: 1500px; margin: 0 auto; }
     .header-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .back-link {
@@ -145,11 +159,14 @@
     <div class="header-top">
       <a class="back-link" href="./index.html">← Hajun Plane 3D</a>
       <div>
-        <h1>Terrain Provider Lab <span class="badge" id="capture-count">0 captures</span></h1>
+        <h1>Terrain Provider Lab <span class="badge" id="capture-count">0 captures</span><span class="compact-summary" id="compact-summary"></span></h1>
         <div class="subtitle">Live Terrarium DEM inspector + streamed-terrain evidence gallery</div>
       </div>
+      <button id="header-fold-btn" class="fold-btn" type="button" aria-expanded="true" aria-controls="header-controls" title="접기 (F)">
+        <span class="fold-icon" aria-hidden="true">▲</span><span id="fold-text">접기</span>
+      </button>
     </div>
-    <div class="controls">
+    <div class="controls" id="header-controls">
       <div class="control">
         <label for="region-select">Region / anchor</label>
         <select id="region-select"></select>
@@ -363,6 +380,27 @@
         if (point) return { lat: point.lat, lon: point.lon };
         return { lat: 35.165199, lon: 128.938995 };
       }
+      const FOLD_KEY = 'hajun_terrain_header_collapsed';
+      function updateCompactSummary() {
+        const region = currentRegion();
+        const altitude = Number(document.getElementById('altitude-select').value);
+        const preset = document.getElementById('options-select').selectedOptions[0];
+        const presetText = preset ? preset.textContent.split('—')[0].trim() : '';
+        const summary = document.getElementById('compact-summary');
+        if (summary) summary.textContent = `${region.lat.toFixed(3)}, ${region.lon.toFixed(3)} · ${altitude} m · ${presetText}`;
+      }
+
+      function setHeaderCollapsed(collapsed) {
+        const header = document.querySelector('header');
+        const button = document.getElementById('header-fold-btn');
+        header.classList.toggle('is-collapsed', collapsed);
+        button.setAttribute('aria-expanded', String(!collapsed));
+        document.getElementById('fold-text').textContent = collapsed ? '펼치기' : '접기';
+        button.title = collapsed ? '필터 펼치기 (F)' : '접기 (F)';
+        updateCompactSummary();
+        try { localStorage.setItem(FOLD_KEY, collapsed ? 'true' : 'false'); } catch (_) {}
+      }
+
 
       function updateFlyLinks() {
         const region = currentRegion();
@@ -379,6 +417,7 @@
           url.searchParams.set('look', link.dataset.look);
           link.href = url.href;
         }
+        updateCompactSummary();
       }
 
       function elevationColor(height, min, max) {
@@ -717,6 +756,22 @@
         renderGrid();
       }
 
+      document.getElementById('header-fold-btn').addEventListener('click', () => {
+        const header = document.querySelector('header');
+        setHeaderCollapsed(!header.classList.contains('is-collapsed'));
+      });
+      try {
+        if (localStorage.getItem(FOLD_KEY) === 'true') setHeaderCollapsed(true);
+      } catch (_) {}
+      window.addEventListener('keydown', (event) => {
+        if (event.target && /^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName)) return;
+        if (document.getElementById('lightbox').classList.contains('active')) return;
+        if (event.key === 'f' || event.key === 'F') {
+          event.preventDefault();
+          const header = document.querySelector('header');
+          setHeaderCollapsed(!header.classList.contains('is-collapsed'));
+        }
+      });
       buildRegions();
       initLook3D();
       bindGallery();

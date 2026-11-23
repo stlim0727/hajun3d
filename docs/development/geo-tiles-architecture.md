@@ -160,6 +160,8 @@ selectors re-create the exact-frame provider and redraw the sampled height map
 with tile/cache stats. The same samples build a Three.js mesh in a second canvas:
 drag or use the N/E/S/W and up/down buttons to look around the selected point
 at the chosen altitude without launching the game.
+The sticky header folds to a one-line summary via its button or the `F` key,
+keeping the 3D view usable in a short viewport.
 The "Fly in the game" links still deep-link into `index.html`
 with `flyHere=1`, `geoLat`, `geoLon`, `flyAlt` and `look`. `game.js` handles
 those parameters with `startGeoInspectFlight()`: it calls `startAtPlace()` at
