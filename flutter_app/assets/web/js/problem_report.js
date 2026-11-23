@@ -194,7 +194,109 @@
         if (this.renderer.xr && this.renderer.xr.isPresenting) return null;
         // Draw immediately so the WebGL drawing buffer still contains this frame.
         this.renderer.render(this.scene, this.camera);
-        return this.renderer.domElement.toDataURL('image/png');
+        const glCanvas = this.renderer.domElement;
+        if (!glCanvas) return null;
+
+        // Overlay visible DOM UI controls on top of 3D frame for rich diagnosis
+        try {
+          const compCanvas = document.createElement('canvas');
+          compCanvas.width = glCanvas.width;
+          compCanvas.height = glCanvas.height;
+          const ctx = compCanvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(glCanvas, 0, 0);
+
+            const scaleX = glCanvas.width / (window.innerWidth || glCanvas.clientWidth || 1);
+            const scaleY = glCanvas.height / (window.innerHeight || glCanvas.clientHeight || 1);
+
+            const selectors = [
+              '#hud-top .hud-card',
+              '#target-indicator',
+              '.flight-instruments',
+              '.hud-top-right .icon-btn',
+              '#problem-report-float-btn',
+              '.touch-throttle-card',
+              '#touch-btn-brake',
+              '#touch-rudder-card',
+              '#touch-rudder-thumb',
+              '.touch-quick-actions .mini-action-btn',
+              '.touch-stick-card',
+              '#joystick-zone',
+              '#joystick-stick',
+              '#gpws-banner:not(.hidden)',
+              '#passenger-reaction-box:not(.hidden)',
+              '.emergency-panel:not(.hidden)',
+              '.mobile-menu-modal:not(.hidden)',
+              '.modal-card'
+            ];
+
+            const drawnRects = [];
+            const seen = new Set();
+            document.querySelectorAll(selectors.join(', ')).forEach((el) => {
+              if (seen.has(el)) return;
+              seen.add(el);
+              const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+              if (style && (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0)) return;
+
+              const r = el.getBoundingClientRect();
+              if (r.width <= 0 || r.height <= 0) return;
+
+              const x = r.left * scaleX;
+              const y = r.top * scaleY;
+              const w = r.width * scaleX;
+              const h = r.height * scaleY;
+
+              ctx.save();
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+              ctx.strokeStyle = el.id === 'problem-report-float-btn'
+                ? 'rgba(250, 204, 21, 0.9)'
+                : 'rgba(56, 189, 248, 0.75)';
+              ctx.lineWidth = Math.max(1, 1.5 * scaleX);
+
+              const radius = Math.min(6 * scaleX, w / 2, h / 2);
+              if (typeof ctx.roundRect === 'function') {
+                ctx.beginPath();
+                ctx.roundRect(x, y, w, h, radius);
+                ctx.fill();
+                ctx.stroke();
+              } else {
+                ctx.fillRect(x, y, w, h);
+                ctx.strokeRect(x, y, w, h);
+              }
+
+              const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+              if (text && w > 14 * scaleX && h > 8 * scaleY) {
+                const fontSize = Math.max(7, Math.min(12 * scaleX, h * 0.5));
+                ctx.font = `bold ${fontSize}px sans-serif`;
+                ctx.fillStyle = '#f8fafc';
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'center';
+
+                let displayText = text;
+                if (displayText.length > 24) displayText = displayText.slice(0, 22) + '…';
+                ctx.fillText(displayText, x + w / 2, y + h / 2, Math.max(0, w - 4 * scaleX));
+              }
+              ctx.restore();
+
+              drawnRects.push({
+                id: el.id || null,
+                className: el.className || null,
+                left: Math.round(r.left),
+                top: Math.round(r.top),
+                width: Math.round(r.width),
+                height: Math.round(r.height),
+                text: text.slice(0, 60)
+              });
+            });
+
+            this._lastCapturedUIRects = drawnRects;
+            return compCanvas.toDataURL('image/png');
+          }
+        } catch (uiErr) {
+          pushLog({ time: new Date().toISOString(), level: 'warn', message: `UI overlay composite failed, falling back to WebGL: ${formatValue(uiErr)}` });
+        }
+
+        return glCanvas.toDataURL('image/png');
       } catch (err) {
         pushLog({ time: new Date().toISOString(), level: 'error', message: `Screenshot failed: ${formatValue(err)}` });
         return null;
@@ -318,13 +420,15 @@
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const files = [
           { name: 'README.txt', data: 'Hajun Plane 3D problem report\n\n' +
-            'screenshot.png - last rendered frame\n' +
+            'screenshot.png - composite screenshot including 3D world + on-screen UI overlay\n' +
+            'ui-layout.json - on-screen DOM UI layout bounds, coordinates and text\n' +
             'report.json - full structured diagnostics\n' +
             'geo.txt - geodetic position / terrain / tile state\n' +
             'flight.txt - flight and aircraft state\n' +
             'environment.txt - browser, GPU and build details\n' +
             'logs.txt - recent console messages and errors\n\n' +
             'Review the files before sharing: they can include your browser details and local URLs.\n' },
+          { name: 'ui-layout.json', data: JSON.stringify(this._lastCapturedUIRects || [], null, 2) },
           { name: 'report.json', data: JSON.stringify(report, null, 2) },
           { name: 'geo.txt', data: section('GEO', report.geo) },
           { name: 'flight.txt', data: section('FLIGHT', report.flight) },
