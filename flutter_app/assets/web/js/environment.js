@@ -1165,9 +1165,9 @@
   },
 
   getTerrainColliderHit(worldX, worldY, worldZ, clearance = 6.0) {
-    // 제주 상공 비행은 DEM 고도와 실제 렌더링된 3D 타일이 어긋날 수 있어
-    // 보이지 않는 산에 의한 충돌을 막는다. (일반 비행 모드는 기존 동작 유지)
-    if (this.isJejuFlyover || this.isGeoPlaceFlyover) return null;
+    // 제주 상공 비행은 DEM과 3D 타일 불일치 가능성이 있어 기존 동작을 유지한다.
+    // 선택 지점 상공은 프레임이 정렬된 provider 지형 충돌을 사용한다.
+    if (this.isJejuFlyover) return null;
     if (this.geoLayer) {
       if (!this.terrainProvider?.isReady?.(worldX, worldZ) || this.terrainProvider.isWater?.(worldX, worldZ)) {
         return null;
