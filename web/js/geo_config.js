@@ -34,6 +34,10 @@ window.geoLocalDelta = function (point) {
   };
 };
 
+// Baseline default anchor and simulation anchor coordinates.
+window.DEFAULT_GEO_ANCHOR = { ...window.GEO_ANCHOR };
+window.GEO_SIM_ANCHOR = { x: 160, z: 0 };
+
 // Inverse of geoLocalDelta: maps local game-frame (x, z) back to WGS84 (lat, lon).
 window.geoLocalToLatLon = function (x, z) {
   return window.Geodesy.gameToWgs84(x, z, window.GEO_ANCHOR);

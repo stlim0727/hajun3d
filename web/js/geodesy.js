@@ -134,7 +134,7 @@
       const rn = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
       const rm = (WGS84_A * (1 - WGS84_E2)) / Math.pow(1 - WGS84_E2 * sinLat * sinLat, 1.5);
       return {
-        lat: (o.lat - (n / rm) * R2D),
+        lat: (o.lat + (n / rm) * R2D),
         lon: (o.lon + (e / (rn * Math.cos(lat))) * R2D),
       };
     }

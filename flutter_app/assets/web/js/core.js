@@ -340,11 +340,12 @@ class AirplaneGame {
       headingDeg: Number(geoParams.get('geoHeading') ?? baseAnchor.headingDeg),
       height: Number(geoParams.get('geoHeight') ?? baseAnchor.height ?? 0)
     };
+    this.defaultGeoAnchor = { ...this.geoAnchor };
     this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
     this.floatingOrigin = window.FloatingOrigin ? window.FloatingOrigin.create() : null;
     this.renderOrigin = new THREE.Vector3();
     this.renderOriginApplied = new THREE.Vector3();
-    this.geoSimAnchorBase = null;
+    this.geoSimAnchorBase = { x: 160, y: 0, z: 0 };
     this.geoRenderSimAnchor = null;
     this.geoFocusBases = null;
     this.geoRenderFocusAnchors = null;
@@ -440,6 +441,9 @@ class AirplaneGame {
       : [];
     this.geoSimAnchorBase = { ...worldSimAnchor };
     this.geoRenderSimAnchor = renderSimAnchor;
+    if (typeof window !== 'undefined') {
+      window.GEO_SIM_ANCHOR = { x: worldSimAnchor.x, z: worldSimAnchor.z };
+    }
     this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
     const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
     this.geoRenderFocusAnchors = renderFocusAnchors;
@@ -597,6 +601,9 @@ class AirplaneGame {
     const renderSimAnchor = { ...worldSimAnchor };
     this.geoSimAnchorBase = { ...worldSimAnchor };
     this.geoRenderSimAnchor = renderSimAnchor;
+    if (typeof window !== 'undefined') {
+      window.GEO_SIM_ANCHOR = { x: worldSimAnchor.x, z: worldSimAnchor.z };
+    }
 
     if (this.geoLayer && typeof this.geoLayer.dispose === 'function') this.geoLayer.dispose();
     this.geoLayer = null;
@@ -787,7 +794,11 @@ class AirplaneGame {
     }
 
     if (this.floatingOrigin && this.planeGroup && typeof window.geoLocalToLatLon === 'function') {
-      const camLatLon = window.geoLocalToLatLon(this.planeGroup.position.x - 160, this.planeGroup.position.z);
+      const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+      const camLatLon = window.geoLocalToLatLon(
+        this.planeGroup.position.x - anchorBase.x,
+        this.planeGroup.position.z - (anchorBase.z || 0)
+      );
       this.floatingOrigin.rebase(camLatLon.lat, camLatLon.lon);
     }
     this.applyFloatingOrigin();

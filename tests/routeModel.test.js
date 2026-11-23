@@ -53,3 +53,21 @@ test('geo-tile mode measures progress from the active WGS84 anchor, not z', () =
   assert.ok(Math.abs(route.destinationSim('RKSI', false).z - sim.z) < 1e-6);
   assert.ok(route.remainingKm('RKSI', 160, 0, false) > 300);
 });
+
+test('geo-tile mode respects retargeted GEO_SIM_ANCHOR for position and destination', () => {
+  const { window, route, nav } = loadRouteModel();
+  const tokyo = { lat: 35.5494, lon: 139.7798, headingDeg: 353.9, height: 10 };
+  window.GEO_ANCHOR = { ...tokyo };
+  const tokyoSimAnchor = { x: 981794, z: 8352 };
+  window.GEO_SIM_ANCHOR = { ...tokyoSimAnchor };
+
+  const cur = route.currentLatLon(tokyoSimAnchor.x, tokyoSimAnchor.z, false, 'RKSI');
+  assert.ok(Math.abs(cur.lat - tokyo.lat) < 1e-4);
+  assert.ok(Math.abs(cur.lon - tokyo.lon) < 1e-4);
+
+  const dest = nav.byIcao.RKSI;
+  const local = window.Geodesy.wgs84ToGame(dest.lat, dest.lon, tokyo);
+  const destSim = route.destinationSim('RKSI', false);
+  assert.ok(Math.abs(destSim.x - (local.x + tokyoSimAnchor.x)) < 1e-4);
+  assert.ok(Math.abs(destSim.z - (local.z + tokyoSimAnchor.z)) < 1e-4);
+});

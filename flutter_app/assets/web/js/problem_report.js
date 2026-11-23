@@ -309,8 +309,9 @@
       const nav = window.AirportIndicators || null;
       const destination = nav && nav.byIcao ? nav.byIcao[this.selectedDestinationIcao] : null;
       const jeju = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+      const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
       const latLon = (pos && typeof window.geoLocalToLatLon === 'function')
-        ? window.geoLocalToLatLon(pos.x - 160, pos.z)
+        ? window.geoLocalToLatLon(pos.x - anchorBase.x, pos.z - (anchorBase.z || 0))
         : null;
       const providerReady = Boolean(pos && this.terrainProvider && typeof this.terrainProvider.isReady === 'function'
         && this.terrainProvider.isReady(pos.x, pos.z));

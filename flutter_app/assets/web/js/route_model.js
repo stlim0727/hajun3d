@@ -27,6 +27,10 @@
     return root.GEO_ANCHOR || { lat: 35.165199, lon: 128.938995 };
   }
 
+  function simAnchor() {
+    return root.GEO_SIM_ANCHOR || { x: SIM_ORIGIN_X, z: 0 };
+  }
+
   function destination(icao) {
     const nav = indicators();
     const key = String(icao || 'RKSI').toUpperCase();
@@ -41,7 +45,8 @@
   function currentLatLon(x, z, compressed, icao) {
     const nav = indicators();
     if ((!compressed || !isDefaultRoute(icao)) && root.Geodesy) {
-      return root.Geodesy.gameToWgs84(x - SIM_ORIGIN_X, z, anchor());
+      const sa = simAnchor();
+      return root.Geodesy.gameToWgs84(x - sa.x, z - (sa.z || 0), anchor());
     }
     if (nav && typeof nav.positionAlongRoute === 'function') {
       return nav.positionAlongRoute(-z / 45000);
@@ -72,7 +77,8 @@
     const dest = destination(icao);
     if ((!compressed || !isDefaultRoute(icao)) && root.Geodesy && dest) {
       const local = root.Geodesy.wgs84ToGame(dest.lat, dest.lon, anchor());
-      return { x: local.x + SIM_ORIGIN_X, y: 0, z: local.z };
+      const sa = simAnchor();
+      return { x: local.x + sa.x, y: 0, z: local.z + (sa.z || 0) };
     }
     return { x: SIM_ORIGIN_X, y: 0, z: SIM_ROUTE_END_Z };
   }

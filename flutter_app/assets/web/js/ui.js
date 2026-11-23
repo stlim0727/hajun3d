@@ -165,7 +165,6 @@
       const placeholder = document.createElement('option');
       placeholder.value = '';
       placeholder.textContent = '기본 공항 선택 (Gimhae)';
-      placeholder.disabled = true;
       placeholder.selected = true;
       this.placeSelect.appendChild(placeholder);
       for (const preset of this.getPlacePresets()) {
@@ -331,6 +330,18 @@
         return;
       }
     }
+    if (this.defaultGeoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
+      if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
+        this.retargetGeo(this.defaultGeoAnchor, { simAnchor: { x: 160, y: 0, z: 1600 } });
+      } else {
+        Object.assign(this.geoAnchor, this.defaultGeoAnchor);
+        if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
+        if (window.GEO_SIM_ANCHOR) {
+          window.GEO_SIM_ANCHOR.x = 160;
+          window.GEO_SIM_ANCHOR.z = 0;
+        }
+      }
+    }
     this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
@@ -412,6 +423,18 @@
           elevationM: Number(option.dataset.elev) || 0
         });
         return;
+      }
+    }
+    if (this.defaultGeoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
+      if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
+        this.retargetGeo(this.defaultGeoAnchor, { simAnchor: { x: 160, y: 0, z: 1600 } });
+      } else {
+        Object.assign(this.geoAnchor, this.defaultGeoAnchor);
+        if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
+        if (window.GEO_SIM_ANCHOR) {
+          window.GEO_SIM_ANCHOR.x = 160;
+          window.GEO_SIM_ANCHOR.z = 0;
+        }
       }
     }
     this.isJejuFlyover = false;
@@ -1096,8 +1119,9 @@
 
     if (airport && typeof this.showPopup === 'function') {
       const pos = this.planeGroup ? this.planeGroup.position : { x: 160, z: 0 };
+      const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
       const curLatLon = (typeof window !== 'undefined' && typeof window.geoLocalToLatLon === 'function')
-        ? window.geoLocalToLatLon(pos.x - 160, pos.z)
+        ? window.geoLocalToLatLon(pos.x - anchorBase.x, pos.z - (anchorBase.z || 0))
         : (nav ? nav.origin : { lat: 35.165, lon: 128.939 });
       const ind = nav ? nav.indicatorFrom(curLatLon, airport) : null;
       const info = ind ? ` (${ind.distanceKm.toFixed(0)}km · BRG ${String(Math.round(ind.bearingDeg)).padStart(3, '0')}°)` : '';
@@ -1119,11 +1143,12 @@
 
     // Compressed arcade flights map z onto the great circle; geo-tile flights
     // use the active exact geodetic anchor.
+    const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
     const position = (typeof window !== 'undefined' && window.RouteModel)
       ? window.RouteModel.currentLatLon(pos.x, pos.z, compressed, destIcao)
       : (isDefaultIncheon || typeof window === 'undefined' || typeof window.geoLocalToLatLon !== 'function')
         ? (nav ? nav.positionAlongRoute(zProgress) : { lat: 35.165, lon: 128.939 })
-        : window.geoLocalToLatLon(pos.x - 160, pos.z);
+        : window.geoLocalToLatLon(pos.x - anchorBase.x, pos.z - (anchorBase.z || 0));
 
     if (this.isJejuFlyover) {
       const jeju = this.getJejuLocalPosition();
