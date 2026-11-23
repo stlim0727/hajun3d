@@ -81,6 +81,16 @@
       border-radius: 99px; padding: 5px 11px; cursor: pointer; font: inherit; font-size: .75rem;
     }
     .pill.active { color: var(--accent); border-color: var(--accent); background: #1e3a5f; }
+    .fly-control { min-width: 350px; }
+    .fly-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+    .fly-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 8px 10px; font: inherit; font-size: .76rem;
+      text-decoration: none; white-space: nowrap;
+    }
+    .fly-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .fly-btn.primary { background: #1e3a5f; border-color: var(--accent); color: var(--accent); }
     .search { margin-left: auto; min-width: 190px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
     .card {
@@ -147,6 +157,18 @@
           <option value="coarse">Coarse — z9, 16 tiles, 3×3</option>
           <option value="airport">Airport flat zones — z11, 3×3</option>
         </select>
+      </div>
+      <div class="control fly-control">
+        <label>Fly in the game at this position (opens new tab)</label>
+        <div class="fly-buttons">
+          <a class="fly-btn primary" data-look="forward" href="./index.html" target="_blank" rel="noopener">▶ Fly here</a>
+          <a class="fly-btn" data-look="right" href="./index.html" target="_blank" rel="noopener">Right →</a>
+          <a class="fly-btn" data-look="back" href="./index.html" target="_blank" rel="noopener">Back</a>
+          <a class="fly-btn" data-look="left" href="./index.html" target="_blank" rel="noopener">← Left</a>
+          <a class="fly-btn" data-look="up" href="./index.html" target="_blank" rel="noopener">↑ Up</a>
+          <a class="fly-btn" data-look="down" href="./index.html" target="_blank" rel="noopener">↓ Down</a>
+          <a class="fly-btn" data-look="orbit" href="./index.html" target="_blank" rel="noopener">360° orbit</a>
+        </div>
       </div>
     </div>
   </header>
@@ -303,6 +325,23 @@
         return { lat: 35.165199, lon: 128.938995 };
       }
 
+      function updateFlyLinks() {
+        const region = currentRegion();
+        const altitude = Number(document.getElementById('altitude-select').value);
+        const heading = (window.GEO_ANCHOR && window.GEO_ANCHOR.headingDeg) || 0;
+        for (const link of document.querySelectorAll('[data-look]')) {
+          const url = new URL('index.html', window.location.href);
+          url.searchParams.set('flyHere', '1');
+          url.searchParams.set('geoLat', String(region.lat));
+          url.searchParams.set('geoLon', String(region.lon));
+          url.searchParams.set('geoHeight', '0');
+          url.searchParams.set('geoHeading', String(heading));
+          url.searchParams.set('flyAlt', String(altitude));
+          url.searchParams.set('look', link.dataset.look);
+          link.href = url.href;
+        }
+      }
+
       function elevationColor(height, min, max) {
         if (!Number.isFinite(height)) return [23, 34, 52];
         const t = max > min ? Math.max(0, Math.min(1, (height - min) / (max - min))) : 0.5;
@@ -409,6 +448,7 @@
         missing = 0;
         const TP = window.TerrainProvider;
         const region = currentRegion();
+        updateFlyLinks();
         const presetName = document.getElementById('options-select').value;
         const preset = PRESETS[presetName];
         const status = document.getElementById('status');
@@ -521,6 +561,7 @@
       document.getElementById('region-select').addEventListener('change', rebuild);
       document.getElementById('options-select').addEventListener('change', rebuild);
       document.getElementById('altitude-select').addEventListener('change', () => {
+        updateFlyLinks();
         if (provider) { ticks = 0; sample(); }
       });
       if (window.TerrainProvider) rebuild();

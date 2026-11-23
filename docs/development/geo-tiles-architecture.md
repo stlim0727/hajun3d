@@ -152,6 +152,18 @@ browser loader falls back to the original main-thread decode. Both files are
 mirrored into the Flutter WebView assets. The vendored `flightsim-core`
 provider keeps its own small tile cache and is unchanged.
 
+## Terrain Provider Lab page
+
+`terrainprovider.html` (root source, mirrored to `web/`) pairs a capture gallery
+with a live Terrarium DEM inspector. Region, altitude and provider-option
+selectors re-create the exact-frame provider and redraw the sampled height map
+with tile/cache stats. The "Fly in the game" links deep-link into `index.html`
+with `flyHere=1`, `geoLat`, `geoLon`, `flyAlt` and `look`. `game.js` handles
+those parameters with `startGeoInspectFlight()`: it calls `startAtPlace()` at
+the selected WGS84 point, overrides the cruise altitude, and presets the
+cockpit look direction (forward/right/back/left/up/down) or a 360° drone orbit.
+The in-game camera drag still works for free look.
+
 
 
 

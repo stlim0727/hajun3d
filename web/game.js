@@ -662,6 +662,57 @@ window.toggleMobileMenu = function() {
   }
 };
 
+// Deep link from terrainprovider.html: spawn at a WGS84 point and preset the look direction.
+const GEO_LOOK_PRESETS = {
+  forward: { yaw: 0, pitch: -0.06 },
+  right: { yaw: -Math.PI / 2, pitch: -0.06 },
+  back: { yaw: Math.PI, pitch: -0.06 },
+  left: { yaw: Math.PI / 2, pitch: -0.06 },
+  up: { yaw: 0, pitch: 0.85 },
+  down: { yaw: 0, pitch: -0.85 }
+};
+
+window.startGeoInspectFlight = function (options) {
+  const o = options || {};
+  const lat = Number(o.lat);
+  const lon = Number(o.lon);
+  const alt = Number(o.alt);
+  if (![lat, lon].every(Number.isFinite)) return false;
+
+  const overlay = document.getElementById('overlay-screen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.style.display = 'none';
+  }
+  const gateAction = document.getElementById('gate-action-container');
+  if (gateAction) gateAction.classList.add('hidden');
+
+  if (!window.airplaneGame) initGame();
+  const game = window.airplaneGame;
+  if (!game || typeof game.startAtPlace !== 'function') return false;
+
+  game.startAtPlace({ id: 'geo-inspect', name: 'Geo inspection', lat, lon, elevationM: 0 });
+  if (Number.isFinite(alt) && alt >= 0 && game.planeGroup) {
+    game.planeGroup.position.y = alt;
+    game.verticalSpeed = 0;
+    if (typeof game.resetFlight3dPhysics === 'function') game.resetFlight3dPhysics();
+  }
+
+  const look = o.look || 'forward';
+  if (look === 'orbit') {
+    game.setCameraMode('drone');
+  } else {
+    game.setCameraMode('1st');
+    const preset = GEO_LOOK_PRESETS[look] || GEO_LOOK_PRESETS.forward;
+    const cs = typeof game.ensureCameraState === 'function' ? game.ensureCameraState() : game.cameraState;
+    if (cs) {
+      cs.lookYaw = preset.yaw;
+      cs.lookPitch = preset.pitch;
+    }
+  }
+  return true;
+};
+
 function initGame() {
   if (!window.airplaneGame) {
     try {
@@ -678,3 +729,14 @@ if (document.readyState === 'loading') {
   initGame();
 }
 window.addEventListener('load', initGame);
+(function autoStartGeoInspect() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('flyHere') !== '1' || !params.has('geoLat') || !params.has('geoLon')) return;
+  const flight = {
+    lat: Number(params.get('geoLat')),
+    lon: Number(params.get('geoLon')),
+    alt: Number(params.get('flyAlt')),
+    look: params.get('look') || 'forward'
+  };
+  requestAnimationFrame(() => window.startGeoInspectFlight(flight));
+})();
