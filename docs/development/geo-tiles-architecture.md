@@ -157,9 +157,10 @@ provider keeps its own small tile cache and is unchanged.
 `terrainprovider.html` (root source, mirrored to `web/`) pairs a capture gallery
 with a live Terrarium DEM inspector. Region, altitude and provider-option
 selectors re-create the exact-frame provider and redraw the sampled height map
-with tile/cache stats. The same samples build a Three.js mesh in a second canvas:
-drag or use the N/E/S/W and up/down buttons to look around the selected point
-at the chosen altitude without launching the game.
+with tile/cache stats. The second pane embeds the actual game renderer in an
+iframe at the selected point/altitude, so the terrain matches an in-game flight.
+A transparent drag layer steers the embedded cockpit camera; the N/E/S/W and
+up/down buttons reload it with a preset look direction.
 The sticky header folds to a one-line summary via its button or the `F` key,
 keeping the 3D view usable in a short viewport.
 The "Fly in the game" links still deep-link into `index.html`
