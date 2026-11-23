@@ -162,6 +162,12 @@
     this.placeSelect = document.getElementById('place-select');
     this.placeCoords = document.getElementById('place-coords');
     if (this.placeSelect) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '기본 공항 선택 (Gimhae)';
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      this.placeSelect.appendChild(placeholder);
       for (const preset of this.getPlacePresets()) {
         const option = document.createElement('option');
         option.value = preset.id;
@@ -307,6 +313,22 @@
   // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 김해 3200m 활주로 중앙 정렬)
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
+    // If a place is selected from the place selector, start airborne at that place
+    if (this.placeSelect && this.placeSelect.selectedOptions && this.placeSelect.selectedOptions.length > 0) {
+      const option = this.placeSelect.selectedOptions[0];
+      const lat = Number(option.dataset.lat);
+      const lon = Number(option.dataset.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        this.startAtPlace({
+          id: option.value,
+          name: option.textContent || option.value,
+          lat,
+          lon,
+          elevationM: Number(option.dataset.elev) || 0
+        });
+        return;
+      }
+    }
     this.isJejuFlyover = false;
     this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
