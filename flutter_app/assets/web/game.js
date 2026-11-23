@@ -697,6 +697,22 @@ window.startGeoInspectFlight = function (options) {
     game.verticalSpeed = 0;
     if (typeof game.resetFlight3dPhysics === 'function') game.resetFlight3dPhysics();
   }
+  if (typeof game.retargetGeo === 'function' && game.planeGroup) {
+    const pos = game.planeGroup.position;
+    const inspectAlt = Number.isFinite(alt) ? alt : 1100;
+    game.retargetGeo(
+      { lat, lon, height: 0 },
+      {
+        ionToken: game.geoIonToken,
+        simAnchor: { x: pos.x, y: 0, z: pos.z },
+        focusAnchors: [{
+          x: pos.x, y: 0, z: pos.z,
+          radius: 12000,
+          maxAltitude: Math.max(6000, inspectAlt + 2000)
+        }]
+      }
+    );
+  }
 
   const look = o.look || 'forward';
   if (look === 'orbit') {

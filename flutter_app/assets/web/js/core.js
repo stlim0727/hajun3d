@@ -504,9 +504,10 @@ class AirplaneGame {
     this.geoIonToken = token;
 
     const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
-    const focusBase = jejuFocus
-      ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
-      : [];
+    const focusSource = Array.isArray(options.focusAnchors) && options.focusAnchors.length
+      ? options.focusAnchors
+      : (jejuFocus ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }] : []);
+    const focusBase = focusSource.map(anchor => ({ ...anchor }));
     this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
     const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
     this.geoRenderFocusAnchors = renderFocusAnchors;
