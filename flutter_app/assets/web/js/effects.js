@@ -95,12 +95,8 @@
       // ignore storage errors in restricted environments
     }
 
-    if (clamped <= 0.005) {
-      if (this.speedLineMaterial) this.speedLineMaterial.opacity = 0;
-      if (this.speedLinesGroup) this.speedLinesGroup.visible = false;
-      if (this.speedVignetteEl) this.speedVignetteEl.style.opacity = '0';
-    } else if (this.speedLinesGroup) {
-      this.speedLinesGroup.visible = true;
+    if (clamped <= 0.005 && this.speedVignetteEl) {
+      this.speedVignetteEl.style.opacity = '0';
     }
 
     if (typeof this.updateSpeedEffectUI === 'function') {
@@ -110,54 +106,13 @@
     if (options.announce && typeof this.showPopup === 'function') {
       const pct = Math.round(clamped * 100);
       this.showPopup(pct === 0
-        ? '💨 기류/속도선 이펙트: 끄기 (0%)'
-        : `💨 기류/속도선 이펙트 강도: ${pct}%`);
+        ? '💨 속도감 이펙트: 끄기 (0%)'
+        : `💨 속도감 이펙트 강도: ${pct}%`);
     }
   },
 
   initSpeedEffects() {
     this.speedEffectIntensity = this.loadSpeedEffectIntensity();
-
-    // 1. 고속 공기 기류 스트림 라인 (3D Speed Lines)
-    const lineCount = 180;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(lineCount * 6); // 2 vertices per line (x,y,z, x,y,z)
-
-    this.speedLineData = [];
-    for (let i = 0; i < lineCount; i++) {
-      const radius = 6.0 + Math.random() * 32.0;
-      const angle = Math.random() * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * 0.65 + 1.5;
-      const z = -45.0 + Math.random() * 90.0;
-      const length = 12.0 + Math.random() * 22.0;
-      const speedMult = 1.0 + Math.random() * 0.8;
-
-      this.speedLineData.push({ x, y, z, length, speedMult });
-
-      const idx = i * 6;
-      positions[idx] = x;
-      positions[idx + 1] = y;
-      positions[idx + 2] = z;
-      positions[idx + 3] = x;
-      positions[idx + 4] = y;
-      positions[idx + 5] = z - length;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    this.speedLineMaterial = new THREE.LineBasicMaterial({
-      color: 0xbae6fd,
-      transparent: true,
-      opacity: 0.0,
-      blending: THREE.AdditiveBlending,
-      linewidth: 1.5
-    });
-
-    this.speedLinesGroup = new THREE.LineSegments(geometry, this.speedLineMaterial);
-    this.speedLinesGroup.frustumCulled = false;
-    this.speedLinesGroup.visible = this.speedEffectIntensity > 0.005;
-    this.scene.add(this.speedLinesGroup);
 
     this.speedVignetteEl = document.getElementById('speed-vignette');
     if (typeof this.updateSpeedEffectUI === 'function') {
@@ -704,53 +659,11 @@
   },
 
   updateSpeedEffects(dt, currentKmh) {
-    if (!this.speedLinesGroup || !this.speedLineMaterial) return;
-
     const intensity = typeof this.speedEffectIntensity === 'number'
       ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
       : DEFAULT_SPEED_EFFECT_INTENSITY;
 
-    // 시속 135 km/h 이상부터 스트림 라인 점진 등장 (이륙 활주 체감 강화), 800 km/h에서 최고조
-    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 135) / 665)); // 0.0 ~ 1.0
-
-    const rawTargetOpacity = speedRatio > 0.04 ? (0.06 + speedRatio * 0.62) : 0.0;
-    const targetOpacity = rawTargetOpacity * intensity;
-    this.speedLineMaterial.opacity = THREE.MathUtils.lerp(this.speedLineMaterial.opacity, targetOpacity, 0.1);
-    this.speedLinesGroup.visible = this.speedLineMaterial.opacity > 0.005;
-
-    // 스피드 라인 위치 및 회전을 기체 중심으로 추종
-    this.speedLinesGroup.position.copy(this.planeGroup.position);
-    this.speedLinesGroup.quaternion.copy(this.planeGroup.quaternion);
-
-    if (this.speedLinesGroup.visible && this.speedLineMaterial.opacity > 0.01) {
-      const posAttr = this.speedLinesGroup.geometry.attributes.position;
-      const posArr = posAttr.array;
-      const moveSpeed = (42.0 + speedRatio * 145.0) * dt * 60;
-
-      for (let i = 0; i < this.speedLineData.length; i++) {
-        const item = this.speedLineData[i];
-        item.z += moveSpeed * item.speedMult;
-        if (item.z > 50) {
-          item.z = -50 - Math.random() * 20;
-          const radius = 6.0 + Math.random() * 32.0;
-          const angle = Math.random() * Math.PI * 2;
-          item.x = Math.cos(angle) * radius;
-          item.y = Math.sin(angle) * radius * 0.65 + 1.5;
-          item.length = 12.0 + Math.random() * 22.0;
-        }
-
-        const idx = i * 6;
-        posArr[idx] = item.x;
-        posArr[idx + 1] = item.y;
-        posArr[idx + 2] = item.z;
-        posArr[idx + 3] = item.x;
-        posArr[idx + 4] = item.y;
-        posArr[idx + 5] = item.z - item.length;
-      }
-      posAttr.needsUpdate = true;
-    }
-
-    // 2. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
+    // 1. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
     if (!this.isOnGround && (currentKmh > 520 || (currentKmh > 320 && Math.abs(this.roll) > 0.35))) {
       const wingSpan = this.currentPlaneType === 'dc10' ? 24.5 : 17.5;
       [-wingSpan, wingSpan].forEach(sideX => {
@@ -759,7 +672,7 @@
       });
     }
 
-    // 3. 화면 테두리 스피드 비네트 효과
+    // 2. 화면 테두리 스피드 비네트 효과
     if (this.speedVignetteEl) {
       if (intensity > 0.01 && currentKmh > 420) {
         const vigOpacity = Math.min(0.85, (currentKmh - 420) / 400) * intensity;
@@ -768,7 +681,7 @@
         this.speedVignetteEl.style.opacity = '0';
       }
     }
-    // 4. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
+    // 3. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
     if (this.oceanTexture) {
       this.oceanTexture.offset.y -= dt * 0.035;
     }

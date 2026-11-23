@@ -7,7 +7,7 @@
   'use strict';
 
   // 엔진음 기본 레벨 및 카메라 시점별 감쇠 계수
-  const ENGINE_BASE_GAIN = 0.65;
+  const ENGINE_BASE_GAIN = 0.325;
   const CAMERA_ENGINE_GAIN = {
     '1st': 1.0,
     hud: 1.0,

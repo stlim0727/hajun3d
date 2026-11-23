@@ -792,7 +792,7 @@
       ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
       : 0.35;
     const pct = Math.round(intensity * 100);
-    const labelText = pct === 0 ? '기류 OFF' : `기류 ${pct}%`;
+    const labelText = pct === 0 ? '속도감 OFF' : `속도감 ${pct}%`;
 
     const btnText = document.getElementById('effect-intensity-text');
     if (btnText) btnText.textContent = labelText;

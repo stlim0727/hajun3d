@@ -269,7 +269,7 @@ test('audio subsystem: engine bus lowers volume and attenuates by camera POV', (
   assert.ok(game.pistonGain.connectedTo.includes(game.engineBus), 'Piston engine must route through engine bus');
 
   const cockpitVolume = game.engineBus.gain.value;
-  assert.ok(cockpitVolume > 0 && cockpitVolume < 1.0, 'Cockpit engine level must be lowered below full scale');
+  assert.ok(Math.abs(cockpitVolume - 0.325) < 1e-6, `engine bus must be 50% below the original 0.65 level, got ${cockpitVolume}`);
 
   game.cameraMode = '3rd';
   game.updateAudio(0.016);

@@ -197,9 +197,6 @@ class AirplaneGame {
     this.gpwsSirenGain = null;
 
     // 속도감 및 동적 시각/오디오 효과 (Sense of Speed & Dynamic Camera Effects)
-    this.speedLinesGroup = null;
-    this.speedLineData = [];
-    this.speedLineMaterial = null;
     this.speedEffectIntensity = this.loadSpeedEffectIntensity ? this.loadSpeedEffectIntensity() : 0.35;
     this.oceanTexture = null;
     this.speedVignetteEl = null;
