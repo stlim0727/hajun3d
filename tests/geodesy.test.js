@@ -74,3 +74,9 @@ test('local offsets near the anchor stay metric and consistent with ECEF', () =>
   assert.ok(Math.abs(back.lat - (35 - 2000 / 110574)) < 1e-4);
   assert.ok(Math.abs(back.lon - (129 + 1000 / (111320 * Math.cos(35 * Math.PI / 180)))) < 1e-4);
 });
+
+test('enuToWgs84 fallback preserves positive North direction beyond the tangent horizon', () => {
+  const origin = { lat: 35, lon: 129, headingDeg: 0, height: 0 };
+  const res = geo.enuToWgs84(0, 6500000, 0, origin);
+  assert.ok(res.lat > origin.lat, `Northward ENU displacement must increase latitude (got ${res.lat})`);
+});
