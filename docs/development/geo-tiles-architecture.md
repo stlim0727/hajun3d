@@ -103,6 +103,15 @@ vendored flat frame before delegating to `flightsim-core`; `core.js` uses it so
 tile lookup and flat zones stay aligned with the exact landmark frame. The
 vendored bundle itself is untouched.
 
+`web/js/floating_origin.js` adds a camera-rebased double frame: simulation
+positions stay JS numbers, `toCameraEnu()` removes the camera ECEF origin, and
+`toRenderFloats()` is the only float32 staging step. `core.js` rebases it each
+frame and `problem_report.js` records the current origin. Render-time scene
+translation is deliberately gated: `HajunGeoTiles.update()` computes LOD from
+world-space `simAnchor`, so moving the scene and camera into a relative frame
+must be coordinated with the tile layer and camera modes in one change.
+
+
 ## Selectable spawn-place picker — retargeted tiles and physics
 
 The start menu and mobile drawer expose **📍 장소 선택 비행 (Select spawn place)**.

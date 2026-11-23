@@ -353,6 +353,8 @@
           geoTilesEnabled: Boolean(this.geoLayer),
           geoTilesStats: this.geoLayer ? this.geoLayer.stats : null,
           geoTilesDebug: this.geoLayer && typeof this.geoLayer.debug === 'function' ? this.geoLayer.debug() : null,
+          floatingOrigin: this.floatingOrigin && typeof this.floatingOrigin.debug === 'function'
+            ? this.floatingOrigin.debug() : null,
           terrainProviderReady: providerReady,
           terrainProviderHeightM: providerHeight,
           terrainProviderWater: providerReady && typeof this.terrainProvider.isWater === 'function'
