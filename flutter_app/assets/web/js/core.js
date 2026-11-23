@@ -341,6 +341,7 @@ class AirplaneGame {
       height: Number(geoParams.get('geoHeight') ?? baseAnchor.height ?? 0)
     };
     this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
+    this.floatingOrigin = window.FloatingOrigin ? window.FloatingOrigin.create() : null;
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance'
@@ -612,6 +613,10 @@ class AirplaneGame {
       this.screenShake *= 0.92;
     }
 
+    if (this.floatingOrigin && this.planeGroup && typeof window.geoLocalToLatLon === 'function') {
+      const camLatLon = window.geoLocalToLatLon(this.planeGroup.position.x - 160, this.planeGroup.position.z);
+      this.floatingOrigin.rebase(camLatLon.lat, camLatLon.lon);
+    }
     if (this.geoLayer) this.geoLayer.update();
     if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
     this.renderer.render(this.scene, this.camera);
