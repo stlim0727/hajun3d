@@ -4171,3 +4171,43 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     gap: 4px !important;
   }
 }
+
+/* Selectable spawn-place picker (interim Gimhae-frame presets) */
+.place-picker-panel {
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2);
+}
+
+.place-picker-panel .emergency-title {
+  color: #7dd3fc;
+}
+
+.place-picker-select {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e0f2fe;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  pointer-events: auto !important;
+}
+
+.place-picker-select:focus {
+  border-color: #38bdf8;
+}
+
+.place-picker-coords {
+  font-size: 12px;
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+
+.place-picker-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #94a3b8;
+}

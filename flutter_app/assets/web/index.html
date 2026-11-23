@@ -273,6 +273,10 @@
             <span class="item-icon">🏝️</span>
             <div><strong>제주공항 상공 비행</strong><small>Flying over Jeju Airport</small></div>
           </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.openPlacePicker(); window.toggleMobileMenu();">
+            <span class="item-icon">📍</span>
+            <div><strong>장소 선택 비행</strong><small>Select spawn place</small></div>
+          </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.downloadProblemReport(); window.toggleMobileMenu();">
             <span class="item-icon">🧾</span>
             <div><strong>문제 보고서 다운로드</strong><small>스크린샷 · 위치 · 로그 ZIP</small></div>
@@ -413,6 +417,18 @@
           </div>
         </button>
       </div>
+    </div>
+
+    <!-- Selectable spawn-place picker (interim presets in the Gimhae-anchored frame) -->
+    <div id="place-picker-panel" class="emergency-panel glass hidden place-picker-panel">
+      <div class="emergency-panel-header">
+        <span class="emergency-title">📍 장소 선택 비행 (SELECT PLACE)</span>
+        <button id="place-picker-close-btn" class="close-btn" type="button" onclick="window.closePlacePicker()">✕</button>
+      </div>
+      <select id="place-select" class="place-picker-select" aria-label="비행 시작 장소 선택"></select>
+      <div id="place-coords" class="place-picker-coords">—</div>
+      <p class="place-picker-note">김해 기준 프레임에 고정된 프리셋입니다. 먼 지역은 지형·거리 정밀도가 낮아질 수 있습니다.</p>
+      <button id="place-picker-start-btn" class="btn-secondary" type="button" onclick="window.startAtSelectedPlace()">✈️ 선택한 장소 상공에서 시작</button>
     </div>
 
     <!-- GLB 3D Model Control Modal Panel -->
@@ -892,6 +908,7 @@
         <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()" style="pointer-events: auto !important; cursor: pointer !important;">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
         <button id="haeundae-flight-btn" class="btn-secondary" type="button" onclick="window.startHaeundaeFlight()" style="background: rgba(16, 185, 129, 0.18); border-color: rgba(52, 211, 153, 0.6); color: #d1fae5; pointer-events: auto !important; cursor: pointer !important;">🌊 해운대 상공 비행 (Flying over Haeundae)</button>
         <button id="jeju-flyover-btn" class="btn-secondary" type="button" onclick="window.startJejuFlyover()" style="background: rgba(16, 185, 129, 0.18); border-color: rgba(52, 211, 153, 0.55); color: #d1fae5; pointer-events: auto !important; cursor: pointer !important;">🏝️ 제주공항 상공 비행 (Flying over Jeju Airport)</button>
+        <button id="place-picker-btn" class="btn-secondary" type="button" onclick="window.openPlacePicker()" style="background: rgba(56, 189, 248, 0.16); border-color: rgba(56, 189, 248, 0.55); color: #e0f2fe; pointer-events: auto !important; cursor: pointer !important;">📍 장소 선택 비행 (Select spawn place)</button>
         <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()" style="background: rgba(14, 165, 233, 0.18); border-color: rgba(56, 189, 248, 0.55); color: #e0f2fe; pointer-events: auto !important; cursor: pointer !important;">🔍 3D GLB 모델 갤러리 둘러보기 (회전 · 줌)</button>
         <button id="problem-report-btn" class="btn-secondary" type="button" onclick="window.downloadProblemReport()" style="background: rgba(148, 163, 184, 0.16); border-color: rgba(148, 163, 184, 0.5); color: #e2e8f0; pointer-events: auto !important; cursor: pointer !important;">🧾 문제 보고서 다운로드 (스크린샷 · 위치 · 로그 ZIP)</button>
       </div>

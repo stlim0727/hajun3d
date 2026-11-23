@@ -140,6 +140,43 @@ window.startJejuFlyover = function() {
   }
 };
 
+window.openPlacePicker = function() {
+  if (!window.airplaneGame) initGame();
+  const panel = document.getElementById('place-picker-panel');
+  if (panel) panel.classList.remove('hidden');
+};
+
+window.closePlacePicker = function() {
+  const panel = document.getElementById('place-picker-panel');
+  if (panel) panel.classList.add('hidden');
+};
+
+window.startAtSelectedPlace = function() {
+  const panel = document.getElementById('place-picker-panel');
+  if (panel) panel.classList.add('hidden');
+  const overlay = document.getElementById('overlay-screen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.style.display = 'none';
+  }
+  const gateAction = document.getElementById('gate-action-container');
+  if (gateAction) gateAction.classList.add('hidden');
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame && typeof window.airplaneGame.startAtPlace === 'function') {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startAtPlace(
+        typeof window.airplaneGame.getSelectedPlace === 'function' ? window.airplaneGame.getSelectedPlace() : null
+      );
+    }
+  } catch (err) {
+    console.error('startAtSelectedPlace error:', err);
+  }
+};
+
 window.downloadProblemReport = function() {
   try {
     if (!window.airplaneGame) initGame();

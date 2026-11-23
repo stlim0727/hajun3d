@@ -157,6 +157,22 @@
         btn.classList.toggle('active', btn.dataset && btn.dataset.skin === activeSkin.id);
       });
     }
+    this.placePickerPanel = document.getElementById('place-picker-panel');
+    this.placeSelect = document.getElementById('place-select');
+    this.placeCoords = document.getElementById('place-coords');
+    if (this.placeSelect) {
+      for (const preset of this.getPlacePresets()) {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.name;
+        option.dataset.lat = String(preset.lat);
+        option.dataset.lon = String(preset.lon);
+        option.dataset.elev = String(preset.elevationM || 0);
+        this.placeSelect.appendChild(option);
+      }
+      this.placeSelect.addEventListener('change', () => this.updateSelectedPlaceReadout());
+      this.updateSelectedPlaceReadout();
+    }
     this.updateSpeedEffectUI();
   },
 
@@ -291,6 +307,7 @@
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
     this.isJejuFlyover = false;
+    this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -356,6 +373,7 @@
   startGateDeparture() {
     this.overlay.classList.add('hidden');
     this.isJejuFlyover = false;
+    this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -420,6 +438,7 @@
   startHaeundaeFlight() {
     this.overlay.classList.add('hidden');
     this.isJejuFlyover = false;
+    this.isGeoPlaceFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -497,6 +516,7 @@
     this.overlay.classList.add('hidden');
     this.showGateActionPrompt(false);
     this.isJejuFlyover = true;
+    this.isGeoPlaceFlyover = false;
     this.isPlaying = true;
     this.isDestroyed = false;
     this.isBellySliding = false;
@@ -573,6 +593,137 @@
       syncFallbackVisibility();
     }
     this.showPopup('🏝️ 제주공항 상공 비행 시작! 제주도 경관과 3,000m 활주로를 조망하세요. (Flying over Jeju Airport)');
+    this.startJetSound();
+  },
+
+  getPlacePresets() {
+    const presets = [];
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    if (nav && Array.isArray(nav.airports)) {
+      for (const airport of nav.airports) {
+        presets.push({
+          id: airport.icao,
+          name: `${airport.iata} ${airport.short} (${airport.icao})`,
+          lat: airport.lat,
+          lon: airport.lon,
+          elevationM: airport.elevationM || 0
+        });
+      }
+    }
+    const haeundae = (typeof window !== 'undefined' && window.GEO_POINTS) ? window.GEO_POINTS.haeundae : null;
+    if (haeundae) {
+      presets.push({
+        id: 'HAEUNDAE',
+        name: '해운대 LCT (Haeundae)',
+        lat: haeundae.lat,
+        lon: haeundae.lon,
+        elevationM: 0
+      });
+    }
+    return presets;
+  },
+
+  updateSelectedPlaceReadout() {
+    if (!this.placeSelect || !this.placeCoords) return;
+    const option = this.placeSelect.selectedOptions && this.placeSelect.selectedOptions[0];
+    if (!option) return;
+    const lat = Number(option.dataset.lat);
+    const lon = Number(option.dataset.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      this.placeCoords.textContent = '—';
+      return;
+    }
+    this.placeCoords.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+  },
+
+  getSelectedPlace() {
+    const option = this.placeSelect && this.placeSelect.selectedOptions && this.placeSelect.selectedOptions[0];
+    if (!option) return null;
+    const lat = Number(option.dataset.lat);
+    const lon = Number(option.dataset.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return {
+      id: option.value,
+      name: option.textContent || option.value,
+      lat,
+      lon,
+      elevationM: Number(option.dataset.elev) || 0
+    };
+  },
+
+  startAtPlace(place) {
+    if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return;
+    if (this.placePickerPanel) this.placePickerPanel.classList.add('hidden');
+    if (this.overlay) this.overlay.classList.add('hidden');
+    this.showGateActionPrompt(false);
+    this.isJejuFlyover = false;
+    this.isGeoPlaceFlyover = true;
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.throttle = 0.78;
+    this.n1 = 86.0;
+    this.targetN1 = 86.0;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(0.78);
+
+    this.buildAircraft(this.currentPlaneType);
+    const local = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
+      ? window.geoLocalDelta({ lat: place.lat, lon: place.lon, old: { x: 0, z: 0 } }).local
+      : { x: 0, z: 0 };
+    this.planeGroup.position.set(local.x, 900 + (Number(place.elevationM) || 0), local.z);
+    this.yaw = 0;
+    this.pitch = 0;
+    this.roll = 0;
+    this.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    this.planeGroup.visible = true;
+
+    this.velocity.set(0, 0, -78);
+    this.speed = 1.0;
+    this.groundSpeed = 78;
+    this.verticalSpeed = 0;
+    this.isOnGround = false;
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = `${place.name} 상공 비행 (Selected Place)`;
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = typeof window !== 'undefined' ? (window.GEO_ION_TOKEN || '') : '';
+    try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    const tilesActive = Boolean(this.geoLayer) || Boolean(tilesOn);
+    const ll = (typeof window !== 'undefined' && typeof window.geoLocalToLatLon === 'function')
+      ? window.geoLocalToLatLon(local.x, local.z)
+      : { lat: place.lat, lon: place.lon };
+    this.showPopup(tilesActive
+      ? `📍 ${place.name} 상공 비행 시작! (${ll.lat.toFixed(4)}°, ${ll.lon.toFixed(4)}°) · 김해 기준 타일 프레임`
+      : `📍 ${place.name} 상공 비행 시작! (${ll.lat.toFixed(4)}°, ${ll.lon.toFixed(4)}°) · 오프라인 폴백(해수면) 경고`);
     this.startJetSound();
   },
 

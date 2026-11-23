@@ -95,6 +95,24 @@ streamed terrain covers the whole map without overlap.
 Known limit: other procedural scenery along the old corridor is not yet
 georeferenced; only Gimhae, Haeundae and Incheon are placed at real coordinates.
 
+## Selectable spawn-place picker — interim scope and next step
+
+The start menu and mobile drawer now expose **📍 장소 선택 비행 (Select spawn place)**.
+It offers the real-airport presets from `airport_indicators.js` plus the Haeundae
+landmark, converts the chosen WGS84 point into the **existing Gimhae-anchored**
+local frame with `geoLocalDelta()`, and spawns airborne at ~900 m above the preset elevation. No tile or
+terrain-provider re-anchoring happens: the 3D Tiles layer and terrain datum stay
+fixed at Gimhae, so distant presets have reduced positional accuracy and may fall
+back to the procedural/sea-floor surface when tiles are unavailable.
+
+**Next step (deferred):** true arbitrary-place spawning requires a runtime
+`retargetGeo(anchor)` — dispose/recreate `HajunGeoTiles.create()` around the
+selected lat/lon, recreate the terrain provider with spawn-relative flat zones,
+generalize `geoLocalDelta()`/`geoLocalToLatLon()` to the active anchor, replace
+the `isGeoPlaceFlyover` collision escape with full provider-backed ground
+queries, and hide legacy Gimhae/Incheon GLB scenery outside the old corridor.
+Until then this picker is a preset-only stopgap.
+
 
 ## Airfield cleanup and flat buildings
 
