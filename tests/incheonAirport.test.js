@@ -154,3 +154,45 @@ test('Ground runway steering works with HOTAS stick, touch joystick, and keyboar
   const touchLeft = game.collectFlight3dInputs(0.016);
   assert.ok(touchLeft.rudder < -0.5, `Touch joystick left must steer left on ground (got ${touchLeft.rudder})`);
 });
+
+test('_curveGeoFallbackPlane curves fallback ground downward with Earth curvature so distant 3D tiles are never buried', () => {
+  class MockPlaneGeometry {
+    constructor(w, h, segW, segH) {
+      this.parameters = { width: w, height: h };
+      const xs = [0, 20000, 220000];
+      const ys = [0, 0, 0];
+      const zs = [0, 0, 0];
+      this.attributes = {
+        position: {
+          count: xs.length,
+          getX: (i) => xs[i],
+          getY: (i) => ys[i],
+          getZ: (i) => zs[i],
+          setZ: (i, v) => { zs[i] = v; },
+          needsUpdate: false
+        }
+      };
+    }
+    computeVertexNormals() {}
+    dispose() {}
+  }
+  const sandbox = {
+    THREE: { PlaneGeometry: MockPlaneGeometry },
+    window: {},
+    document: { getElementById: () => null },
+    location: { protocol: 'http:', hostname: 'localhost' },
+    URLSearchParams,
+    console
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/core.js', 'utf8'), sandbox);
+  const AirplaneGame = vm.runInContext('AirplaneGame', sandbox);
+  const game = Object.create(AirplaneGame.prototype);
+
+  const mesh = { name: 'GeoFallbackGround', geometry: new MockPlaneGeometry(1200000, 1200000, 1, 1) };
+  game._curveGeoFallbackPlane(mesh);
+  const pos = mesh.geometry.attributes.position;
+  assert.ok(pos.getZ(0) <= -35, 'Anchor fallback must stay below runway');
+  assert.ok(pos.getZ(1) < -65, '20km fallback must curve below -31m Earth drop');
+  assert.ok(pos.getZ(2) < -3830, '220km fallback must curve below -3800m Earth drop');
+});

@@ -480,11 +480,38 @@ class AirplaneGame {
     for (let i = prevChildCount; i < this.scene.children.length; i++) {
       const child = this.scene.children[i];
       if (!child) continue;
-      if (child.name === 'GeoFallbackGround' || child.name === 'GeoFallbackWater') continue;
-      this._geoTilesGroup = child;
-      break;
+      if (child.name === 'GeoFallbackGround' || child.name === 'GeoFallbackWater') {
+        this._curveGeoFallbackPlane(child);
+        continue;
+      }
+      if (!this._geoTilesGroup) this._geoTilesGroup = child;
     }
     return this._geoTilesGroup;
+  }
+
+  // Curve the GeoFallbackGround / GeoFallbackWater backing planes downward with Earth's
+  // WGS84 radius so they never float above and bury curved 3D Tiles at 20-300+ km from anchor.
+  _curveGeoFallbackPlane(mesh) {
+    if (!mesh || !mesh.geometry || typeof THREE === 'undefined' || typeof THREE.PlaneGeometry !== 'function') return;
+    const width = (mesh.geometry.parameters && mesh.geometry.parameters.width) || 1200000;
+    const height = (mesh.geometry.parameters && mesh.geometry.parameters.height) || 1200000;
+    const curvedGeo = new THREE.PlaneGeometry(width, height, 64, 64);
+    const pos = curvedGeo.attributes && curvedGeo.attributes.position;
+    if (pos) {
+      const twoR = 2 * 6371000;
+      const baseDrop = mesh.name === 'GeoFallbackWater' ? 45 : 35;
+      for (let i = 0; i < pos.count; i++) {
+        const vx = pos.getX(i);
+        const vy = pos.getY(i);
+        const drop = (vx * vx + vy * vy) / twoR + baseDrop;
+        // Plane is rotated -PI/2 around X, so local +Z maps to world +Y.
+        pos.setZ(i, -drop);
+      }
+      pos.needsUpdate = true;
+      if (typeof curvedGeo.computeVertexNormals === 'function') curvedGeo.computeVertexNormals();
+    }
+    if (typeof mesh.geometry.dispose === 'function') mesh.geometry.dispose();
+    mesh.geometry = curvedGeo;
   }
 
   // GPU vertex-shader flatten for streamed 3D Tiles over Gimhae & Incheon Airport + approach corridor
