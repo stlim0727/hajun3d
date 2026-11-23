@@ -48,6 +48,7 @@
 
     <!-- Target Ring / Runway Direction Indicator -->
     <div id="target-indicator" class="target-indicator">
+      <div id="hud-top-heading" class="hud-top-heading" title="현재 비행기 진방위 (True Heading)">HDG 354° N</div>
       <div class="arrow"></div>
       <span id="target-dist" class="dist-text">활주로 36L (150m)</span>
     </div>
@@ -100,7 +101,7 @@
           </div>
         </div>
         <div class="pfd-heading-readout" title="현재 항공기 진방위 (True Heading)">
-          <span class="hdg-label">HDG</span>
+          <span class="hdg-label">🧭 HDG</span>
           <span id="heading-val" class="hdg-value">354°</span>
           <span id="heading-cardinal" class="hdg-cardinal">N</span>
         </div>
@@ -344,6 +345,14 @@
           <button class="mobile-menu-item-btn" type="button" data-cam-mode="hud" onclick="window.setCameraMode('hud'); window.toggleMobileMenu();">
             <span class="item-icon">🎯</span>
             <div><strong>순수 HUD</strong><small>Boresight 전방 시점</small></div>
+          </button>
+        </div>
+
+        <div class="mobile-menu-section-title">🛠️ 시스템 및 문제 신고</div>
+        <div class="mobile-menu-grid">
+          <button class="mobile-menu-item-btn" type="button" onclick="window.downloadProblemReport(); window.toggleMobileMenu();">
+            <span class="item-icon">🧾</span>
+            <div><strong>문제 보고서 다운로드</strong><small>스크린샷 · 위치 · 로그 ZIP</small></div>
           </button>
         </div>
       </div>

@@ -93,6 +93,7 @@
     this.attitudeHorizon = document.getElementById('attitude-horizon');
     this.headingVal = document.getElementById('heading-val');
     this.headingCardinal = document.getElementById('heading-cardinal');
+    this.hudTopHeading = document.getElementById('hud-top-heading');
     this.destinationSelect = document.getElementById('destination-select');
     this.selectedDestinationIcao = this.selectedDestinationIcao || 'RKSI';
     this.speedBadge = document.getElementById('speed-status-badge');
@@ -967,11 +968,14 @@
     if (this.scoreDisplay) this.scoreDisplay.textContent = this.score;
     if (this.paxDisplay) this.paxDisplay.textContent = `${this.passengers}명`;
 
-    // 현재 항공기 진방위(True Heading) 갱신 (PFD 계기판 하단)
-    if (this.headingVal || this.headingCardinal) {
+    // 현재 항공기 진방위(True Heading) 갱신 (PFD 계기판 및 상단 타겟 바)
+    if (this.headingVal || this.headingCardinal || this.hudTopHeading) {
       const hdg = this.getAircraftHeadingDeg();
-      if (this.headingVal) this.headingVal.textContent = `${String(hdg).padStart(3, '0')}°`;
-      if (this.headingCardinal) this.headingCardinal.textContent = this.getCardinalDirection(hdg);
+      const cardinal = this.getCardinalDirection(hdg);
+      const hdgStr = String(hdg).padStart(3, '0');
+      if (this.headingVal) this.headingVal.textContent = `${hdgStr}°`;
+      if (this.headingCardinal) this.headingCardinal.textContent = cardinal;
+      if (this.hudTopHeading) this.hudTopHeading.textContent = `HDG ${hdgStr}° ${cardinal}`;
     }
 
     const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
