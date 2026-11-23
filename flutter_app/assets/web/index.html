@@ -277,10 +277,6 @@
             <span class="item-icon">📍</span>
             <div><strong>장소 선택 비행</strong><small>Select spawn place</small></div>
           </button>
-          <button class="mobile-menu-item-btn" type="button" onclick="window.downloadProblemReport(); window.toggleMobileMenu();">
-            <span class="item-icon">🧾</span>
-            <div><strong>문제 보고서 다운로드</strong><small>스크린샷 · 위치 · 로그 ZIP</small></div>
-          </button>
           <button class="mobile-menu-item-btn mic-btn" type="button" onclick="window.toggleMicrophone(); window.toggleMobileMenu();">
             <span class="item-icon">🎙️</span>
             <div><strong>기장 안내 방송</strong><small id="mobile-mic-status">마이크 ON/OFF</small></div>
@@ -795,6 +791,9 @@
       </div>
     </div>
   </div>
+  <!-- Persistent problem report access: visible on every screen -->
+  <button id="problem-report-float-btn" class="problem-report-float glass" type="button" title="문제 보고서 다운로드 (스크린샷 · 위치 · 로그 ZIP)" onclick="window.downloadProblemReport()">🧾 <span>문제 보고</span></button>
+
   <!-- Selectable spawn-place picker (interim presets in the Gimhae-anchored frame) -->
   <div id="place-picker-panel" class="emergency-panel glass hidden place-picker-panel">
     <div class="emergency-panel-header">
@@ -924,7 +923,6 @@
             <button id="jeju-flyover-btn" class="btn-secondary" type="button" onclick="window.startJejuFlyover()">🏝️ 제주공항 상공 비행</button>
             <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()">🔍 3D GLB 모델 갤러리</button>
             <button id="glb-import-btn" class="btn-secondary" type="button" onclick="window.triggerGLBFileSelect()">📦 커스텀 GLB 불러오기</button>
-            <button id="problem-report-btn" class="btn-secondary" type="button" onclick="window.downloadProblemReport()">🧾 문제 보고서 다운로드</button>
           </div>
       <p class="build-info" data-build-info>
         <span>Branch</span> <span data-build-branch>unknown</span>
