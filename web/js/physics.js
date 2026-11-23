@@ -830,7 +830,11 @@
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('runway_landing');
         }
-        if (this.planeGroup && this.planeGroup.position.z < -30000) {
+        const destIcao = this.selectedDestinationIcao || 'RKSI';
+        const atDestination = (typeof window !== 'undefined' && window.RouteModel && this.planeGroup)
+          ? window.RouteModel.isDestinationLanding(destIcao, this.planeGroup.position.x, this.planeGroup.position.z, !this.geoLayer)
+          : Boolean(this.planeGroup && this.planeGroup.position.z < -30000);
+        if (atDestination) {
           this.flightPhase = 'TAXI_IN';
           if (this.phaseDisplay) this.phaseDisplay.textContent = '대륙 육지 공항 착륙 성공 (게이트 1번으로 주행)';
           this.score += 1500;
@@ -1098,8 +1102,13 @@
     }
 
     if (this.isOnGround && this.planeGroup) {
-      const distDestGate = Math.hypot(this.planeGroup.position.x - (-235), this.planeGroup.position.z - (-45450));
-      const distDestGate2 = Math.hypot(this.planeGroup.position.x - (-155), this.planeGroup.position.z - (-45000));
+      const destIcao = this.selectedDestinationIcao || 'RKSI';
+      const route = typeof window !== 'undefined' ? window.RouteModel : null;
+      const compressed = !this.geoLayer;
+      const destGate = route ? route.gateSim(destIcao, compressed) : { x: -235, z: -45450 };
+      const destRunway = route ? route.destinationSim(destIcao, compressed) : { x: -155, z: -45000 };
+      const distDestGate = Math.hypot(this.planeGroup.position.x - destGate.x, this.planeGroup.position.z - destGate.z);
+      const distDestGate2 = Math.hypot(this.planeGroup.position.x - destRunway.x, this.planeGroup.position.z - destRunway.z);
       const distStartGate = Math.hypot(this.planeGroup.position.x - (-155), this.planeGroup.position.z - 0);
       const nearGate = (distDestGate <= 85.0) || (distDestGate2 <= 85.0) || (distStartGate <= 85.0);
       if (nearGate && this.speed < 0.35 && this.flightPhase !== 'DEPLANING' && this.flightPhase !== 'MISSION_COMPLETE' && this.flightPhase !== 'TAKEOFF_RUN') {

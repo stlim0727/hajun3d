@@ -120,6 +120,16 @@ Legacy Gimhae/Incheon GLB scenery keeps its original world coordinates; the
 70 km far clip keeps it out of view at distant presets. Without an ion token
 the picker still falls back to the procedural/sea-floor surface.
 
+## Metric route model
+
+`web/js/route_model.js` derives progress, remaining distance and bearing from
+great-circle values in `AirportIndicators`. The legacy RKPK→RKSI arcade corridor
+still maps compressed `z` onto the great circle and keeps its mesh endpoints at
+`z=-45000`; geo-tile flights use the active exact `GEO_ANCHOR` instead. HUD
+distance/bearing, from-destination and landing phase thresholds now read this
+model, so raw `z` is only a fallback when the module is unavailable.
+
+
 
 ## Airfield cleanup and flat buildings
 

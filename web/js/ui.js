@@ -196,8 +196,10 @@
     if (this.cruiseSpeedBtn) {
       this.cruiseSpeedBtn.className = `icon-btn glass cruise-btn${this.cruiseMultiplier === 2 ? ' fast-2x' : (this.cruiseMultiplier === 4 ? ' fast-4x' : '')}`;
     }
-    this.showPopup(this.cruiseMultiplier > 1 
-      ? `🚀 [${this.cruiseMultiplier}x 배속 순항 활성화] 340km 대륙 횡단 항로를 ${this.cruiseMultiplier}배 빠른 속도로 순항합니다!`
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const routeKm = nav ? Math.round(nav.routeDistanceKm) : 340;
+    this.showPopup(this.cruiseMultiplier > 1
+      ? `🚀 [${this.cruiseMultiplier}x 배속 순항 활성화] ${routeKm}km 대륙 횡단 항로를 ${this.cruiseMultiplier}배 빠른 속도로 순항합니다!`
       : '✈️ [1x 표준 순항 복귀] 일반 속도로 순항합니다.');
   },
 
@@ -359,7 +361,9 @@
     this.isStalling = false;
     this.clearGPWS();
 
-    const isFromDest = (this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE');
+    const isFromDest = (typeof window !== 'undefined' && window.RouteModel && this.planeGroup)
+      ? window.RouteModel.isFromDestination(this.selectedDestinationIcao || 'RKSI', this.planeGroup.position.x, this.planeGroup.position.z, !this.geoLayer)
+      : ((this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE'));
     this.flightPhase = 'TAKEOFF_RUN';
     this.phaseDisplay.textContent = isFromDest ? '대륙 활주로 이륙 활주' : '활주로 이륙 활주 (Takeoff)';
 
@@ -424,7 +428,9 @@
     this.isStalling = false;
     this.clearGPWS();
 
-    const isFromDest = (this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE');
+    const isFromDest = (typeof window !== 'undefined' && window.RouteModel && this.planeGroup)
+      ? window.RouteModel.isFromDestination(this.selectedDestinationIcao || 'RKSI', this.planeGroup.position.x, this.planeGroup.position.z, !this.geoLayer)
+      : ((this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE'));
     this.flightPhase = 'TAXI_OUT';
     this.phaseDisplay.textContent = isFromDest ? '대륙 공항 유도로 주행' : '유도로 주행 (Taxiway)';
 
@@ -1003,7 +1009,12 @@
 
     const nav = window.AirportIndicators;
     const zProgress = Math.min(1.0, Math.max(0, -this.planeGroup.position.z / 45000));
-    const navState = this.getDestinationNavigationState(zProgress);
+    const destIcao = this.selectedDestinationIcao || 'RKSI';
+    const compressed = !this.geoLayer;
+    const progress = (typeof window !== 'undefined' && window.RouteModel)
+      ? window.RouteModel.progress(destIcao, this.planeGroup.position.x, this.planeGroup.position.z, compressed)
+      : zProgress;
+    const navState = this.getDestinationNavigationState(progress, compressed);
     const targetPos = navState.targetPos;
     this.targetDist.textContent = navState.targetLabel;
 
@@ -1078,7 +1089,7 @@
     return this.selectedDestinationIcao;
   },
 
-  getDestinationNavigationState(zProgress) {
+  getDestinationNavigationState(zProgress, compressed = !this.geoLayer) {
     const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
     const destIcao = this.selectedDestinationIcao || 'RKSI';
     const destAirport = (nav && nav.byIcao && nav.byIcao[destIcao]) || (nav ? nav.destination : null);
@@ -1089,11 +1100,13 @@
     let targetLabel = '활주로 36L';
     const isDefaultIncheon = destIcao === 'RKSI';
 
-    // Default RKPK -> RKSI compressed corridor uses positionAlongRoute;
-    // custom destinations use live Gimhae-anchored geodetic coordinates.
-    const position = (isDefaultIncheon || typeof window === 'undefined' || typeof window.geoLocalToLatLon !== 'function')
-      ? (nav ? nav.positionAlongRoute(zProgress) : { lat: 35.165, lon: 128.939 })
-      : window.geoLocalToLatLon(pos.x - 160, pos.z);
+    // Compressed arcade flights map z onto the great circle; geo-tile flights
+    // use the active exact geodetic anchor.
+    const position = (typeof window !== 'undefined' && window.RouteModel)
+      ? window.RouteModel.currentLatLon(pos.x, pos.z, compressed, destIcao)
+      : (isDefaultIncheon || typeof window === 'undefined' || typeof window.geoLocalToLatLon !== 'function')
+        ? (nav ? nav.positionAlongRoute(zProgress) : { lat: 35.165, lon: 128.939 })
+        : window.geoLocalToLatLon(pos.x - 160, pos.z);
 
     if (this.isJejuFlyover) {
       const jeju = this.getJejuLocalPosition();
@@ -1103,15 +1116,22 @@
       targetPos = new THREE.Vector3(160, groundY, 800);
       targetLabel = '이륙 활주로 36L (150m)';
     } else if (isDefaultIncheon && (this.flightPhase === 'TAXI_IN' || this.flightPhase === 'DEPLANING' || this.flightPhase === 'MISSION_COMPLETE')) {
-      targetPos = new THREE.Vector3(-330, groundY, -45000);
+      const gate = (typeof window !== 'undefined' && window.RouteModel)
+        ? window.RouteModel.gateSim(destIcao, compressed) : { x: -330, z: -45000 };
+      targetPos = new THREE.Vector3(gate.x, groundY, gate.z);
       const gateDistM = Math.round(pos.distanceTo(targetPos) * 2);
       targetLabel = `인천공항 T1 탑승교 1번 게이트 (${gateDistM}m)`;
     } else if (isDefaultIncheon) {
-      targetPos = new THREE.Vector3(160, groundY, -45000);
+      const destSim = (typeof window !== 'undefined' && window.RouteModel)
+        ? window.RouteModel.destinationSim(destIcao, compressed) : { x: 160, z: -45000 };
+      targetPos = new THREE.Vector3(destSim.x, groundY, destSim.z);
       const routeKm = nav ? nav.routeDistanceKm : 339.5;
-      const remKm = (routeKm * (1.0 - zProgress)).toFixed(1);
+      const remValue = (typeof window !== 'undefined' && window.RouteModel)
+        ? window.RouteModel.remainingKm(destIcao, pos.x, pos.z, compressed)
+        : routeKm * (1.0 - zProgress);
+      const remKm = Math.max(0, remValue).toFixed(1);
       if (zProgress > 0.96) {
-        const remM = Math.round(routeKm * (1.0 - zProgress) * 1000);
+        const remM = Math.round(Math.max(0, remValue) * 1000);
         targetLabel = `인천국제공항 16R 착륙 활주로 (${remM}m)`;
       } else {
         const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x 배속순항]` : '';
@@ -1124,12 +1144,14 @@
       const brg = nav ? String(Math.round(nav.bearingDeg(position, destAirport))).padStart(3, '0') : '174';
       targetLabel = `김해국제공항 36L (${distText} · BRG ${brg}°)`;
     } else if (destAirport) {
-      if (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function') {
+      let destSim = { x: 160, z: -45000 };
+      if (typeof window !== 'undefined' && window.RouteModel) {
+        destSim = window.RouteModel.destinationSim(destIcao, compressed);
+      } else if (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function') {
         const local = window.geoLocalDelta({ lat: destAirport.lat, lon: destAirport.lon, old: { x: 0, z: 0 } }).local;
-        targetPos = new THREE.Vector3(local.x + 160, groundY, local.z);
-      } else {
-        targetPos = new THREE.Vector3(160, groundY, -45000);
+        destSim = { x: local.x + 160, z: local.z };
       }
+      targetPos = new THREE.Vector3(destSim.x, groundY, destSim.z);
       const ind = nav ? nav.indicatorFrom(position, destAirport) : { distanceKm: 0, bearingDeg: 0 };
       const distText = ind.distanceKm < 1
         ? `${Math.round(ind.distanceKm * 1000)}m`
