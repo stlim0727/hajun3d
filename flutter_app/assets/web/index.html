@@ -9,6 +9,7 @@
   <script src="js/geodesy.js?v=20261123a"></script>
   <script src="js/geo_config.js?v=20261123b"></script>
   <script src="js/airport_indicators.js?v=20261122a"></script>
+  <script src="js/route_model.js?v=20261123a"></script>
   <script src="js/three_core_bundle.js?v=20261122c"></script>
 </head>
 <body>
@@ -275,10 +276,7 @@
             <span class="item-icon">🏝️</span>
             <div><strong>제주공항 상공 비행</strong><small>Flying over Jeju Airport</small></div>
           </button>
-          <button class="mobile-menu-item-btn" type="button" onclick="window.openPlacePicker(); window.toggleMobileMenu();">
-            <span class="item-icon">📍</span>
-            <div><strong>장소 선택 비행</strong><small>Select spawn place</small></div>
-          </button>
+
           <button class="mobile-menu-item-btn mic-btn" type="button" onclick="window.toggleMicrophone(); window.toggleMobileMenu();">
             <span class="item-icon">🎙️</span>
             <div><strong>기장 안내 방송</strong><small id="mobile-mic-status">마이크 ON/OFF</small></div>
@@ -805,17 +803,6 @@
   <button id="problem-report-float-btn" class="problem-report-float glass" type="button" title="문제 보고서 다운로드 (스크린샷 · 위치 · 로그 ZIP)" onclick="window.downloadProblemReport()">🧾 <span>문제 보고</span></button>
 
   <!-- Selectable spawn-place picker (interim presets in the Gimhae-anchored frame) -->
-  <div id="place-picker-panel" class="emergency-panel glass hidden place-picker-panel">
-    <div class="emergency-panel-header">
-      <span class="emergency-title">📍 장소 선택 비행 (SELECT PLACE)</span>
-      <button id="place-picker-close-btn" class="close-btn" type="button" onclick="window.closePlacePicker()">✕</button>
-    </div>
-    <select id="place-select" class="place-picker-select" aria-label="비행 시작 장소 선택"></select>
-    <div id="place-coords" class="place-picker-coords">—</div>
-    <p class="place-picker-note">김해 기준 프레임에 고정된 프리셋입니다. 먼 지역은 지형·거리 정밀도가 낮아질 수 있습니다.</p>
-    <button id="place-picker-start-btn" class="btn-secondary" type="button" onclick="window.startAtSelectedPlace()">✈️ 선택한 장소 상공에서 시작</button>
-  </div>
-
   <!-- Start / Game Over Modal -->
   <div id="overlay-screen" class="overlay">
     <div class="modal-card glass">
@@ -840,6 +827,10 @@
             <option value="ancestor">1903 조상 비행기</option>
           </select>
         </label>
+        <label class="setup-field">
+          <span class="setup-label">출발 장소</span>
+          <select id="place-select" aria-label="비행 시작 장소 선택"></select>
+        </label>
       </div>
 
       <p class="lobby-hint">
@@ -850,7 +841,6 @@
       <div class="modal-actions lobby-actions">
         <button id="takeoff-direct-btn" class="btn-primary lobby-primary" type="button" onclick="window.startDirectTakeoff()">🛫 비행 시작</button>
         <button id="start-btn" class="btn-secondary lobby-secondary" type="button" onclick="window.startGateDeparture()">🏢 게이트 탑승 & 유도로 주행하기</button>
-        <button id="place-picker-btn" class="btn-secondary lobby-secondary" type="button" onclick="window.openPlacePicker()">📍 장소 선택 비행</button>
       </div>
 
       <details class="lobby-more">
