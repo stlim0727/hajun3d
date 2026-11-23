@@ -34,11 +34,73 @@
     };
   }
 
+  /**
+   * Terrarium provider aligned with the exact game frame from geodesy.js.
+   * The vendored core provider still uses its flat createAnchorFrame(); this
+   * adapter converts sim coordinates into the equivalent flat coordinates so
+   * tile lookup and flat zones land on the same WGS84 points as landmarks and
+   * the HUD. No vendored code is modified.
+   */
+  function createExactFrameTerrariumProvider(options) {
+    const geo = root.Geodesy;
+    if (!geo || typeof geo.gameToWgs84 !== 'function') {
+      throw new Error('createExactFrameTerrariumProvider requires geodesy.js');
+    }
+    const o = options || {};
+    if (!o.anchor) throw new Error('createExactFrameTerrariumProvider requires { anchor }');
+    const anchor = o.anchor;
+    const simOffset = o.simOffset || { x: 0, z: 0 };
+    const r = (anchor.headingDeg || 0) * Math.PI / 180;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const raw = core.createTerrariumProvider(o);
+
+    // Inverse of the vendored flat frame: exact sim metres -> flat sim metres.
+    function toFlat(x, z) {
+      const ll = geo.gameToWgs84(x - simOffset.x, z - simOffset.z, anchor);
+      const latMid = (anchor.lat + ll.lat) * 0.5 * Math.PI / 180;
+      const east = (ll.lon - anchor.lon) * 111320 * Math.cos(latMid);
+      const north = (ll.lat - anchor.lat) * 110540;
+      const a = east * cos - north * sin;
+      const b = east * sin + north * cos;
+      return { x: a + simOffset.x, z: simOffset.z - b };
+    }
+
+    return {
+      kind: raw.kind,
+      zoom: raw.zoom,
+      visualRoot: raw.visualRoot,
+      getHeight(x, z) {
+        const p = toFlat(x, z);
+        return raw.getHeight(p.x, p.z);
+      },
+      isReady(x, z) {
+        const p = toFlat(x, z);
+        return raw.isReady(p.x, p.z);
+      },
+      isWater(x, z) {
+        const p = toFlat(x, z);
+        return raw.isWater(p.x, p.z);
+      },
+      getNormal(x, z) {
+        const p = toFlat(x, z);
+        return raw.getNormal(p.x, p.z);
+      },
+      update(position) {
+        if (!position) return raw.update(position);
+        const p = toFlat(position.x, position.z);
+        return raw.update({ x: p.x, y: position.y, z: p.z });
+      },
+      dispose() { return raw.dispose(); }
+    };
+  }
+
   const api = {
     decodeTerrarium: core.decodeTerrarium,
     lonLatToTilePixel: core.lonLatToTilePixel,
     createAnchorFrame: core.createAnchorFrame,
     createTerrariumProvider: core.createTerrariumProvider,
+    createExactFrameTerrariumProvider,
     analyticTerrainProvider: core.analyticTerrainProvider,
     assertTerrainProviderContract: core.assertTerrainProviderContract,
     toNormalVector3: core.toNormalVector3,

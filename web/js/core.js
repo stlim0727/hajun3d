@@ -408,7 +408,7 @@ class AirplaneGame {
   enableTerrainProvider() {
     const TP = window.TerrainProvider;
     if (!TP || this.terrainProvider) return false;
-    this.terrainProvider = TP.createTerrariumProvider({
+    this.terrainProvider = TP.createExactFrameTerrariumProvider({
       anchor: this.geoAnchor,
       simOffset: { x: 160, z: 1600 },
       loadTile: TP.createBrowserTileLoader(),
