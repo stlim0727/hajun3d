@@ -106,10 +106,13 @@ vendored bundle itself is untouched.
 `web/js/floating_origin.js` adds a camera-rebased double frame: simulation
 positions stay JS numbers, `toCameraEnu()` removes the camera ECEF origin, and
 `toRenderFloats()` is the only float32 staging step. `core.js` rebases it each
-frame and `problem_report.js` records the current origin. Render-time scene
-translation is deliberately gated: `HajunGeoTiles.update()` computes LOD from
-world-space `simAnchor`, so moving the scene and camera into a relative frame
-must be coordinated with the tile layer and camera modes in one change.
+frame and `problem_report.js` records the current origin. Render rebasing is
+now coordinated: `scene.position` is translated by `-renderOrigin`, the camera
+is offset by the same vector, and the tile layer receives render-relative
+copies of `simAnchor`/`focusAnchors` so `HajunGeoTiles.update()` LOD tests stay
+in the same frame. Camera modes derive offsets from world `planeGroup.position`
+and quaternion instead of the translated `matrixWorld`; the HUD target arrow
+subtracts the render origin before `worldToLocal()`.
 
 
 ## Selectable spawn-place picker — retargeted tiles and physics

@@ -1191,6 +1191,9 @@
     const planePos = this.planeGroup.position;
     const planeQuat = this.planeGroup.quaternion;
     this.planeGroup.updateMatrixWorld();
+    // Camera offsets use the simulation's world position; planeGroup.matrixWorld
+    // carries the render-frame origin translation and is not used here.
+    const localToWorld = (local) => local.clone().applyQuaternion(planeQuat).add(planePos);
 
     // Carry translation immediately so damped exterior cameras don't lag behind
     if (cs.chaseTargetInitialized) {
@@ -1258,7 +1261,7 @@
         eyeLocal.y += cs.headGForceOffset + buffetY + cs.touchJoltOffset;
         eyeLocal.x += buffetX;
 
-        const eyeWorld = eyeLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const eyeWorld = localToWorld(eyeLocal);
         this.camera.position.copy(eyeWorld);
 
         const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
@@ -1277,7 +1280,7 @@
         const winLocal = isAncestor
           ? new THREE.Vector3(-1.2, 0.7, 1.0)
           : new THREE.Vector3(-2.1, 1.35, 3.5);
-        const eyeWorld = winLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const eyeWorld = localToWorld(winLocal);
         this.camera.position.copy(eyeWorld);
 
         const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
@@ -1401,7 +1404,7 @@
         const eyeLocal = isAncestor
           ? new THREE.Vector3(1.2, -0.9, 2.5)
           : new THREE.Vector3(2.6, -2.5, 7.5);
-        const eyeWorld = eyeLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const eyeWorld = localToWorld(eyeLocal);
         const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
         if (Math.abs(cs.touchJoltOffset) > 0.0005) {
           eyeWorld.addScaledVector(upWorld, cs.touchJoltOffset * 1.6);
@@ -1415,7 +1418,7 @@
           : new THREE.Vector3(-0.4, -2.0, -3.0);
         targetLocal.x += cs.gearLookYaw * 3.0;
         targetLocal.y += cs.gearLookPitch * 3.0;
-        const targetWorld = targetLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const targetWorld = localToWorld(targetLocal);
         this.camera.lookAt(targetWorld);
         break;
       }
@@ -1423,7 +1426,7 @@
       case 'hud': {
         // 순수 HUD 전방 시점 (Fixed Boresight)
         const hudLocal = this.getCockpitCameraOffset(this.currentPlaneType, 'hud');
-        this.camera.position.copy(hudLocal.applyMatrix4(this.planeGroup.matrixWorld));
+        this.camera.position.copy(localToWorld(hudLocal));
         this.camera.quaternion.copy(planeQuat);
         this.camera.up.set(0, 1, 0).applyQuaternion(planeQuat);
         break;
@@ -1445,7 +1448,7 @@
         behindLocal.applyAxisAngle(new THREE.Vector3(1, 0, 0), clampedPitch);
         behindLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), cs.chaseYaw);
 
-        const targetCamPos = behindLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const targetCamPos = localToWorld(behindLocal);
         targetCamPos.y = Math.max(groundFloor, targetCamPos.y);
 
         if (cs.chasePos.lengthSq() < 0.001) {
