@@ -53201,12 +53201,15 @@ void main() {
       credit.innerHTML = '<a href="https://cesium.com" target="_blank"><img src="https://assets.ion.cesium.com/ion-credit.png" alt="Cesium ion" style="height:20px;background:#fff;border-radius:3px"></a><img src="https://assets.ion.cesium.com/google-credit.png" alt="Google" style="height:20px;background:#fff;border-radius:3px">';
       container.appendChild(credit);
     }
+    const renderCameraPos = new Vector3();
     function update() {
       tiles.errorTarget = 128;
-      const nearAnchor = camera.position.y < simAnchor.y + 600 && Math.hypot(camera.position.x - simAnchor.x, camera.position.z - simAnchor.z) < 6e3;
+      renderCameraPos.copy(camera.position);
+      if (scene && scene.position) renderCameraPos.add(scene.position);
+      const nearAnchor = renderCameraPos.y < simAnchor.y + 600 && Math.hypot(renderCameraPos.x - simAnchor.x, renderCameraPos.z - simAnchor.z) < 6e3;
       const nearFocusAnchor = focusAnchors.some((anchor) => {
         const y2 = anchor.y ?? 0;
-        return camera.position.y < (anchor.maxAltitude ?? y2 + 600) && Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6e3);
+        return renderCameraPos.y < (anchor.maxAltitude ?? y2 + 600) && Math.hypot(renderCameraPos.x - anchor.x, renderCameraPos.z - anchor.z) < (anchor.radius ?? 6e3);
       });
       tiles.maxDepth = nearAnchor || nearFocusAnchor ? nearAnchorMaxDepth : 0;
       tiles.setResolutionFromRenderer(camera, renderer);

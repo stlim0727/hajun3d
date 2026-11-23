@@ -70,16 +70,21 @@ export function create(options = {}) {
     container.appendChild(credit);
   }
 
+  const renderCameraPos = new THREE.Vector3();
   function update() {
     // GoogleCloudAuthPlugin resets this on init; keep Korean LOD requests available.
     tiles.errorTarget = 128;
+    // core.js translates the scene by -renderOrigin while camera.position stays in
+    // world metres; compare against render-relative anchors in the same frame.
+    renderCameraPos.copy(camera.position);
+    if (scene && scene.position) renderCameraPos.add(scene.position);
     // Keep the available parent tiles around Gimhae during ground operations.
-    const nearAnchor = camera.position.y < simAnchor.y + 600 &&
-      Math.hypot(camera.position.x - simAnchor.x, camera.position.z - simAnchor.z) < 6000;
+    const nearAnchor = renderCameraPos.y < simAnchor.y + 600 &&
+      Math.hypot(renderCameraPos.x - simAnchor.x, renderCameraPos.z - simAnchor.z) < 6000;
     const nearFocusAnchor = focusAnchors.some((anchor) => {
       const y = anchor.y ?? 0;
-      return camera.position.y < (anchor.maxAltitude ?? y + 600) &&
-        Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6000);
+      return renderCameraPos.y < (anchor.maxAltitude ?? y + 600) &&
+        Math.hypot(renderCameraPos.x - anchor.x, renderCameraPos.z - anchor.z) < (anchor.radius ?? 6000);
     });
     tiles.maxDepth = (nearAnchor || nearFocusAnchor) ? nearAnchorMaxDepth : 0;
     tiles.setResolutionFromRenderer(camera, renderer);
