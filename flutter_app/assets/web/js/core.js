@@ -417,8 +417,8 @@ class AirplaneGame {
     if (!TP || (this.terrainProvider && !options.force)) return false;
     const simOffset = options.simOffset || { x: 160, z: 1600 };
     const flatZones = options.flatZones ?? [
-      { minX: -700, maxX: 700, minZ: -2200, maxZ: 2200, height: 0, blendMargin: 400 },
-      { minX: -1600, maxX: 1400, minZ: -47500, maxZ: -42500, height: 0, blendMargin: 600 }
+      { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+      { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
     ];
     this.terrainProvider = TP.createExactFrameTerrariumProvider({
       anchor: this.geoAnchor,
@@ -443,6 +443,7 @@ class AirplaneGame {
     this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
     const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
     this.geoRenderFocusAnchors = renderFocusAnchors;
+    const prevSceneChildren = Array.isArray(this.scene.children) ? this.scene.children.length : 0;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken,
       lat: this.geoAnchor.lat,
@@ -463,6 +464,7 @@ class AirplaneGame {
       container: this.container
     });
     if (this.geoLayer) {
+      this._captureGeoTilesGroup(prevSceneChildren);
       this.enableTerrainProvider();
       ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
         if (this[name]) this[name].visible = false;
@@ -470,6 +472,81 @@ class AirplaneGame {
       this.applyAirfieldMinimalism();
     }
     return Boolean(this.geoLayer);
+  }
+
+  _captureGeoTilesGroup(prevChildCount) {
+    this._geoTilesGroup = null;
+    if (!this.scene || !Array.isArray(this.scene.children)) return null;
+    for (let i = prevChildCount; i < this.scene.children.length; i++) {
+      const child = this.scene.children[i];
+      if (!child) continue;
+      if (child.name === 'GeoFallbackGround' || child.name === 'GeoFallbackWater') continue;
+      this._geoTilesGroup = child;
+      break;
+    }
+    return this._geoTilesGroup;
+  }
+
+  // GPU vertex-shader flatten for streamed 3D Tiles over Gimhae & Incheon Airport + approach corridor
+  // so real-world mountain tiles never poke through the airport aprons, runways, or final approach.
+  applyGeoTilesFlattenZones() {
+    if (!this._geoTilesGroup || typeof THREE === 'undefined') return;
+    if (!this._geoFlattenUniforms) {
+      this._geoFlattenUniforms = {
+        uSceneOffset: { value: new THREE.Vector3() }
+      };
+    }
+    if (this.scene && this.scene.position) {
+      this._geoFlattenUniforms.uSceneOffset.value.copy(this.scene.position);
+    }
+
+    this._geoFlattenFrame = (this._geoFlattenFrame || 0) + 1;
+    if (this._geoFlattenFrame % 10 !== 1) return;
+
+    const uniformsRef = this._geoFlattenUniforms;
+    const patchMaterial = (mat) => {
+      if (!mat || !mat.userData || mat.userData._geoFlattenPatched) return;
+      const prevCompile = mat.onBeforeCompile;
+      mat.onBeforeCompile = (shader, renderer) => {
+        if (typeof prevCompile === 'function') prevCompile(shader, renderer);
+        shader.uniforms.uGeoFlattenSceneOffset = uniformsRef.uSceneOffset;
+        shader.vertexShader =
+          'uniform vec3 uGeoFlattenSceneOffset;\n' +
+          shader.vertexShader.replace(
+            '#include <project_vertex>',
+            `vec4 wpGeoFlat = modelMatrix * vec4( transformed, 1.0 );
+            vec3 simPosGeoFlat = wpGeoFlat.xyz - uGeoFlattenSceneOffset;
+            // Incheon Airport + 2.5km approach corridor (x: -2400..2200, z: -49500..-40500)
+            float icnDx = max(max(-2400.0 - simPosGeoFlat.x, simPosGeoFlat.x - 2200.0), 0.0);
+            float icnDz = max(max(-49500.0 - simPosGeoFlat.z, simPosGeoFlat.z - (-40500.0)), 0.0);
+            float icnFactor = 1.0 - smoothstep(0.0, 1400.0, length(vec2(icnDx, icnDz)));
+            if (icnFactor > 0.0) {
+              float targetWorldY = -1.5 + uGeoFlattenSceneOffset.y;
+              wpGeoFlat.y = mix(wpGeoFlat.y, min(wpGeoFlat.y, targetWorldY), icnFactor);
+            }
+            // Gimhae Airport runway corridor (x: -900..900, z: -2600..2600)
+            float pusDx = max(max(-900.0 - simPosGeoFlat.x, simPosGeoFlat.x - 900.0), 0.0);
+            float pusDz = max(max(-2600.0 - simPosGeoFlat.z, simPosGeoFlat.z - 2600.0), 0.0);
+            float pusFactor = 1.0 - smoothstep(0.0, 500.0, length(vec2(pusDx, pusDz)));
+            if (pusFactor > 0.0) {
+              float targetWorldY = -1.2 + uGeoFlattenSceneOffset.y;
+              wpGeoFlat.y = mix(wpGeoFlat.y, min(wpGeoFlat.y, targetWorldY), pusFactor);
+            }
+            vec4 mvPosition = viewMatrix * wpGeoFlat;
+            gl_Position = projectionMatrix * mvPosition;`
+          );
+      };
+      mat.userData._geoFlattenPatched = true;
+      mat.needsUpdate = true;
+    };
+
+    if (typeof this._geoTilesGroup.traverse === 'function') {
+      this._geoTilesGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.material) return;
+        if (Array.isArray(obj.material)) obj.material.forEach(patchMaterial);
+        else patchMaterial(obj.material);
+      });
+    }
   }
 
   // Re-anchor streamed tiles and terrain physics to an arbitrary place spawn.
@@ -515,6 +592,7 @@ class AirplaneGame {
     this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
     const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
     this.geoRenderFocusAnchors = renderFocusAnchors;
+    const prevSceneChildren = Array.isArray(this.scene.children) ? this.scene.children.length : 0;
     this.geoLayer = window.HajunGeoTiles.create({
       ionToken: token,
       lat: next.lat,
@@ -534,6 +612,7 @@ class AirplaneGame {
       container: this.container
     });
     if (!this.geoLayer) return false;
+    this._captureGeoTilesGroup(prevSceneChildren);
 
     this.enableTerrainProvider({ simOffset: worldSimAnchor, flatZones: [] });
     ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
@@ -674,7 +753,10 @@ class AirplaneGame {
       this.floatingOrigin.rebase(camLatLon.lat, camLatLon.lon);
     }
     this.applyFloatingOrigin();
-    if (this.geoLayer) this.geoLayer.update();
+    if (this.geoLayer) {
+      this.geoLayer.update();
+      this.applyGeoTilesFlattenZones();
+    }
     if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
     this.renderer.render(this.scene, this.camera);
   }

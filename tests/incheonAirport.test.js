@@ -85,3 +85,72 @@ test('Incheon Airport remains at the playable -45000 route and stays visible wit
     'TerrainProvider must include a flat zone covering Incheon Runway 16R at (160, -45000)'
   );
 });
+
+test('applyGeoTilesFlattenZones patches 3D tile materials to flatten mountains over Incheon Airport and approach corridor', () => {
+  class Vector3 {
+    constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+    copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+  }
+  const sandbox = {
+    THREE: { Vector3 },
+    window: {},
+    document: { getElementById: () => null },
+    location: { protocol: 'http:', hostname: 'localhost' },
+    URLSearchParams,
+    console
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/core.js', 'utf8'), sandbox);
+  const AirplaneGame = vm.runInContext('AirplaneGame', sandbox);
+  const game = Object.create(AirplaneGame.prototype);
+
+  const tileMat = { userData: {}, needsUpdate: false, onBeforeCompile: null };
+  const tileMesh = { isMesh: true, material: tileMat };
+  game._geoTilesGroup = { traverse(fn) { fn(tileMesh); } };
+  game.scene = { position: new Vector3(10, 0, -200) };
+
+  game.applyGeoTilesFlattenZones();
+  assert.equal(tileMat.userData._geoFlattenPatched, true);
+  assert.equal(tileMat.needsUpdate, true);
+  assert.equal(typeof tileMat.onBeforeCompile, 'function');
+
+  const shader = { uniforms: {}, vertexShader: 'void main() { #include <project_vertex> }' };
+  tileMat.onBeforeCompile(shader, null);
+  assert.ok(shader.uniforms.uGeoFlattenSceneOffset, 'Scene offset uniform must be bound for floating origin');
+  assert.ok(shader.vertexShader.includes('-49500.0'), 'Incheon runway/approach flatten Z-min must be injected');
+  assert.ok(shader.vertexShader.includes('-40500.0'), 'Incheon runway/approach flatten Z-max must be injected');
+});
+
+test('Ground runway steering works with HOTAS stick, touch joystick, and keyboard after landing', () => {
+  const sandbox = {
+    THREE: {
+      MathUtils: {
+        clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
+        lerp: (a, b, t) => a + (b - a) * t
+      }
+    },
+    AirplaneGame: { prototype: {} },
+    window: {},
+    document: { getElementById: () => null }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/physics.js', 'utf8'), sandbox);
+  const game = Object.create(sandbox.AirplaneGame.prototype);
+
+  game.isOnGround = true;
+  game.keys = { up: false, down: false, left: false, right: false, fastForward: false, brake: false };
+  game.throttle = 0.2;
+  game.gearExtended = true;
+
+  // HOTAS stick left/right without twist rudder must steer nosewheel on runway
+  game.hotasState = { connected: true, useTwistRudder: false, pitch: 0, roll: 0.8, yaw: 0 };
+  const hotasRight = game.collectFlight3dInputs(0.016);
+  assert.ok(hotasRight.rudder > 0.5, `HOTAS right roll must steer right on ground (got ${hotasRight.rudder})`);
+
+  // Mobile touch joystick left must steer nosewheel left on runway
+  game.hotasState = { connected: false };
+  game.joystickData = { active: true, x: -0.9, y: 0 };
+  game.smoothedTouchStick = { x: -0.9, y: 0 };
+  const touchLeft = game.collectFlight3dInputs(0.016);
+  assert.ok(touchLeft.rudder < -0.5, `Touch joystick left must steer left on ground (got ${touchLeft.rudder})`);
+});

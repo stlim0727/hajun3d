@@ -678,8 +678,12 @@
       rudder = this.hotasState.yaw;
     }
     if (this.isOnGround) {
-      if (this.keys.left) rudder = Math.max(-1, rudder - 0.7);
-      if (this.keys.right) rudder = Math.min(1, rudder + 0.7);
+      if (this.keys.left) rudder = Math.max(-1, rudder - 0.85);
+      if (this.keys.right) rudder = Math.min(1, rudder + 0.85);
+      // HOTAS 스틱 / 모바일 터치 조이스틱 좌우 입력도 지상 노즈휠 조향(Tiller)에 연동
+      if (Math.abs(rudder) < 0.05 && Math.abs(aileron) > 0.05) {
+        rudder = THREE.MathUtils.clamp(aileron * 0.9, -1, 1);
+      }
     }
 
     const brakes = (this.keys.brake || this.isBellySliding) ? 1.0 : 0.0;
@@ -989,6 +993,15 @@
       core.angularVelocity.x += Math.sin(t * 0.65) * 0.055 * speedFactor * effectiveDt;
       core.angularVelocity.y += Math.sin(t * 1.45) * 0.22 * speedFactor * effectiveDt;
       core.angularVelocity.z += Math.cos(t * 1.45 + 0.6) * 0.14 * speedFactor * effectiveDt;
+    }
+
+    // 착륙 후 활주로 지상 방향 전환(노즈휠 틸러 조향) 보조 — 착륙 직후 감속/택싱 중에도 안정적 선회 보장
+    const curGroundSpd = Math.hypot(result.linearVelocity.x, result.linearVelocity.z);
+    if (this.isOnGround && !this.isDestroyed && !this.isBellySliding && curGroundSpd > 0.35 && Math.abs(inputs.rudder) > 0.04 && core.angularVelocity) {
+      const lowSpdRamp = Math.min(1.0, curGroundSpd / 8.0);
+      const highSpdDamp = Math.max(0.25, 1.0 - curGroundSpd / 80.0);
+      const targetYawRate = -inputs.rudder * 0.52 * lowSpdRamp * highSpdDamp;
+      core.angularVelocity.y += (targetYawRate - core.angularVelocity.y) * Math.min(1.0, effectiveDt * 4.5);
     }
 
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
