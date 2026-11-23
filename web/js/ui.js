@@ -26,7 +26,7 @@
     }
   },
 
-  switchAircraft(type) {
+  switchAircraft(type, options) {
     if (!type) return;
     const names = {
       dc10: 'DC-10 삼발기',
@@ -54,8 +54,8 @@
     this.gearPhaseTimer = 0.0;
     this.updateGearUI('DOWN', 'gear-down');
 
-    // ★ 100% 공식 바이너리 GLB 3D 기체 즉시 로드
-    this.loadGLBPreset(type);
+    // 로비 선택은 상태만 갱신하고, GLB 로드는 비행 시작 시 buildAircraft에서 수행
+    if (!(options && options.deferLoad)) this.loadGLBPreset(type);
 
     const planeNameEl = document.getElementById('plane-name-text');
     if (planeNameEl) planeNameEl.textContent = nameText;

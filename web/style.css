@@ -1119,6 +1119,128 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   -webkit-overflow-scrolling: touch !important;
 }
 
+/* Lobby: one primary action, compact setup, optional extras */
+.lobby-setup {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.setup-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #38bdf8;
+}
+
+.lobby-setup select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+.lobby-hint {
+  margin: 0 0 16px !important;
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+}
+
+.lobby-hint .key {
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #38bdf8;
+  font-size: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.lobby-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.lobby-actions .lobby-primary {
+  min-height: 52px;
+  font-size: 16px;
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+}
+.lobby-secondary { min-height: 44px; }
+
+.lobby-more {
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  text-align: left;
+}
+
+.lobby-more > summary {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7dd3fc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lobby-more-body { padding: 0 12px 12px; }
+.lobby-more-body .plane-selector-box { margin-bottom: 10px; }
+
+.lobby-extra-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.help-card { max-width: min(680px, calc(100vw - 28px)); }
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.help-header h1 { font-size: 24px !important; margin-bottom: 0 !important; }
+.help-lead { margin: 8px 0 16px !important; }
+.help-card .controls-guide { margin-bottom: 16px; }
+
+.help-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+
 /* 기종 선택 버튼 및 이륙/주행 시작 버튼 최우선 클릭 레이어 보장 */
 .plane-choice-btn,
 .btn-primary,
@@ -2580,15 +2702,6 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   100% { transform: scale(1.15); }
 }
 
-.plane-choice-btn.glb-choice-btn {
-  border-color: rgba(56, 189, 248, 0.5) !important;
-  background: rgba(14, 165, 233, 0.15) !important;
-}
-
-.plane-choice-btn.glb-choice-btn:hover {
-  background: rgba(14, 165, 233, 0.35) !important;
-  border-color: #38bdf8 !important;
-}
 
 /* ================================================================
    HOTAS 1 & Airbus Sidestick Flight Control System Styles
@@ -2993,40 +3106,6 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   box-shadow: 0 0 10px rgba(6, 182, 212, 0.6) !important;
 }
 
-/* 4. Collapsible Controls Guide in Modal */
-.controls-guide-collapsible {
-  background: rgba(15, 23, 42, 0.65) !important;
-  border: 1px solid rgba(56, 189, 248, 0.3) !important;
-  border-radius: 10px !important;
-  margin-bottom: 12px !important;
-  overflow: hidden !important;
-  text-align: left !important;
-}
-
-.guide-summary {
-  padding: 10px 14px !important;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  color: #38bdf8 !important;
-  cursor: pointer !important;
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  background: rgba(30, 41, 59, 0.75) !important;
-  user-select: none !important;
-}
-
-.guide-summary:hover {
-  background: rgba(56, 189, 248, 0.15) !important;
-}
-
-.controls-guide-collapsible .controls-guide {
-  padding: 12px !important;
-  margin-bottom: 0 !important;
-  background: transparent !important;
-  max-height: 240px !important;
-  overflow-y: auto !important;
-}
 
 /* ==========================================================================
    📱 Media Queries: max-width: 900px (All Mobile & Compact Devices)
@@ -3196,11 +3275,6 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     touch-action: pan-y !important;
     -webkit-overflow-scrolling: touch !important;
   }
-  .controls-guide-collapsible .controls-guide {
-    max-height: none !important;
-    overflow: visible !important;
-    overflow-y: visible !important;
-  }
   .modal-card h1 {
     font-size: 22px !important;
     margin-bottom: 6px !important;
@@ -3225,18 +3299,16 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   }
   .plane-choice-btn strong {
     font-size: 11px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
   }
   .plane-choice-btn span {
-    font-size: 8.5px !important;
-    line-height: 1.2 !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
-    overflow: hidden !important;
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
   }
+  .lobby-setup {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .lobby-more-body { padding: 0 8px 10px; }
   .btn-primary {
     padding: 12px 16px !important;
     font-size: 14px !important;

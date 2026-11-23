@@ -14,29 +14,38 @@ function debounceAction(actionKey, delayMs = 180) {
   return true;
 }
 
-window.switchPlane = function(type) {
-  // 1. 모달 버튼 활성화 상태 즉시 업데이트 (UI 즉각 100% 반응)
-  document.querySelectorAll('.plane-choice-btn').forEach(btn => btn.classList.remove('active'));
-  const activeBtn = document.getElementById(`select-${type}`);
-  if (activeBtn) activeBtn.classList.add('active');
+window.syncLobbySelectors = function(type) {
+  const planeSelect = document.getElementById('plane-select');
+  if (planeSelect && type && planeSelect.value !== type) planeSelect.value = type;
+  const skinSelect = document.getElementById('skin-select');
+  const skin = window.airplaneGame && typeof window.airplaneGame.getActiveAirlineSkin === 'function'
+    ? window.airplaneGame.getActiveAirlineSkin() : null;
+  if (skinSelect && skin && skinSelect.value !== skin.id) skinSelect.value = skin.id;
+};
 
-  // 2. 게임 기체 모델 전환
+window.switchPlane = function(type) {
+  if (!type) return;
+  // 로비에서는 상태만 변경하고, GLB 로드는 비행 시작 시 buildAircraft에서 수행
   try {
     if (!window.airplaneGame) initGame();
     if (window.airplaneGame) {
-      window.airplaneGame.switchAircraft(type);
+      window.airplaneGame.switchAircraft(type, { deferLoad: true });
+      window.syncLobbySelectors(type);
     }
   } catch (err) {
     console.error('switchPlane error:', err);
   }
 };
 
+
 window.setAirlineSkin = function(id) {
   if (!window.airplaneGame) initGame();
   if (window.airplaneGame && typeof window.airplaneGame.setAirlineSkin === 'function') {
     window.airplaneGame.setAirlineSkin(id);
   }
+  window.syncLobbySelectors();
 };
+
 
 window.nextPlane = function() {
   if (!debounceAction('nextPlane', 200)) return;
@@ -46,6 +55,7 @@ window.nextPlane = function() {
     const curIdx = aircraftTypes.indexOf(window.airplaneGame.currentPlaneType);
     const nextIdx = (curIdx + 1) % aircraftTypes.length;
     window.airplaneGame.switchAircraft(aircraftTypes[nextIdx]);
+    window.syncLobbySelectors(aircraftTypes[nextIdx]);
   }
 };
 
@@ -361,12 +371,34 @@ window.toggleSound = function() {
 };
 
 window.openHelp = function() {
+  const help = document.getElementById('help-screen');
+  if (help) {
+    help.style.display = 'flex';
+    help.classList.remove('hidden');
+  }
+};
+
+window.closeHelp = function() {
+  const help = document.getElementById('help-screen');
+  if (help) {
+    help.classList.add('hidden');
+    help.style.display = 'none';
+  }
+};
+
+window.openLobby = function() {
+  window.closeHelp();
   const overlay = document.getElementById('overlay-screen');
   if (overlay) {
     overlay.style.display = 'flex';
     overlay.classList.remove('hidden');
   }
 };
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') window.closeHelp();
+});
+
 
 window.toggleFullscreen = function() {
   if (!debounceAction('toggleFullscreen', 250)) return;
@@ -487,6 +519,7 @@ window.handleGLBFileSelect = function(event) {
 window.loadGLBPreset = function(type) {
   if (window.airplaneGame) {
     window.airplaneGame.loadGLBPreset(type);
+    window.syncLobbySelectors(type);
   }
   window.closeGLBMenu();
 };
