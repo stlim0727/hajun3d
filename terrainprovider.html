@@ -67,6 +67,21 @@
       flex: 1; height: 8px; border-radius: 99px;
       background: linear-gradient(90deg, #164e63, #22d3ee, #4ade80, #a3a36b, #f8fafc);
     }
+    .look-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+    .look-head h3 { font-size: .85rem; }
+    .look-hint { color: var(--muted); font-size: .7rem; font-weight: 400; margin-left: 6px; }
+    .look-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
+    .look-buttons button {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: .74rem;
+    }
+    .look-buttons button:hover { border-color: var(--accent); color: var(--accent); }
+    .view3d-wrap {
+      position: relative; width: 100%; aspect-ratio: 16 / 10; margin-top: 8px;
+      background: #162438; border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden; cursor: grab;
+    }
+    .view3d-wrap:active { cursor: grabbing; }
     .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
     .stat { background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; }
     .stat span { display: block; color: var(--muted); font-size: .7rem; }
@@ -185,6 +200,21 @@
         <div class="canvas-tag" id="canvas-tag">loading…</div>
       </div>
       <div class="legend"><span>Low</span><div class="legend-bar"></div><span>High</span></div>
+      <div class="look-head">
+        <h3>3D look-around <span class="look-hint">drag to look · buttons snap direction</span></h3>
+        <div class="look-buttons">
+          <button type="button" data-look3d="forward" title="North">N</button>
+          <button type="button" data-look3d="right" title="East">E</button>
+          <button type="button" data-look3d="back" title="South">S</button>
+          <button type="button" data-look3d="left" title="West">W</button>
+          <button type="button" data-look3d="up" title="Up">↑</button>
+          <button type="button" data-look3d="down" title="Down">↓</button>
+        </div>
+      </div>
+      <div class="view3d-wrap">
+        <canvas id="view3d" aria-label="3D terrain look-around"></canvas>
+        <div class="canvas-tag" id="view3d-tag">3D view loading…</div>
+      </div>
       <div class="stats" id="stats"></div>
       <div class="status" id="status" role="status"></div>
     </section>
@@ -289,6 +319,15 @@
       let timer = null;
       let ticks = 0;
       let missing = 0;
+      const LOOK3D_PRESETS = {
+        forward: { yaw: 0, pitch: -0.35 },
+        right: { yaw: -Math.PI / 2, pitch: -0.35 },
+        back: { yaw: Math.PI, pitch: -0.35 },
+        left: { yaw: Math.PI / 2, pitch: -0.35 },
+        up: { yaw: 0, pitch: 0.9 },
+        down: { yaw: 0, pitch: -0.9 }
+      };
+      const look3d = { scene: null, camera: null, renderer: null, mesh: null, yaw: 0, pitch: -0.35, span: 12000, dragging: false, lastX: 0, lastY: 0 };
 
       function buildRegions() {
         const select = document.getElementById('region-select');
@@ -383,6 +422,128 @@
         ctx.fillText('N', GRID / 2 + 3, 9);
       }
 
+      function updateLookTag() {
+        const tag = document.getElementById('view3d-tag');
+        if (tag) tag.textContent = `${(look3d.span / 1000).toFixed(1)} km · yaw ${look3d.yaw.toFixed(2)} / pitch ${look3d.pitch.toFixed(2)}`;
+      }
+
+      function initLook3D() {
+        const THREE = window.THREE;
+        if (!THREE) {
+          document.getElementById('view3d-tag').textContent = 'THREE unavailable';
+          return;
+        }
+        const canvas = document.getElementById('view3d');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x7ec8e3);
+        scene.fog = new THREE.Fog(0x7ec8e3, 6000, 40000);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x203040, 1.15));
+        const sea = new THREE.Mesh(
+          new THREE.PlaneGeometry(120000, 120000),
+          new THREE.MeshBasicMaterial({ color: 0x37699c, side: THREE.DoubleSide })
+        );
+        sea.rotation.x = -Math.PI / 2;
+        sea.position.y = -3;
+        scene.add(sea);
+        const camera = new THREE.PerspectiveCamera(70, 1.6, 1, 80000);
+        camera.rotation.order = 'YXZ';
+        look3d.scene = scene;
+        look3d.camera = camera;
+        look3d.renderer = renderer;
+
+        canvas.addEventListener('pointerdown', (event) => {
+          look3d.dragging = true;
+          look3d.lastX = event.clientX;
+          look3d.lastY = event.clientY;
+          canvas.setPointerCapture(event.pointerId);
+        });
+        canvas.addEventListener('pointermove', (event) => {
+          if (!look3d.dragging) return;
+          look3d.yaw -= (event.clientX - look3d.lastX) * 0.005;
+          look3d.pitch = Math.max(-1.2, Math.min(1.2, look3d.pitch - (event.clientY - look3d.lastY) * 0.005));
+          look3d.lastX = event.clientX;
+          look3d.lastY = event.clientY;
+          updateLookTag();
+        });
+        const endDrag = () => { look3d.dragging = false; };
+        canvas.addEventListener('pointerup', endDrag);
+        canvas.addEventListener('pointercancel', endDrag);
+
+        for (const button of document.querySelectorAll('[data-look3d]')) {
+          button.addEventListener('click', () => {
+            const preset = LOOK3D_PRESETS[button.dataset.look3d] || LOOK3D_PRESETS.forward;
+            look3d.yaw = preset.yaw;
+            look3d.pitch = preset.pitch;
+            updateLookTag();
+          });
+        }
+
+        function frame() {
+          requestAnimationFrame(frame);
+          const width = canvas.clientWidth || 320;
+          const height = canvas.clientHeight || 200;
+          const dpr = renderer.getPixelRatio();
+          if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+            renderer.setSize(width, height, false);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+          }
+          camera.position.set(0, Number(document.getElementById('altitude-select').value) || 0, 0);
+          camera.rotation.set(look3d.pitch, look3d.yaw, 0);
+          renderer.render(scene, camera);
+        }
+        frame();
+      }
+
+      function build3DTerrain(heights, min, max, span) {
+        const THREE = window.THREE;
+        if (!THREE || !look3d.scene) return;
+        if (look3d.mesh) {
+          look3d.scene.remove(look3d.mesh);
+          look3d.mesh.geometry.dispose();
+          look3d.mesh.material.dispose();
+          look3d.mesh = null;
+        }
+        const positions = new Float32Array(GRID * GRID * 3);
+        const colors = new Float32Array(GRID * GRID * 3);
+        const indices = [];
+        const lo = Number.isFinite(min) ? min : 0;
+        const hi = Number.isFinite(max) ? max : lo + 1;
+        for (let row = 0; row < GRID; row++) {
+          for (let col = 0; col < GRID; col++) {
+            const i = row * GRID + col;
+            const height = heights[i];
+            positions[i * 3] = (col / (GRID - 1) - 0.5) * span;
+            positions[i * 3 + 1] = Number.isFinite(height) ? height : lo;
+            positions[i * 3 + 2] = (row / (GRID - 1) - 0.5) * span;
+            const color = elevationColor(height, lo, hi);
+            colors[i * 3] = color[0] / 255;
+            colors[i * 3 + 1] = color[1] / 255;
+            colors[i * 3 + 2] = color[2] / 255;
+          }
+        }
+        for (let row = 0; row < GRID - 1; row++) {
+          for (let col = 0; col < GRID - 1; col++) {
+            const a = row * GRID + col;
+            const b = a + 1;
+            const c = a + GRID;
+            const d = c + 1;
+            indices.push(a, c, b, b, c, d);
+          }
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        look3d.mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+        look3d.scene.add(look3d.mesh);
+        look3d.span = span;
+        updateLookTag();
+      }
+
       function updateStats(centerHeight, preset) {
         const engineStats = engine && typeof engine.stats === 'function' ? engine.stats() : {};
         const altitude = Number(document.getElementById('altitude-select').value);
@@ -432,6 +593,7 @@
           }
         }
         drawTerrain(heights, min, max);
+        build3DTerrain(heights, min, max, span);
         const centerHeight = provider.getHeight(0, 0);
         updateStats(centerHeight, preset);
         document.getElementById('canvas-tag').textContent = `${(span / 1000).toFixed(1)} km span · ${preset.zoom}`;
@@ -556,6 +718,7 @@
       }
 
       buildRegions();
+      initLook3D();
       bindGallery();
       loadCatalog();
       document.getElementById('region-select').addEventListener('change', rebuild);

@@ -157,7 +157,10 @@ provider keeps its own small tile cache and is unchanged.
 `terrainprovider.html` (root source, mirrored to `web/`) pairs a capture gallery
 with a live Terrarium DEM inspector. Region, altitude and provider-option
 selectors re-create the exact-frame provider and redraw the sampled height map
-with tile/cache stats. The "Fly in the game" links deep-link into `index.html`
+with tile/cache stats. The same samples build a Three.js mesh in a second canvas:
+drag or use the N/E/S/W and up/down buttons to look around the selected point
+at the chosen altitude without launching the game.
+The "Fly in the game" links still deep-link into `index.html`
 with `flyHere=1`, `geoLat`, `geoLon`, `flyAlt` and `look`. `game.js` handles
 those parameters with `startGeoInspectFlight()`: it calls `startAtPlace()` at
 the selected WGS84 point, overrides the cruise altitude, and presets the
