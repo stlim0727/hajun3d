@@ -1186,6 +1186,7 @@
     if (!this.camera || !this.planeGroup) return;
     const hideAirframeForInteriorView = (this.cameraMode === '1st' || this.cameraMode === 'hud');
     this.planeGroup.visible = !this.isDestroyed && !hideAirframeForInteriorView;
+    if (this.renderOriginApplied) this.renderOriginApplied.set(0, 0, 0);
     const cs = this.ensureCameraState();
     const safeDt = Math.max(0, Math.min(0.1, dt || 0.016));
     const planePos = this.planeGroup.position;

@@ -67,3 +67,22 @@ test('applyFloatingOrigin restores world camera before changing origin', () => {
   assert.equal(game.geoRenderSimAnchor.x, 160 - 1000100);
   assert.equal(game.geoRenderFocusAnchors[0].z, 900 + 2000100);
 });
+
+test('applyFloatingOrigin maintains render-frame camera across consecutive frames when camera position is updated', () => {
+  const game = makeGame(loadCore());
+  // Frame 1: world camera (1000010, 10, -2000030), plane (1000000, 0, -2000000)
+  game.applyFloatingOrigin();
+  assert.deepEqual(game.camera.position.toArray(), [10, 10, -30]);
+
+  // Frame 2: simulation updates world camera to (1000012, 10, -2000035) while plane moves to (1000002, 0, -2000005)
+  // Simulation writes world position and clears renderOriginApplied
+  game.renderOriginApplied.set(0, 0, 0);
+  game.camera.position.set(1000012, 10, -2000035);
+  game.planeGroup.position.set(1000002, 0, -2000005);
+  game.applyFloatingOrigin();
+
+  // Camera in render frame must remain relative to plane [10, 10, -30], not offset by whole world coordinates
+  assert.deepEqual(game.camera.position.toArray(), [10, 10, -30]);
+  assert.equal(game.scene.position.x, -1000002);
+  assert.equal(game.scene.position.z, 2000005);
+});
