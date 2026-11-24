@@ -80,7 +80,11 @@ window.ScreenFlow = {
     const game = window.airplaneGame;
     if (target === 'lobby') {
       if (!opts.result) this.restoreLobby();
-      if (game) game.isPlaying = false;
+      if (game) {
+        game.isPlaying = false;
+        if (typeof game.stopJetSound === 'function') game.stopJetSound();
+      }
+      if (typeof window.speechSynthesis !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
       this.returnTo = 'lobby';
     } else if (target === 'game') {
       this.returnTo = 'game';

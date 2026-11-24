@@ -65,7 +65,8 @@ function makeGame() {
     screenPaused: false,
     keys: { up: true },
     resetHeldControls() { this.keys.up = false; },
-    syncSettingsUI() { this.settingsSynced = true; }
+    syncSettingsUI() { this.settingsSynced = true; },
+    stopJetSound() { this.jetSoundStopped = true; },
   };
 }
 
@@ -124,4 +125,20 @@ test('mission result copy stays on the result screen and is cleared on a new fli
   window.openLobby();
   assert.equal(title.textContent, originalTitle);
   assert.equal(desc.innerHTML, originalDesc);
+});
+
+test('direct lobby exit from a live flight stops audio and restores setup', () => {
+  const { window, elements } = loadDispatcher();
+  const game = makeGame();
+  game.isPlaying = true;
+  window.airplaneGame = game;
+
+  window.ScreenFlow.beginGame();
+  window.openLobby();
+
+  assert.equal(window.ScreenFlow.current, 'lobby');
+  assert.equal(game.isPlaying, false);
+  assert.equal(game.jetSoundStopped, true);
+  assert.equal(elements.get('overlay-screen').classList.contains('hidden'), false);
+  assert.equal(elements.get('modal-title').textContent, 'AIRPORT FLIGHT OPERATIONS');
 });
