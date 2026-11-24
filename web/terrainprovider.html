@@ -95,7 +95,8 @@
       background: #162438; border: 1px solid var(--border); border-radius: 10px;
       overflow: hidden;
     }
-    #game-preview { display: block; width: 100%; height: 100%; border: 0; }
+    #tiles3d { display: block; width: 100%; height: 100%; }
+    .tiles-credit-host { position: absolute; inset: auto 0 0 0; z-index: 1; pointer-events: none; }
     .preview-drag { position: absolute; inset: 0; z-index: 2; cursor: grab; touch-action: none; }
     .preview-drag:active { cursor: grabbing; }
     .view3d-wrap .canvas-tag { z-index: 3; }
@@ -221,7 +222,7 @@
       </div>
       <div class="legend"><span>Low</span><div class="legend-bar"></div><span>High</span></div>
       <div class="look-head">
-        <h3>Game view <span class="look-hint">same renderer as flight · drag inside to look around</span></h3>
+        <h3>3D Tiles view <span class="look-hint">standalone · drag to look</span></h3>
         <div class="look-buttons">
           <button type="button" data-look3d="forward" title="North">N</button>
           <button type="button" data-look3d="right" title="East">E</button>
@@ -232,9 +233,10 @@
         </div>
       </div>
       <div class="view3d-wrap">
-        <iframe id="game-preview" title="Game view at selected geo position" loading="lazy"></iframe>
+        <canvas id="tiles3d" aria-label="3D Tiles terrain view"></canvas>
+        <div id="tiles-credit-host" class="tiles-credit-host"></div>
         <div id="preview-drag" class="preview-drag" title="Drag to look around"></div>
-        <div class="canvas-tag" id="view3d-tag">Loading game view…</div>
+        <div class="canvas-tag" id="view3d-tag">Loading 3D Tiles…</div>
       </div>
       <div class="stats" id="stats"></div>
       <div class="status" id="status" role="status"></div>
@@ -340,7 +342,15 @@
       let timer = null;
       let ticks = 0;
       let missing = 0;
-      let previewLook = 'forward';
+      const LOOK_PRESETS = {
+        forward: { yaw: 0, pitch: -0.35 },
+        right: { yaw: -Math.PI / 2, pitch: -0.35 },
+        back: { yaw: Math.PI, pitch: -0.35 },
+        left: { yaw: Math.PI / 2, pitch: -0.35 },
+        up: { yaw: 0, pitch: 0.9 },
+        down: { yaw: 0, pitch: -0.9 }
+      };
+      const viewer = { scene: null, camera: null, renderer: null, tiles: null, yaw: 0, pitch: -0.35 };
 
       function buildRegions() {
         const select = document.getElementById('region-select');
@@ -413,7 +423,6 @@
           url.searchParams.set('look', link.dataset.look);
           link.href = url.href;
         }
-        refreshGamePreview();
       }
 
       function elevationColor(height, min, max) {
@@ -457,55 +466,81 @@
         ctx.fillText('N', GRID / 2 + 3, 9);
       }
 
-      function gamePreviewUrl() {
-        const region = currentRegion();
-        const altitude = Number(document.getElementById('altitude-select').value);
-        const heading = (window.GEO_ANCHOR && window.GEO_ANCHOR.headingDeg) || 0;
-        const url = new URL('index.html', window.location.href);
-        url.searchParams.set('flyHere', '1');
-        url.searchParams.set('geoLat', String(region.lat));
-        url.searchParams.set('geoLon', String(region.lon));
-        url.searchParams.set('geoHeight', '0');
-        url.searchParams.set('geoHeading', String(heading));
-        url.searchParams.set('flyAlt', String(altitude));
-        url.searchParams.set('look', previewLook);
-        return url.href;
-      }
+      function initTilesViewer() {
+        const THREE = window.THREE;
+        if (!THREE || !window.HajunGeoTiles) {
+          document.getElementById('view3d-tag').textContent = '3D Tiles bundle unavailable';
+          return;
+        }
+        const canvas = document.getElementById('tiles3d');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x7ec8e3);
+        const camera = new THREE.PerspectiveCamera(70, 1.6, 1, 70000);
+        camera.rotation.order = 'YXZ';
+        viewer.scene = scene;
+        viewer.camera = camera;
+        viewer.renderer = renderer;
 
-      function refreshGamePreview() {
-        const frame = document.getElementById('game-preview');
-        if (!frame) return;
-        frame.src = gamePreviewUrl();
-        const tag = document.getElementById('view3d-tag');
-        if (tag) tag.textContent = 'Drag inside to look around · buttons reposition the camera';
-      }
-
-      function applyCleanPreview(frame) {
-        try {
-          const doc = frame.contentDocument;
-          if (!doc || !doc.head) return;
-          let style = doc.getElementById('hajun-clean-preview');
-          if (!style) {
-            style = doc.createElement('style');
-            style.id = 'hajun-clean-preview';
-            // Reuse the game canvas as-is; hide only its HUD/overlay siblings.
-            // The ion/Google credit lives inside #game-container and stays visible.
-            style.textContent = 'body > *:not(#game-container){display:none!important}';
-            doc.head.appendChild(style);
+        function frame() {
+          requestAnimationFrame(frame);
+          const width = canvas.clientWidth || 320;
+          const height = canvas.clientHeight || 200;
+          const dpr = renderer.getPixelRatio();
+          if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+            renderer.setSize(width, height, false);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
           }
-        } catch (_) {}
+          camera.position.set(0, Number(document.getElementById('altitude-select').value) || 0, 0);
+          camera.rotation.set(viewer.pitch, viewer.yaw, 0);
+          if (viewer.tiles) viewer.tiles.update();
+          renderer.render(scene, camera);
+        }
+        frame();
+      }
+
+      function rebuildTiles() {
+        if (viewer.tiles) {
+          viewer.tiles.dispose();
+          viewer.tiles = null;
+        }
+        const creditHost = document.getElementById('tiles-credit-host');
+        creditHost.innerHTML = '';
+        const tag = document.getElementById('view3d-tag');
+        const token = window.GEO_ION_TOKEN || '';
+        if (!token || !window.HajunGeoTiles || !viewer.scene) {
+          tag.textContent = 'ion tiles unavailable on this origin';
+          return;
+        }
+        const region = currentRegion();
+        viewer.tiles = window.HajunGeoTiles.create({
+          ionToken: token,
+          lat: region.lat,
+          lon: region.lon,
+          height: 0,
+          azimuth: 0,
+          simAnchor: { x: 0, y: 0, z: 0 },
+          focusAnchors: [{ x: 0, y: 0, z: 0, radius: 12000, maxAltitude: 20000 }],
+          nearAnchorMaxDepth: 17,
+          scene: viewer.scene,
+          camera: viewer.camera,
+          renderer: viewer.renderer,
+          container: creditHost
+        });
+        tag.textContent = `${region.lat.toFixed(4)}, ${region.lon.toFixed(4)} · drag to look`;
       }
 
       function bindPreview() {
         for (const button of document.querySelectorAll('[data-look3d]')) {
           button.addEventListener('click', () => {
-            previewLook = button.dataset.look3d || 'forward';
-            refreshGamePreview();
+            const preset = LOOK_PRESETS[button.dataset.look3d] || LOOK_PRESETS.forward;
+            viewer.yaw = preset.yaw;
+            viewer.pitch = preset.pitch;
           });
         }
 
-        const frame = document.getElementById('game-preview');
-        frame.addEventListener('load', () => applyCleanPreview(frame));
         const layer = document.getElementById('preview-drag');
         let dragging = false;
         let lastX = 0;
@@ -518,14 +553,10 @@
         });
         layer.addEventListener('pointermove', (event) => {
           if (!dragging) return;
-          const frame = document.getElementById('game-preview');
-          const game = frame.contentWindow && frame.contentWindow.airplaneGame;
-          const cs = game && game.cameraState;
-          if (!cs) return;
           const dx = event.clientX - lastX;
           const dy = event.clientY - lastY;
-          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw - dx * 0.0044));
-          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch - dy * 0.0044));
+          viewer.yaw = Math.max(-2.1, Math.min(2.1, viewer.yaw - dx * 0.0044));
+          viewer.pitch = Math.max(-0.85, Math.min(0.95, viewer.pitch - dy * 0.0044));
           lastX = event.clientX;
           lastY = event.clientY;
         });
@@ -724,10 +755,12 @@
       });
       buildRegions();
       bindPreview();
-      refreshGamePreview();
+
       bindGallery();
       loadCatalog();
-      document.getElementById('region-select').addEventListener('change', rebuild);
+      document.getElementById('region-select').addEventListener('change', () => { rebuild(); rebuildTiles(); });
+      initTilesViewer();
+      rebuildTiles();
       document.getElementById('options-select').addEventListener('change', rebuild);
       document.getElementById('altitude-select').addEventListener('change', () => {
         updateFlyLinks();

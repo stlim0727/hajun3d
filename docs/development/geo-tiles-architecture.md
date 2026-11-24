@@ -157,12 +157,11 @@ provider keeps its own small tile cache and is unchanged.
 `terrainprovider.html` (root source, mirrored to `web/`) pairs a capture gallery
 with a live Terrarium DEM inspector. Region, altitude and provider-option
 selectors re-create the exact-frame provider and redraw the sampled height map
-with tile/cache stats. The second pane embeds the actual game renderer in an
-iframe at the selected point/altitude, so the terrain matches an in-game flight.
-A transparent drag layer steers the embedded cockpit camera; the N/E/S/W and
-up/down buttons reload it with a preset look direction.
-A single CSS rule in the iframe hides the HUD/overlay siblings; the game canvas
-and its ion/Google credit remain visible.
+with tile/cache stats. The second pane calls `HajunGeoTiles.create()` directly
+with `simAnchor` at the origin, reusing the same 3D Tiles bundle as the game
+without loading `core.js`, physics or UI. A local camera at the selected
+altitude, a transparent drag layer and the N/E/S/W up/down buttons provide look
+controls; the ion/Google credit stays in the viewer container.
 The sticky header folds to a one-line summary via its button or the `F` key,
 keeping the 3D view usable in a short viewport.
 The "Fly in the game" links still deep-link into `index.html`
