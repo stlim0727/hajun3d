@@ -68,7 +68,7 @@
         hasBuiltInGear: true,
         gearMaterialRegex: /^Material\.(034|036|037|040|042|044|045|049|050|056)$/,
         sharedGearMaterials: /^(Material\.016|material_0)$/,
-        fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
+        fans: [{ radius: 0.80, blades: 24, leftX: -5.72, rightX: 5.72, y: -2.27, z: -0.45 }]
       };
       return {
         a320,
@@ -96,7 +96,7 @@
           wingParams:   [4.0, 16.0, 32.0, 5.15],
           wingProfile:  [0.34, 0.31, -1.5, 5.0],
           hasBuiltInGear: false,
-          fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
+          fans: [{ radius: 0.50, blades: 24, leftX: -10.57, rightX: 10.57, y: -0.89, z: -4.10 }],
           gearDefs: {
             // Main gear pivots sit below the thin wing skin, with fixed mounts reaching into it.
             nose: { x: 0, y: -1.0, z: -22.0, isNose: true, is4Wheel: false, strutLength: 2.77 },
@@ -1443,8 +1443,8 @@
       this.engineExhaustPoints = fanExhaustPoints;
     } else {
       const fallbackByType = {
-        a320: [[-5.06, -1.5, 1.8], [5.06, -1.5, 1.8]],
-        a350: [[-9.8, -2.1, 2.8], [9.8, -2.1, 2.8]],
+        a320: [[-5.72, -2.27, 2.98], [5.72, -2.27, 2.98]],
+        a350: [[-10.57, 1.22, 2.53], [10.57, 1.22, 2.53]],
         b747: [[-11.5, -1.4, -0.5], [-6.2, -1.8, 2.2], [6.2, -1.8, 2.2], [11.5, -1.4, -0.5]],
         dc10: [[-6.8, -1.8, 2.2], [0, 3.6, 13.5], [6.8, -1.8, 2.2]],
         md80: [[-2.6, 0.5, 13.0], [2.6, 0.5, 13.0]],

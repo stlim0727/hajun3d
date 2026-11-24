@@ -2608,8 +2608,8 @@
     // 1. 실제 회전 티타늄 터보팬 블레이드 & 중앙 스파이럴 콘 (Twin Turbofans)
     // 엔진 카울 안쪽에만 깊숙이 위치시켜 흡입구 전면에서만 블레이드가 회전하도록 안착
     const engineDefs = isA350
-      ? { radius: 1.35, blades: 22, leftX: -9.8, rightX: 9.8, y: -2.3, z: -1.2 }
-      : { radius: 0.80, blades: 24, leftX: -5.06, rightX: 5.06, y: -1.5, z: -0.8 };
+      ? { radius: 0.50, blades: 24, leftX: -10.57, rightX: 10.57, y: -0.89, z: -4.10 }
+      : { radius: 0.80, blades: 24, leftX: -5.72, rightX: 5.72, y: -2.27, z: -0.45 };
 
     [engineDefs.leftX, engineDefs.rightX].forEach(x => {
       const fan = this.createTurbofanFan(engineDefs.radius, engineDefs.blades, chromeMat);
