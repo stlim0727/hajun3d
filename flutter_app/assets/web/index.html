@@ -842,10 +842,24 @@
         <button type="button" class="link-btn" onclick="window.openHelp()">전체 조작키 보기 →</button>
       </p>
 
-      <div class="modal-actions lobby-actions">
-        <button id="takeoff-direct-btn" class="btn-primary lobby-primary" type="button" onclick="window.startDirectTakeoff()">🛫 비행 시작</button>
-        <button id="start-btn" class="btn-secondary lobby-secondary" type="button" onclick="window.startGateDeparture()">🏢 게이트 탑승 & 유도로 주행하기</button>
+      <div class="modal-actions lobby-actions" role="group" aria-label="비행 단계 선택">
+        <button id="takeoff-direct-btn" class="btn-primary lobby-phase-btn lobby-phase-takeoff" type="button" onclick="window.startTakeoffPhase()">
+          <span class="phase-icon" aria-hidden="true">🛫</span>
+          <span class="phase-label">이륙</span>
+          <span class="phase-desc">활주로 정렬 · 이륙 활주</span>
+        </button>
+        <button id="cruise-phase-btn" class="btn-secondary lobby-phase-btn lobby-phase-cruise" type="button" onclick="window.startCruisePhase()">
+          <span class="phase-icon" aria-hidden="true">✈️</span>
+          <span class="phase-label">순항</span>
+          <span class="phase-desc">상공 순항 · 항로 비행</span>
+        </button>
+        <button id="approach-phase-btn" class="btn-secondary lobby-phase-btn lobby-phase-approach" type="button" onclick="window.startApproachPhase()">
+          <span class="phase-icon" aria-hidden="true">🛬</span>
+          <span class="phase-label">착륙 접근</span>
+          <span class="phase-desc">파이널 · 착륙 연습</span>
+        </button>
       </div>
+      <p class="lobby-phase-note">기종과 출발 장소를 고른 뒤 원하는 비행 단계부터 시작하세요. 게이트 탑승은 아래 추가 메뉴에 있습니다.</p>
 
       <details class="lobby-more">
         <summary>기종 · 스킨 전체 보기 · 다른 비행 모드 · 설정</summary>
@@ -923,6 +937,7 @@
           </div>
 
           <div class="modal-actions lobby-extra-actions">
+            <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()">🏢 게이트 탑승 & 유도로 주행</button>
             <button id="haeundae-flight-btn" class="btn-secondary" type="button" onclick="window.startHaeundaeFlight()">🌊 해운대 상공 비행</button>
             <button id="jeju-flyover-btn" class="btn-secondary" type="button" onclick="window.startJejuFlyover()">🏝️ 제주공항 상공 비행</button>
             <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()">🔍 3D GLB 모델 갤러리</button>

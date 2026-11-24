@@ -1200,17 +1200,35 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 }
 
 .lobby-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
-.lobby-actions .lobby-primary {
-  min-height: 52px;
-  font-size: 16px;
-  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+.lobby-phase-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 76px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  text-align: center;
+  line-height: 1.2;
+}
+.lobby-phase-btn .phase-icon { font-size: 22px; line-height: 1; }
+.lobby-phase-btn .phase-label { font-size: 14px; font-weight: 800; }
+.lobby-phase-btn .phase-desc { font-size: 10px; opacity: 0.75; }
+.lobby-phase-takeoff { background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); }
+.lobby-phase-cruise { background: linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%); box-shadow: 0 4px 20px rgba(14, 165, 233, 0.3); }
+.lobby-phase-approach { background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
+.lobby-phase-note {
+  margin: 0 0 14px !important;
+  font-size: 10.5px !important;
+  line-height: 1.4 !important;
+  color: #94a3b8 !important;
 }
 .lobby-secondary { min-height: 44px; }
 
@@ -4009,6 +4027,20 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     min-height: 52px !important;
     touch-action: manipulation !important;
   }
+
+  /* Lobby phase actions: stay in one tappable row on phones */
+  .lobby-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+  .lobby-phase-btn {
+    min-height: 68px !important;
+    padding: 8px 3px !important;
+    touch-action: manipulation !important;
+  }
+  .lobby-phase-btn .phase-icon { font-size: 18px !important; }
+  .lobby-phase-btn .phase-label { font-size: 12px !important; }
+  .lobby-phase-btn .phase-desc { font-size: 9px !important; }
 
   /* Mobile Controls Safe Area & Zero-Clipping Padding */
   #mobile-controls {

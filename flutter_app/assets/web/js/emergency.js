@@ -630,7 +630,7 @@
           <span style="color:#10b981; font-weight:700;">🎖️ 비상착륙 특별 보너스: +3,000점 획득!</span>
         `;
         if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-        if (this.takeoffDirectBtn) this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
+        if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
         this.overlay.classList.remove('hidden');
       }
     }, 1800);

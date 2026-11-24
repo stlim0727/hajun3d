@@ -59,8 +59,7 @@ window.nextPlane = function() {
   }
 };
 
-window.startDirectTakeoff = function() {
-  // 모달 즉시 닫기
+function launchPhase(method) {
   const overlay = document.getElementById('overlay-screen');
   if (overlay) {
     overlay.classList.add('hidden');
@@ -75,12 +74,17 @@ window.startDirectTakeoff = function() {
       if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
         window.airplaneGame.enableGyro(true);
       }
-      window.airplaneGame.startDirectTakeoff();
+      window.airplaneGame[method]();
     }
   } catch (err) {
-    console.error('startDirectTakeoff error:', err);
+    console.error(`${method} error:`, err);
   }
-};
+}
+
+window.startTakeoffPhase = function() { launchPhase('startTakeoffPhase'); };
+window.startCruisePhase = function() { launchPhase('startCruisePhase'); };
+window.startApproachPhase = function() { launchPhase('startApproachPhase'); };
+window.startDirectTakeoff = function() { launchPhase('startDirectTakeoff'); };
 
 window.startGateDeparture = function() {
   // 모달 즉시 닫기

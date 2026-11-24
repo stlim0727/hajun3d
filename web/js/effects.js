@@ -1202,8 +1202,8 @@
       if (modalTitle) modalTitle.textContent = '🚨 CRASH INVESTIGATION REPORT';
       if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
 
-      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
+      if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
+      if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
       this.overlay.classList.remove('hidden');
     }, 2400);
   },
@@ -1255,8 +1255,8 @@
       if (modalTitle) modalTitle.textContent = '🌊 SEA IMPACT & CASUALTY REPORT';
       if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
 
-      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
+      if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
+      if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
       this.overlay.classList.remove('hidden');
     }, 2400);
   },

@@ -26,6 +26,13 @@
     }
   },
 
+  setTakeoffPhaseLabel(text) {
+    if (!this.takeoffPhaseLabel && this.takeoffDirectBtn) {
+      this.takeoffPhaseLabel = this.takeoffDirectBtn.querySelector('.phase-label');
+    }
+    if (this.takeoffPhaseLabel) this.takeoffPhaseLabel.textContent = text;
+  },
+
   switchAircraft(type, options) {
     if (!type) return;
     const names = {
@@ -110,6 +117,7 @@
 
     this.startBtn = document.getElementById('start-btn');
     this.takeoffDirectBtn = document.getElementById('takeoff-direct-btn');
+    this.takeoffPhaseLabel = this.takeoffDirectBtn && this.takeoffDirectBtn.querySelector('.phase-label');
     this.gearBtn = document.getElementById('gear-btn');
     this.camToggleBtn = document.getElementById('cam-toggle-btn');
     this.camModeText = document.getElementById('cam-mode-text');
@@ -406,10 +414,14 @@
     this.updateFlapsUI();
     this.updateSpoilerUI();
     this.updateReverserUI();
-    this.showPopup(isFromDest 
-      ? '🛫 대륙 3,800m 메가 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!' 
+    this.showPopup(isFromDest
+      ? '🛫 대륙 3,800m 메가 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!'
       : '🛫 3,800m 초대형 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!');
     this.startJetSound();
+  },
+  // Lobby phase action: runway takeoff (legacy name kept for URL hooks).
+  startTakeoffPhase() {
+    this.startDirectTakeoff();
   },
 
   // 모드 2: 게이트 탑승 & 유도로 주행 (Full Gate Departure - 1번 게이트 정지선)
@@ -510,7 +522,95 @@
       : '📢 승객 285명 탑승 완료! 0~9 키로 출력을 올려 유도로(황색선)로 이동하세요.');
     this.startJetSound();
   },
+  // 로비 페이즈 시작: 상공 순항 (Selected destination or place)
+  startCruisePhase() {
+    const place = typeof this.getSelectedPlace === 'function' ? this.getSelectedPlace() : null;
+    if (place) {
+      this.startAtPlace(place);
+      return;
+    }
+    this.overlay.classList.add('hidden');
+    this.startAirbornePhase('CLIMB_CRUISE', '상공 순항 비행 (Cruise)');
+    const dest = (window.AirportIndicators && window.AirportIndicators.byIcao && window.AirportIndicators.byIcao[this.selectedDestinationIcao])
+      || (window.AirportIndicators && window.AirportIndicators.destination);
+    this.showPopup(dest
+      ? `✈️ ${dest.name} 방향 순항 비행 시작! 목적지까지 항법 유도선을 따르세요.`
+      : '✈️ 상공 순항 비행 시작! 항법 유도선을 따라 목적지로 향하세요.');
+  },
 
+  // 로비 페이즈 시작: 착륙 접근 (Selected destination or place, 5 km final)
+  startApproachPhase() {
+    this.overlay.classList.add('hidden');
+    const place = typeof this.getSelectedPlace === 'function' ? this.getSelectedPlace() : null;
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const icao = this.selectedDestinationIcao || 'RKSI';
+    const airport = (nav && nav.byIcao && nav.byIcao[icao]) || (nav && nav.destination);
+    const targetLat = place ? place.lat : (airport ? airport.lat : 37.4690);
+    const targetLon = place ? place.lon : (airport ? airport.lon : 126.4510);
+    const target = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
+      ? window.geoLocalDelta({ lat: targetLat, lon: targetLon, old: { x: 0, z: 0 } }).local
+      : { x: 160, z: -45000 };
+    this.startAirbornePhase('FINAL_APPROACH', '착륙 접근 (Final Approach)', {
+      x: target.x,
+      y: 450 + (place ? (Number(place.elevationM) || 0) : ((airport && airport.elevationM) || 0)),
+      z: target.z + 5000,
+      gearDown: true,
+      flapIndex: 3
+    });
+    this.showPopup(place
+      ? `🛬 ${place.name} 착륙 접근 시작! 기어·플랩 FULL 전개, 활주로 정렬 후 접지하세요.`
+      : `🛬 ${airport ? airport.name : '목적지'} 착륙 접근 시작! 기어·플랩 FULL 전개, 활주로 정렬 후 접지하세요.`);
+  },
+
+  // Shared reset for airborne lobby starts (cruise / final approach).
+  startAirbornePhase(phase, label, options) {
+    const opts = options || {};
+    this.isJejuFlyover = false;
+    this.showGateActionPrompt(false);
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = opts.gearDown === true;
+    this.gearPhase = this.gearExtended ? 'DOWN' : 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI(this.gearPhase, this.gearPhase === 'DOWN' ? 'gear-down' : 'gear-up');
+    this.flapIndex = opts.flapIndex || 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.buildAircraft(this.currentPlaneType);
+    const spawn = (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+    this.setupAirborneCruiseState(
+      Number.isFinite(opts.x) ? opts.x : spawn.x,
+      Number.isFinite(opts.y) ? opts.y : 1100,
+      Number.isFinite(opts.z) ? opts.z : -15000
+    );
+    if (opts.gearDown) this.velocity.set(0, -12, -85);
+    this.flightPhase = phase;
+    this.phaseDisplay.textContent = label;
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+    this.startJetSound();
+  },
 
   setupAirborneCruiseState(posX, posY, posZ) {
     const type = (this.currentPlaneType || 'a320').toLowerCase();
@@ -1441,7 +1541,7 @@
           </div>
         `;
         if (this.startBtn) this.startBtn.textContent = '🛫 다음 비행 임무 준비하기 (새 승객 285명 탑승)';
-        if (this.takeoffDirectBtn) this.takeoffDirectBtn.textContent = '대륙 활주로에서 즉시 이륙하기 🛫';
+        if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다음 이륙');
         this.overlay.classList.remove('hidden');
       }
     }, 600);
