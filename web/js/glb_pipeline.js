@@ -1344,6 +1344,28 @@
     }
   },
 
+  // Align the lowest extended-gear point with the airport runway surface.
+  // Per-type normalisation offsets were calibrated on the A320; the B747 and
+  // DC-10 gear hangs much lower, so those models used to spawn underground.
+  alignGLBToRunway(scene) {
+    if (!scene || typeof THREE === 'undefined') return;
+    const runwaySurfaceY = 2.12;
+    const groundY = Number.isFinite(this.groundY) ? this.groundY : 6.84;
+    const bounds = new THREE.Box3().setFromObject(scene);
+    const groupWorldY = this.planeGroup && typeof this.planeGroup.getWorldPosition === 'function'
+      ? this.planeGroup.getWorldPosition(new THREE.Vector3()).y
+      : 0;
+    const localMinY = bounds.min.y - groupWorldY;
+    const correction = (runwaySurfaceY - groundY) - localMinY;
+    if (!Number.isFinite(correction) || Math.abs(correction) < 1e-3) return;
+    // Attached fans, gear and nav lights are calibrated against the unaligned
+    // model, so move them together with the GLB scene.
+    for (const child of (this.planeGroup?.children || [scene])) {
+      child.position.y += correction;
+    }
+    if (typeof scene.updateMatrixWorld === 'function') scene.updateMatrixWorld(true);
+  },
+
   applyGLBScene(scene, fileName, animations) {
     if (!scene) return;
     if (!this.planeGroup) {
@@ -1433,6 +1455,7 @@
     }
 
     this.setupGLBControlSurfaceShaders(scene, this.currentPlaneType);
+    this.alignGLBToRunway(scene);
 
     this.planeGroup.updateMatrixWorld(true);
     const fanExhaustPoints = [];
