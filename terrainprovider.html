@@ -480,6 +480,22 @@
         if (tag) tag.textContent = 'Drag inside to look around · buttons reposition the camera';
       }
 
+      function applyCleanPreview(frame) {
+        try {
+          const doc = frame.contentDocument;
+          if (!doc || !doc.head) return;
+          let style = doc.getElementById('hajun-clean-preview');
+          if (!style) {
+            style = doc.createElement('style');
+            style.id = 'hajun-clean-preview';
+            // Reuse the game canvas as-is; hide only its HUD/overlay siblings.
+            // The ion/Google credit lives inside #game-container and stays visible.
+            style.textContent = 'body > *:not(#game-container){display:none!important}';
+            doc.head.appendChild(style);
+          }
+        } catch (_) {}
+      }
+
       function bindPreview() {
         for (const button of document.querySelectorAll('[data-look3d]')) {
           button.addEventListener('click', () => {
@@ -488,6 +504,8 @@
           });
         }
 
+        const frame = document.getElementById('game-preview');
+        frame.addEventListener('load', () => applyCleanPreview(frame));
         const layer = document.getElementById('preview-drag');
         let dragging = false;
         let lastX = 0;

@@ -161,6 +161,8 @@ with tile/cache stats. The second pane embeds the actual game renderer in an
 iframe at the selected point/altitude, so the terrain matches an in-game flight.
 A transparent drag layer steers the embedded cockpit camera; the N/E/S/W and
 up/down buttons reload it with a preset look direction.
+A single CSS rule in the iframe hides the HUD/overlay siblings; the game canvas
+and its ion/Google credit remain visible.
 The sticky header folds to a one-line summary via its button or the `F` key,
 keeping the 3D view usable in a short viewport.
 The "Fly in the game" links still deep-link into `index.html`
