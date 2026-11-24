@@ -232,3 +232,40 @@ test('in-game POV drag follows terrain provider grab-world direction', () => {
   assert.ok(cs.gearLookYaw < 0, 'belly-cam look target uses the opposite yaw offset sign');
   assert.ok(cs.gearLookPitch > 0, 'belly-cam drag down must raise the look target');
 });
+
+test('projection zoom reaches a near-infinite wide view but never reaches zero', () => {
+  const windowListeners = {};
+  const { proto } = loadCameraRuntime({
+    addEventListener(type, handler) { windowListeners[type] = handler; }
+  });
+
+  const targetListeners = {};
+  const target = {
+    clientHeight: 800,
+    addEventListener(type, handler) { targetListeners[type] = handler; }
+  };
+  const camera = { zoom: 1, updateProjectionMatrix() { this.projectionUpdates = (this.projectionUpdates || 0) + 1; } };
+  const game = Object.create(proto);
+  game.isPlaying = true;
+  game.container = target;
+  game.renderer = { domElement: target };
+  game.camera = camera;
+  game.ensureCameraState = () => ({});
+  game.setupCameraDragControls();
+
+  const wheel = (deltaY) => targetListeners.wheel({
+    deltaY, deltaMode: 0, shiftKey: false, ctrlKey: false, preventDefault() {}
+  });
+
+  wheel(100000);
+  assert.equal(camera.zoom, 0.01, 'wheel zoom-out must reach the wide-view floor');
+
+  wheel(-100000);
+  assert.equal(camera.zoom, 3, 'wheel zoom-in cap must still hold');
+
+  targetListeners.pointerdown({ pointerId: 1, pointerType: 'touch', button: 0, clientX: 100, clientY: 100, target, preventDefault() {} });
+  targetListeners.pointerdown({ pointerId: 2, pointerType: 'touch', button: 0, clientX: 1100, clientY: 100, target, preventDefault() {} });
+  windowListeners.pointermove({ pointerId: 2, clientX: 100, clientY: 100 });
+  assert.equal(camera.zoom, 0.01, 'pinch zoom-out must use the same floor');
+  assert.ok(camera.projectionUpdates > 0, 'zoom changes must refresh the projection matrix');
+});

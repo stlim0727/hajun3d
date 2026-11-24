@@ -1420,8 +1420,11 @@
       const [first, second] = touches.values();
       return Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
     };
+    // Projection zoom only: the camera never moves, so obstacles cannot block it.
+    const MIN_CAMERA_ZOOM = 0.01;
+    const MAX_CAMERA_ZOOM = 3;
     const updateZoom = (factor) => {
-      const zoom = Math.min(3, Math.max(0.7, this.camera.zoom * factor));
+      const zoom = Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, this.camera.zoom * factor));
       if (zoom === this.camera.zoom) return;
       this.camera.zoom = zoom;
       this.camera.updateProjectionMatrix();
