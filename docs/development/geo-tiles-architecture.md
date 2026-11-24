@@ -162,6 +162,8 @@ with `simAnchor` at the origin, reusing the same 3D Tiles bundle as the game
 without loading `core.js`, physics or UI. A local camera at the selected
 altitude, a transparent drag layer and the N/E/S/W up/down buttons provide look
 controls; the ion/Google credit stays in the viewer container.
+Drag follows the grab-world convention; X/Y/Z buttons and arrow/PageUp/PageDown
+keys translate the camera in 100 m steps (Shift = 500 m) for free exploration.
 The sticky header folds to a one-line summary via its button or the `F` key,
 keeping the 3D view usable in a short viewport.
 The "Fly in the game" links still deep-link into `index.html`

@@ -85,11 +85,13 @@
     .look-head h3 { font-size: .85rem; }
     .look-hint { color: var(--muted); font-size: .7rem; font-weight: 400; margin-left: 6px; }
     .look-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
-    .look-buttons button {
+    .look-buttons button, .move-btn {
       background: var(--card); border: 1px solid var(--border); color: var(--text);
       border-radius: 6px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: .74rem;
     }
     .look-buttons button:hover { border-color: var(--accent); color: var(--accent); }
+    .move-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .move-label { color: var(--muted); font-size: .7rem; }
     .view3d-wrap {
       position: relative; width: 100%; aspect-ratio: 16 / 10; margin-top: 8px;
       background: #162438; border: 1px solid var(--border); border-radius: 10px;
@@ -232,6 +234,15 @@
           <button type="button" data-look3d="down" title="Down">↓</button>
         </div>
       </div>
+      <div class="move-row">
+        <span class="move-label">Move (arrows / PgUp / PgDn):</span>
+        <button class="move-btn" data-move="x+" title="West (+X)">X+ W</button>
+        <button class="move-btn" data-move="x-" title="East (-X)">X− E</button>
+        <button class="move-btn" data-move="z+" title="North (+Z)">Z+ N</button>
+        <button class="move-btn" data-move="z-" title="South (-Z)">Z− S</button>
+        <button class="move-btn" data-move="y+" title="Up (+Y)">Y+ ↑</button>
+        <button class="move-btn" data-move="y-" title="Down (-Y)">Y− ↓</button>
+      </div>
       <div class="view3d-wrap">
         <canvas id="tiles3d" aria-label="3D Tiles terrain view"></canvas>
         <div id="tiles-credit-host" class="tiles-credit-host"></div>
@@ -350,7 +361,11 @@
         up: { yaw: 0, pitch: 0.9 },
         down: { yaw: 0, pitch: -0.9 }
       };
-      const viewer = { scene: null, camera: null, renderer: null, tiles: null, yaw: 0, pitch: -0.35 };
+      const viewer = {
+        scene: null, camera: null, renderer: null, tiles: null,
+        yaw: 0, pitch: -0.35,
+        pos: { x: 0, y: Number(document.getElementById('altitude-select').value) || 0, z: 0 }
+      };
 
       function buildRegions() {
         const select = document.getElementById('region-select');
@@ -493,7 +508,7 @@
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
           }
-          camera.position.set(0, Number(document.getElementById('altitude-select').value) || 0, 0);
+          camera.position.set(viewer.pos.x, viewer.pos.y, viewer.pos.z);
           camera.rotation.set(viewer.pitch, viewer.yaw, 0);
           if (viewer.tiles) viewer.tiles.update();
           renderer.render(scene, camera);
@@ -508,6 +523,9 @@
         }
         const creditHost = document.getElementById('tiles-credit-host');
         creditHost.innerHTML = '';
+        viewer.pos.x = 0;
+        viewer.pos.z = 0;
+        viewer.pos.y = Number(document.getElementById('altitude-select').value) || 0;
         const tag = document.getElementById('view3d-tag');
         const token = window.GEO_ION_TOKEN || '';
         if (!token || !window.HajunGeoTiles || !viewer.scene) {
@@ -522,14 +540,27 @@
           height: 0,
           azimuth: 0,
           simAnchor: { x: 0, y: 0, z: 0 },
-          focusAnchors: [{ x: 0, y: 0, z: 0, radius: 12000, maxAltitude: 20000 }],
+          focusAnchors: [{ x: 0, y: 0, z: 0, radius: 50000, maxAltitude: 100000 }],
           nearAnchorMaxDepth: 17,
           scene: viewer.scene,
           camera: viewer.camera,
           renderer: viewer.renderer,
           container: creditHost
         });
-        tag.textContent = `${region.lat.toFixed(4)}, ${region.lon.toFixed(4)} · drag to look`;
+        updateViewerTag();
+      }
+
+      function updateViewerTag() {
+        const tag = document.getElementById('view3d-tag');
+        if (!tag || !viewer.tiles) return;
+        const p = viewer.pos;
+        tag.textContent = `x ${p.x.toFixed(0)} · y ${p.y.toFixed(0)} · z ${p.z.toFixed(0)} · yaw ${viewer.yaw.toFixed(2)} / pitch ${viewer.pitch.toFixed(2)}`;
+      }
+
+      function moveViewer(axis, delta) {
+        if (!Object.prototype.hasOwnProperty.call(viewer.pos, axis)) return;
+        viewer.pos[axis] += delta;
+        updateViewerTag();
       }
 
       function bindPreview() {
@@ -538,6 +569,13 @@
             const preset = LOOK_PRESETS[button.dataset.look3d] || LOOK_PRESETS.forward;
             viewer.yaw = preset.yaw;
             viewer.pitch = preset.pitch;
+            updateViewerTag();
+          });
+        }
+        for (const button of document.querySelectorAll('[data-move]')) {
+          button.addEventListener('click', (event) => {
+            const [axis, sign] = button.dataset.move.split('');
+            moveViewer(axis, (sign === '+' ? 1 : -1) * (event.shiftKey ? 500 : 100));
           });
         }
 
@@ -555,10 +593,11 @@
           if (!dragging) return;
           const dx = event.clientX - lastX;
           const dy = event.clientY - lastY;
-          viewer.yaw = Math.max(-2.1, Math.min(2.1, viewer.yaw - dx * 0.0044));
-          viewer.pitch = Math.max(-0.85, Math.min(0.95, viewer.pitch - dy * 0.0044));
+          viewer.yaw = Math.max(-2.1, Math.min(2.1, viewer.yaw + dx * 0.0044));
+          viewer.pitch = Math.max(-0.85, Math.min(0.95, viewer.pitch + dy * 0.0044));
           lastX = event.clientX;
           lastY = event.clientY;
+          updateViewerTag();
         });
         const endDrag = () => { dragging = false; };
         layer.addEventListener('pointerup', endDrag);
@@ -747,6 +786,17 @@
       window.addEventListener('keydown', (event) => {
         if (event.target && /^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName)) return;
         if (document.getElementById('lightbox').classList.contains('active')) return;
+        const keyMoves = {
+          ArrowLeft: ['x', 1], ArrowRight: ['x', -1],
+          ArrowUp: ['z', 1], ArrowDown: ['z', -1],
+          PageUp: ['y', 1], PageDown: ['y', -1]
+        };
+        const keyMove = keyMoves[event.key];
+        if (keyMove) {
+          event.preventDefault();
+          moveViewer(keyMove[0], keyMove[1] * (event.shiftKey ? 500 : 100));
+          return;
+        }
         if (event.key === 'f' || event.key === 'F') {
           event.preventDefault();
           const header = document.querySelector('header');
@@ -764,6 +814,8 @@
       document.getElementById('options-select').addEventListener('change', rebuild);
       document.getElementById('altitude-select').addEventListener('change', () => {
         updateFlyLinks();
+        viewer.pos.y = Number(document.getElementById('altitude-select').value) || 0;
+        updateViewerTag();
         if (provider) { ticks = 0; sample(); }
       });
       if (window.TerrainProvider) rebuild();
