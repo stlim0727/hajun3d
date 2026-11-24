@@ -193,6 +193,9 @@
     this.landmarkDetailLink = document.getElementById('landmark-detail-link');
     this.selectedLandmarkItem = null;
     this.selectedLandmarkId = null;
+    if (typeof window !== 'undefined' && window.NearbyLandmarks && window.LandmarkPins) {
+      window.LandmarkPins.setItems(window.NearbyLandmarks.localLandmarks());
+    }
     if (this.destinationSelect && this.selectedDestinationIcao) {
       this.destinationSelect.value = this.selectedDestinationIcao;
     }
@@ -1132,7 +1135,7 @@
 
   loadLandmarks(force = false) {
     const service = typeof window !== 'undefined' ? window.NearbyLandmarks : null;
-    if (!service || !this.landmarkPanelOpen) return;
+    if (!service) return;
     const at = this.landmarkPosition();
     if (!at) {
       this.setLandmarkStatus('위치 확인 중', 'local');
@@ -1156,9 +1159,9 @@
       language: this.landmarkLanguage,
       force
     }).then(result => {
-      if (seq !== this.landmarkLoadSeq || !this.landmarkPanelOpen) return;
+      if (seq !== this.landmarkLoadSeq) return;
       this.landmarkItems = result.items || [];
-      this.renderLandmarkRows();
+      if (this.landmarkPanelOpen) this.renderLandmarkRows();
       const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
       if (pins && typeof pins.setItems === 'function') pins.setItems(this.landmarkItems);
       const online = result.source === 'online';
@@ -1169,7 +1172,7 @@
           : '내장 랜드마크 · 오프라인';
       }
     }).catch(() => {
-      if (seq === this.landmarkLoadSeq && this.landmarkPanelOpen) {
+      if (seq === this.landmarkLoadSeq) {
         this.setLandmarkStatus('검색 실패', 'local');
       }
     });
@@ -1267,6 +1270,9 @@
     this.selectedLandmarkItem = item;
     this.selectedLandmarkId = item.id;
     this.setLandmarkPanelVisible(true);
+    if (!this.landmarkRows.length && this.landmarkItems && this.landmarkItems.length) {
+      this.renderLandmarkRows();
+    }
     if (this.landmarkDetail) {
       if (this.landmarkDetailTitle) this.landmarkDetailTitle.textContent = item.title || '장소 정보';
       if (this.landmarkDetailExtract) {
@@ -1458,10 +1464,8 @@
         entry.row.classList.toggle('active', indicator.icao === activeIcao);
       }
     }
-    if (this.landmarkPanelOpen) {
-      this.updateLandmarkRows();
-      this.loadLandmarks();
-    }
+    if (this.landmarkPanelOpen) this.updateLandmarkRows();
+    this.loadLandmarks();
     const localVec = targetPos.clone();
     if (this.renderOrigin) localVec.sub(this.renderOrigin);
     this.planeGroup.worldToLocal(localVec);
