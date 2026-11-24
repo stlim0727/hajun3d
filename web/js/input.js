@@ -1484,20 +1484,20 @@
           cs.chasePitch = Math.max(-1.1, Math.min(1.0, cs.chasePitch + dy * sens));
           break;
         case '1st':
-          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw - dx * sens * 0.8));
-          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch - dy * sens * 0.8));
+          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw + dx * sens * 0.8));
+          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch + dy * sens * 0.8));
           break;
         case 'wing':
-          cs.wingLookYaw = Math.max(-1.2, Math.min(1.2, cs.wingLookYaw - dx * sens * 0.75));
-          cs.wingLookPitch = Math.max(-0.7, Math.min(0.7, cs.wingLookPitch - dy * sens * 0.75));
+          cs.wingLookYaw = Math.max(-1.2, Math.min(1.2, cs.wingLookYaw + dx * sens * 0.75));
+          cs.wingLookPitch = Math.max(-0.7, Math.min(0.7, cs.wingLookPitch + dy * sens * 0.75));
           break;
         case 'drone':
           cs.droneOrbitAngle -= dx * sens;
           cs.dronePitch = Math.max(-0.2, Math.min(0.9, cs.dronePitch + dy * sens * 0.5));
           break;
         case 'gear':
-          cs.gearLookYaw = Math.max(-1.2, Math.min(1.2, cs.gearLookYaw + dx * sens * 0.75));
-          cs.gearLookPitch = Math.max(-0.8, Math.min(0.8, cs.gearLookPitch - dy * sens * 0.75));
+          cs.gearLookYaw = Math.max(-1.2, Math.min(1.2, cs.gearLookYaw - dx * sens * 0.75));
+          cs.gearLookPitch = Math.max(-0.8, Math.min(0.8, cs.gearLookPitch + dy * sens * 0.75));
           break;
       }
     });

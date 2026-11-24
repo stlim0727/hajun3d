@@ -59,12 +59,12 @@ function createThreeMock() {
   };
 }
 
-function loadCameraRuntime() {
+function loadCameraRuntime(win = {}) {
   const THREE = createThreeMock();
   const sandbox = {
     THREE,
     AirplaneGame: { prototype: {} },
-    window: {},
+    window: win,
     document: {
       querySelectorAll: () => [],
       getElementById: () => null
@@ -175,4 +175,60 @@ test('web/index.html includes camera mode selector menu and mobile camera button
   for (const mode of ['3rd', '1st', 'wing', 'drone', 'flyby', 'tower', 'gear', 'hud']) {
     assert.ok(html.includes(`data-cam-mode="${mode}"`), `index.html must include data-cam-mode="${mode}"`);
   }
+});
+
+test('in-game POV drag follows terrain provider grab-world direction', () => {
+  const windowListeners = {};
+  const { proto } = loadCameraRuntime({
+    addEventListener(type, handler) { windowListeners[type] = handler; }
+  });
+
+  const targetListeners = {};
+  const target = {
+    clientHeight: 800,
+    addEventListener(type, handler) { targetListeners[type] = handler; }
+  };
+
+  const cs = {
+    chaseYaw: 0, chasePitch: 0,
+    lookYaw: 0, lookPitch: -0.06,
+    wingLookYaw: 0, wingLookPitch: 0,
+    gearLookYaw: 0, gearLookPitch: 0,
+    droneOrbitAngle: 0, dronePitch: 0.28,
+    isDraggingLook: false, dragPointerId: null,
+    dragLastX: 0, dragLastY: 0
+  };
+  const game = Object.create(proto);
+  game.isPlaying = true;
+  game.container = target;
+  game.renderer = { domElement: target };
+  game.camera = { zoom: 1, updateProjectionMatrix() {} };
+  game.ensureCameraState = () => cs;
+  game.showPopup = () => {};
+  game.setupCameraDragControls();
+
+  const dragRightDown = () => {
+    targetListeners.pointerdown({
+      pointerId: 7, pointerType: 'mouse', button: 0,
+      clientX: 100, clientY: 100, target, preventDefault() {}
+    });
+    windowListeners.pointermove({ pointerId: 7, clientX: 200, clientY: 150 });
+    windowListeners.pointerup({ pointerId: 7 });
+  };
+
+  // 1st-person sensitivity matches terrainprovider.html: 0.0055 * 0.8 = 0.0044 rad/px.
+  game.cameraMode = '1st';
+  dragRightDown();
+  assert.ok(Math.abs(cs.lookYaw - 0.44) < 1e-9, 'cockpit drag right must increase yaw');
+  assert.ok(Math.abs(cs.lookPitch - 0.16) < 1e-9, 'cockpit drag down must increase pitch');
+
+  game.cameraMode = 'wing';
+  dragRightDown();
+  assert.ok(cs.wingLookYaw > 0, 'wing drag right must increase yaw');
+  assert.ok(cs.wingLookPitch > 0, 'wing drag down must increase pitch');
+
+  game.cameraMode = 'gear';
+  dragRightDown();
+  assert.ok(cs.gearLookYaw < 0, 'belly-cam look target uses the opposite yaw offset sign');
+  assert.ok(cs.gearLookPitch > 0, 'belly-cam drag down must raise the look target');
 });

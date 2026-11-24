@@ -175,7 +175,7 @@ with `flyHere=1`, `geoLat`, `geoLon`, `flyAlt` and `look`. `game.js` handles
 those parameters with `startGeoInspectFlight()`: it calls `startAtPlace()` at
 the selected WGS84 point, overrides the cruise altitude, and presets the
 cockpit look direction (forward/right/back/left/up/down) or a 360° drone orbit.
-The in-game camera drag still works for free look.
+In-game cockpit, wing and gear POV drag now uses the same grab-world sign convention (drag right/down pans the world right/down); 3rd-person and drone orbit drag is unchanged.
 
 
 
