@@ -1178,6 +1178,7 @@
 
   setMuted(muted) {
     this.soundEnabled = !muted;
+    if (typeof this.persistSoundEnabled === 'function') this.persistSoundEnabled();
     if (this.masterGain && this.audioCtx) {
       const target = this.soundEnabled ? 1.0 : 0.0;
       this.masterGain.gain.setTargetAtTime(target, this.audioCtx.currentTime, 0.05);

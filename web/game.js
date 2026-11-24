@@ -815,6 +815,7 @@ function initGame() {
       console.error('AirplaneGame init error:', err);
     }
   }
+  if (window.airplaneGame && typeof window.syncSettingsUI === 'function') window.syncSettingsUI();
 }
 
 if (document.readyState === 'loading') {

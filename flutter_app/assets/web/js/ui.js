@@ -54,6 +54,8 @@
     if (soundBtn) soundBtn.textContent = this.soundEnabled ? '🔊 사운드 ON' : '🔇 사운드 OFF';
     const timeBtn = document.getElementById('settings-time-btn');
     if (timeBtn) timeBtn.textContent = this.timeOfDay === 'night' ? '🌙 야간 모드' : '☀️ 주간 모드';
+    const topSoundBtn = document.getElementById('sound-btn');
+    if (topSoundBtn) topSoundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
   },
 
   switchAircraft(type, options) {
@@ -260,8 +262,9 @@
   // ----------------------------------------------------------------
   // 낮/밤 시간대 전환 시스템 (Day / Night Switcher)
   // ----------------------------------------------------------------
-  setTimeOfDay(mode) {
+  setTimeOfDay(mode, options = {}) {
     this.timeOfDay = mode;
+    if (typeof this.persistTimeOfDay === 'function') this.persistTimeOfDay();
     const isNight = (mode === 'night');
 
     // 1. 하늘 배경색 및 안개 색상/밀도
@@ -357,9 +360,11 @@
         : '☀️ <span id="time-mode-text">낮</span>';
     }
 
-    this.showPopup(isNight 
-      ? '🌙 야간 비행 모드: 밤하늘의 은하수 별빛, 활주로 유도등 및 기체 항법등이 점등되었습니다!' 
-      : '☀️ 주간 비행 모드: 맑은 푸른 하늘과 쾌청한 태양광 아래를 비행합니다.');
+    if (options.announce !== false) {
+      this.showPopup(isNight 
+        ? '🌙 야간 비행 모드: 밤하늘의 은하수 별빛, 활주로 유도등 및 기체 항법등이 점등되었습니다!' 
+        : '☀️ 주간 비행 모드: 맑은 푸른 하늘과 쾌청한 태양광 아래를 비행합니다.');
+    }
   },
 
   toggleTimeOfDay() {

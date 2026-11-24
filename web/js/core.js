@@ -268,6 +268,7 @@ class AirplaneGame {
     this.passengerReactionTimer = null;
     this.captainPAIndex = 0;
 
+    this.restoreUserSettings();
     try {
       this.initThree();
       this.initLights();
@@ -296,6 +297,13 @@ class AirplaneGame {
     } catch (e) {
       console.error('Aircraft build error:', e);
     }
+    try {
+      if (this.timeOfDay === 'night' && typeof this.setTimeOfDay === 'function') {
+        this.setTimeOfDay('night', { announce: false });
+      }
+    } catch (e) {
+      console.error('Restore night mode error:', e);
+    }
 
     try {
       this.initSpeedEffects();
@@ -308,6 +316,34 @@ class AirplaneGame {
     this.lastTime = performance.now();
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
+  }
+
+  restoreUserSettings() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const savedSound = localStorage.getItem('hajun3d_sound_enabled');
+      if (savedSound !== null) this.soundEnabled = savedSound === 'true';
+      const savedTime = localStorage.getItem('hajun3d_time_of_day');
+      if (savedTime === 'day' || savedTime === 'night') this.timeOfDay = savedTime;
+    } catch (_) {
+      // Storage may be unavailable in restricted WebView contexts.
+    }
+  }
+
+  persistSoundEnabled() {
+    this.saveUserSetting('hajun3d_sound_enabled', this.soundEnabled);
+  }
+
+  persistTimeOfDay() {
+    this.saveUserSetting('hajun3d_time_of_day', this.timeOfDay);
+  }
+
+  saveUserSetting(key, value) {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(key, String(value));
+    } catch (_) {
+      // Storage may be unavailable in restricted WebView contexts.
+    }
   }
 
   // ----------------------------------------------------------------
