@@ -1197,14 +1197,12 @@
     this.displayPassengerDialogue(`💥 [객실 탑승객 285명] "쿵!! (충격 ${report.estimatedG}G로 기체 대폭발! 사망 ${report.fatalities}명, 부상 ${report.seriousInjuries + report.minorInjuries}명 발생!)"`);
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle) modalTitle.textContent = '🚨 CRASH INVESTIGATION REPORT';
-      if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
-
-      if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
-      this.overlay.classList.remove('hidden');
+      this.showLobbyResult({
+        title: '🚨 CRASH INVESTIGATION REPORT',
+        html: this.renderCrashReportHTML(report),
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 2400);
   },
 
@@ -1250,14 +1248,12 @@
     this.displayPassengerDialogue(`🌊 [객실 탑승객 285명] "바다로 격돌!! (충격 ${report.estimatedG}G! 사망 ${report.fatalities}명, 부상 ${report.seriousInjuries + report.minorInjuries}명 발생!)"`);
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle) modalTitle.textContent = '🌊 SEA IMPACT & CASUALTY REPORT';
-      if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
-
-      if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
-      this.overlay.classList.remove('hidden');
+      this.showLobbyResult({
+        title: '🌊 SEA IMPACT & CASUALTY REPORT',
+        html: this.renderCrashReportHTML(report),
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 2400);
   },
 

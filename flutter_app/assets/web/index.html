@@ -204,7 +204,7 @@
       </div>
       <button id="sound-btn" class="icon-btn glass" title="사운드 온/오프" onclick="window.toggleSound()">🔊</button>
       <button id="fullscreen-btn" class="icon-btn glass" title="전체 화면 전환 / 종료" onclick="window.toggleFullscreen()">⛶ <span id="fullscreen-text">전체 화면</span></button>
-      <button id="help-btn" class="icon-btn glass pc-only-hud" title="조작 방법" onclick="window.openHelp()">❓</button>
+      <button id="settings-btn" class="icon-btn glass" title="설정 · 조작 가이드" onclick="window.openSettings()">⚙️ <span id="settings-btn-text">설정</span></button>
       <button id="mobile-menu-btn" class="icon-btn glass mobile-menu-btn mobile-only" title="전체 메뉴 및 기능 설정" onclick="window.toggleMobileMenu()">⚙️ <span class="mobile-menu-label">메뉴</span></button>
     </div>
 
@@ -309,7 +309,7 @@
             <span class="item-icon">🎮</span>
             <div><strong>HOTAS 1 조이스틱</strong><small>스틱/러더 캘리브레이션</small></div>
           </button>
-          <button class="mobile-menu-item-btn" type="button" onclick="window.openHelp(); window.toggleMobileMenu();">
+          <button class="mobile-menu-item-btn" type="button" onclick="window.openSettings()">
             <span class="item-icon">❓</span>
             <div><strong>운항 매뉴얼</strong><small>조작키 및 비행 팁</small></div>
           </button>
@@ -839,7 +839,7 @@
 
       <p class="lobby-hint">
         <span class="key">0-9</span> 출력 · <span class="key">↑↓</span> 피치 · <span class="key">G</span> 기어 ·
-        <button type="button" class="link-btn" onclick="window.openHelp()">전체 조작키 보기 →</button>
+        <button type="button" class="link-btn" onclick="window.openSettings()">⚙️ 설정 · 전체 조작키 보기 →</button>
       </p>
 
       <div class="modal-actions lobby-actions" role="group" aria-label="비행 단계 선택">
@@ -955,14 +955,24 @@
 
     </div>
   </div>
-  <!-- Controls / Help Modal -->
-  <div id="help-screen" class="overlay hidden">
+  <!-- Settings / Controls Modal -->
+  <div id="settings-screen" class="overlay hidden">
     <div class="modal-card glass help-card">
       <div class="help-header">
-        <h1>🎮 조작 가이드</h1>
-        <button id="help-close-btn" class="close-btn" type="button" onclick="window.closeHelp()">✕</button>
+        <h1>⚙️ 설정 · 조작 가이드</h1>
+        <button id="settings-close-btn" class="close-btn" type="button" onclick="window.closeSettings()">✕</button>
       </div>
-      <p class="help-lead">키보드 · HOTAS · 모바일 터치 조작을 한곳에서 확인하세요.</p>
+      <p class="help-lead">비행 설정과 조작키를 한곳에서 확인하세요. 비행 중 열면 시뮬레이션이 일시정지됩니다.</p>
+      <div class="settings-quick" role="group" aria-label="비행 설정">
+        <button id="settings-sound-btn" class="icon-btn glass" type="button" onclick="window.toggleSound(); window.syncSettingsUI()">🔊 사운드 ON</button>
+        <button id="settings-time-btn" class="icon-btn glass" type="button" onclick="window.toggleTimeOfDay(); window.syncSettingsUI()">☀️ 주간 모드</button>
+        <button class="icon-btn glass" type="button" onclick="window.resetCameraLook()">🎯 시선 초기화</button>
+        <button class="icon-btn glass" type="button" onclick="window.toggleGyroTilt(); window.syncSettingsUI()">📱 자이로 전환</button>
+      </div>
+      <label class="settings-slider-row">
+        <span>💨 속도감 <strong id="settings-effect-value">35%</strong></span>
+        <input id="settings-effect-slider" class="effect-range-slider" type="range" min="0" max="100" step="5" value="35" oninput="window.setSpeedEffectIntensityPercent(this.value)">
+      </label>
       <div class="controls-guide">
         <div class="guide-grid">
           <div class="guide-item" style="grid-column: 1 / -1; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.5);">
@@ -1032,8 +1042,8 @@
         </div>
       </div>
       <div class="help-actions">
-        <button id="help-new-flight-btn" class="btn-secondary" type="button" onclick="window.openLobby()">🔄 새 비행 시작</button>
-        <button id="help-done-btn" class="btn-primary" type="button" onclick="window.closeHelp()">비행으로 돌아가기</button>
+        <button id="settings-new-flight-btn" class="btn-secondary" type="button" onclick="window.openLobby()">🔄 새 비행 시작</button>
+        <button id="settings-done-btn" class="btn-primary" type="button" onclick="window.closeSettings()">비행으로 돌아가기</button>
       </div>
     </div>
   </div>

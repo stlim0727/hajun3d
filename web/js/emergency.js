@@ -619,20 +619,17 @@
     this.triggerPassengerReaction('emergency_landing_success');
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle && modalDesc) {
-        modalTitle.textContent = '🏆 HEROIC EMERGENCY LANDING';
-        modalDesc.innerHTML = `
+      this.showLobbyResult({
+        title: '🏆 HEROIC EMERGENCY LANDING',
+        html: `
           <span style="color:#f59e0b; font-weight:800; font-size:18px;">${emTitle} 성공!</span><br>
           방식: <strong style="color:#38bdf8;">${landName}</strong><br>
           비상 상황 속에서도 침착한 조종술로 승객 전원의 생명을 구했습니다.<br>
           <span style="color:#10b981; font-weight:700;">🎖️ 비상착륙 특별 보너스: +3,000점 획득!</span>
-        `;
-        if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-        if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
-        this.overlay.classList.remove('hidden');
-      }
+        `,
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 1800);
   }
 

@@ -426,6 +426,7 @@
     });
 
     window.addEventListener('keydown', (e) => {
+      if (this.screenPaused) return;
       // N 키: 비행 중 또는 대기 중 언제든지 낮/밤 전환
       if (e.code === 'KeyN') {
         this.toggleTimeOfDay();
@@ -560,6 +561,7 @@
     // Shift + 휠로 엔진 출력 조절
     window.addEventListener('wheel', (e) => {
       if (!e.shiftKey || e.ctrlKey) return;
+      if (this.screenPaused) return;
       const hotasModal = document.getElementById('hotas-modal');
       const glbModal = document.getElementById('glb-modal');
       const overlay = document.getElementById('overlay-screen');
@@ -1430,14 +1432,14 @@
     };
 
     target.addEventListener('wheel', (e) => {
-      if (!this.isPlaying || this.isDestroyed || (e.shiftKey && !e.ctrlKey)) return;
+      if (!this.isPlaying || this.isDestroyed || this.screenPaused || (e.shiftKey && !e.ctrlKey)) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? target.clientHeight : 1;
       updateZoom(Math.exp(-e.deltaY * unit * 0.0015));
     }, { passive: false });
 
     target.addEventListener('pointerdown', (e) => {
-      if (!this.isPlaying || this.isDestroyed) return;
+      if (!this.isPlaying || this.isDestroyed || this.screenPaused) return;
       if (e.button !== 0 && e.button !== 2 && e.pointerType === 'mouse') return;
       if (target !== this.container && e.target !== target) return;
       const cs = getState();
@@ -1459,7 +1461,7 @@
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!this.isPlaying || this.isDestroyed) return;
+      if (!this.isPlaying || this.isDestroyed || this.screenPaused) return;
       if (touches.has(e.pointerId)) {
         const previousDistance = touches.size === 2 ? pinchDistance() : null;
         touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1524,10 +1526,15 @@
     });
 
     target.addEventListener('dblclick', () => {
-      if (this.isPlaying && !this.isDestroyed) {
+      if (this.isPlaying && !this.isDestroyed && !this.screenPaused) {
         this.resetCameraLook();
       }
     });
+  },
+
+  resetHeldControls() {
+    if (!this.keys) return;
+    Object.keys(this.keys).forEach((key) => { this.keys[key] = false; });
   },
 
   resetCameraLook() {

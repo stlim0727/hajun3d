@@ -1267,6 +1267,24 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 .help-header h1 { font-size: 24px !important; margin-bottom: 0 !important; }
 .help-lead { margin: 8px 0 16px !important; }
 .help-card .controls-guide { margin-bottom: 16px; }
+.settings-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.settings-quick .icon-btn { justify-content: center; min-height: 40px; white-space: nowrap; }
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  font-size: 13px;
+}
+.settings-slider-row input { flex: 1; min-width: 0; }
 
 .help-actions {
   display: grid;
@@ -3980,7 +3998,7 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   #reverser-btn,
   #gear-btn,
   #plane-toggle-btn,
-  #help-btn {
+  #settings-btn {
     display: none !important;
   }
 

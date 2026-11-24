@@ -33,6 +33,29 @@
     if (this.takeoffPhaseLabel) this.takeoffPhaseLabel.textContent = text;
   },
 
+  showLobbyResult(result) {
+    const titleEl = document.getElementById('modal-title');
+    const descEl = document.getElementById('modal-desc');
+    if (titleEl) titleEl.textContent = result.title;
+    if (descEl) descEl.innerHTML = result.html;
+    if (result.primaryLabel && this.startBtn) this.startBtn.textContent = result.primaryLabel;
+    if (result.phaseLabel && typeof this.setTakeoffPhaseLabel === 'function') this.setTakeoffPhaseLabel(result.phaseLabel);
+    if (window.ScreenFlow) window.ScreenFlow.go('lobby', { result: true });
+  },
+
+  syncSettingsUI() {
+    const slider = document.getElementById('settings-effect-slider');
+    const value = document.getElementById('settings-effect-value');
+    const intensity = Number.isFinite(this.speedEffectIntensity) ? this.speedEffectIntensity : 0.35;
+    const pct = Math.round(intensity * 100);
+    if (slider) slider.value = String(pct);
+    if (value) value.textContent = `${pct}%`;
+    const soundBtn = document.getElementById('settings-sound-btn');
+    if (soundBtn) soundBtn.textContent = this.soundEnabled ? '🔊 사운드 ON' : '🔇 사운드 OFF';
+    const timeBtn = document.getElementById('settings-time-btn');
+    if (timeBtn) timeBtn.textContent = this.timeOfDay === 'night' ? '🌙 야간 모드' : '☀️ 주간 모드';
+  },
+
   switchAircraft(type, options) {
     if (!type) return;
     const names = {
@@ -1520,11 +1543,9 @@
     const planeName = names[this.currentPlaneType] || '항공기';
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle && modalDesc) {
-        modalTitle.textContent = '🏆 FLIGHT MISSION COMPLETED';
-        modalDesc.innerHTML = `
+      this.showLobbyResult({
+        title: '🏆 FLIGHT MISSION COMPLETED',
+        html: `
           <div style="text-align:left; background:rgba(15,23,42,0.65); padding:14px; border-radius:10px; border:1px solid rgba(56,189,248,0.3); margin-bottom:12px;">
             <div style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:8px;">🛫 대륙 횡단 비행 임무 성공!</div>
             <div style="font-size:13px; color:#e2e8f0; line-height:1.7;">
@@ -1539,11 +1560,10 @@
             승객들이 탑승교를 통해 모두 터미널로 들어갔습니다.<br>
             새로운 승객 탑승 및 기체 정비를 마치고 <strong>다음 비행 임무</strong>를 시작하세요!
           </div>
-        `;
-        if (this.startBtn) this.startBtn.textContent = '🛫 다음 비행 임무 준비하기 (새 승객 285명 탑승)';
-        if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다음 이륙');
-        this.overlay.classList.remove('hidden');
-      }
+        `,
+        primaryLabel: '🛫 다음 비행 임무 준비하기 (새 승객 285명 탑승)',
+        phaseLabel: '다음 이륙'
+      });
     }, 600);
   }
 

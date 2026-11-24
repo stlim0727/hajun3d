@@ -16,6 +16,7 @@ class AirplaneGame {
     this.score = 0;
     this.startTime = 0;
     this.isPlaying = false;
+    this.screenPaused = false;
     this.cameraMode = '3rd';
     this.cameraState = {
       chaseYaw: 0,
@@ -750,7 +751,7 @@ class AirplaneGame {
       this.updateAudio(dt);
     }
 
-    if (this.isPlaying && !this.isDestroyed) {
+    if (this.isPlaying && !this.isDestroyed && !this.screenPaused) {
       if (this.currentEmergency) this.updateEmergency(dt);
       this.updateFlightPhysics(dt);
       this.updateControlSurfaces(dt);

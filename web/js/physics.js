@@ -939,19 +939,16 @@
       } else if (ev.type === 'landingStopped' && this.isWaterLanding && !this.waterSuccessShown) {
         this.waterSuccessShown = true;
         setTimeout(() => {
-          const titleEl = document.getElementById('modal-title');
-          const descEl = document.getElementById('modal-desc');
-          if (titleEl) titleEl.textContent = '🌊 MIRACLE DITCHING SUCCESS!';
-          if (descEl) {
-            descEl.innerHTML = `
+          this.showLobbyResult({
+            title: '🌊 MIRACLE DITCHING SUCCESS!',
+            html: `
               <span style="color:#0284c7; font-weight:800; font-size:16px;">🌊 성공적인 해상 비상착수 (Water Ditching)</span><br>
               완벽한 강하율과 기수 각도로 수면에 부드럽게 안착했습니다.<br>
               285명의 승객 전원이 구명정으로 안전하게 구조되었습니다!
-            `;
-          }
-          if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-          if (this.setTakeoffPhaseLabel) this.setTakeoffPhaseLabel('다시 이륙');
-          if (this.overlay) this.overlay.classList.remove('hidden');
+            `,
+            primaryLabel: '게이트에서 다시 시작 🔄',
+            phaseLabel: '다시 이륙'
+          });
         }, 1800);
       }
     }
