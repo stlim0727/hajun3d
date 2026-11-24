@@ -28,7 +28,7 @@
     "yaml": "2.8.1"
   },
   "dependencies": {
-    "@stlim0727/flightsim-core": "git+https://github.com/stlim0727/flightsim-core.git#a87fbf848dce8a32fc554f32fc7fdaa5245d57ae",
+    "@stlim0727/flightsim-core": "git+https://github.com/stlim0727/flightsim-core.git#31e8b41183b5712ef670bb1eb03d28b4112479ec",
     "three": "^0.186.1",
     "3d-tiles-renderer": "^0.5.4"
   }

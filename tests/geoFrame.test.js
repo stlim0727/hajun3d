@@ -10,6 +10,7 @@ globalThis.THREE = THREE;
 
 await import(pathToFileURL(resolve('web/js/flightsim_core_bundle.js')).href);
 await import(pathToFileURL(resolve('web/js/geodesy.js')).href);
+await import(pathToFileURL(resolve('web/js/tile_engine.js')).href);
 await import(pathToFileURL(resolve('web/js/terrain_provider.js')).href);
 const TP = globalThis.TerrainProvider;
 const geo = globalThis.Geodesy;

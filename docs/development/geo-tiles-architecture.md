@@ -149,15 +149,16 @@ model, so raw `z` is only a fallback when the module is unavailable.
 HTTP source. It bounds RGBA cache bytes (32 MiB default), deduplicates
 in-flight tile requests, caps concurrent decodes at four, and orders queued
 tiles by distance to the camera tile. `web/tile_decode_worker.js` performs
-PNG→RGBA decode off the main thread; if Workers are unavailable or fail, the
-browser loader falls back to the original main-thread decode. Both files are
-mirrored into the Flutter WebView assets. The vendored `flightsim-core`
+PNG→RGBA decode off the main thread; if Workers are unavailable or fail,
+`tile_engine.js` falls back to main-thread decode. Both files are mirrored into
+the Flutter WebView assets. `terrain_provider.js` only wraps the engine-backed
+loader; it has no inline fetch/decode path. The vendored `flightsim-core`
 provider keeps its own small tile cache and is unchanged.
 
 ## Terrain Provider Lab page
 
-`terrainprovider.html` (root source, mirrored to `web/`) pairs a capture gallery
-with a live Terrarium DEM inspector. Region, altitude and provider-option
+`web/terrainprovider.html` is the live Terrain Provider Lab page. It pairs a
+capture gallery with a live Terrarium DEM inspector. Region, altitude and
 selectors re-create the exact-frame provider and redraw the sampled height map
 with tile/cache stats. The second pane calls `HajunGeoTiles.create()` directly
 with `simAnchor` at the origin, reusing the same 3D Tiles bundle as the game

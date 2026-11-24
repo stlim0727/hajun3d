@@ -116,11 +116,13 @@ test('flutter_app/assets/web runtime scripts initialize TerrainProvider and tile
   vm.createContext(sandbox);
 
   vm.runInContext(readFileSync(join(FLUTTER_WEB_DIR, 'js', 'flightsim_core_bundle.js'), 'utf8'), sandbox);
+  vm.runInContext(readFileSync(join(FLUTTER_WEB_DIR, 'js', 'tile_engine.js'), 'utf8'), sandbox);
   vm.runInContext(readFileSync(join(FLUTTER_WEB_DIR, 'js', 'terrain_provider.js'), 'utf8'), sandbox);
   vm.runInContext(readFileSync(join(FLUTTER_WEB_DIR, 'js', 'physics.js'), 'utf8'), sandbox);
 
   assert.equal(sandbox.TerrainProvider.createTerrariumProvider, sandbox.FlightSimCore.createTerrariumProvider);
   assert.equal(typeof sandbox.TerrainProvider.createBrowserTileLoader, 'function');
+  assert.equal(typeof sandbox.TileEngine.create, 'function');
 
   const game = Object.create(sandbox.AirplaneGame.prototype);
   game.groundY = 6.84;
@@ -128,6 +130,7 @@ test('flutter_app/assets/web runtime scripts initialize TerrainProvider and tile
   assert.equal(game.buildFlight3dEnvironment().getGroundHeight(160, 0), 0);
 
   const loadTile = sandbox.TerrainProvider.createBrowserTileLoader('https://example.invalid/{z}/{x}/{y}.png');
+  assert.equal(typeof loadTile.engine.loadTile, 'function', 'browser loader must delegate to tile_engine.js');
   const pixels = await loadTile(11, 1758, 809);
   assert.equal(pixels, rgba);
   assert.deepEqual(createdCanvasSize, [256, 256]);

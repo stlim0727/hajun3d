@@ -415,13 +415,19 @@ class AirplaneGame {
   // Falls back to the legacy flat model while tiles load or if they fail.
   enableTerrainProvider(options = {}) {
     const TP = window.TerrainProvider;
-    const geo = window.Geodesy;
     if (!TP || (this.terrainProvider && !options.force)) return false;
+    const simOffset = options.simOffset || { x: 160, z: 1600 };
+    const contractPoints = [[simOffset.x, simOffset.z], [simOffset.x, simOffset.z - 8000]];
+    if (options.provider !== undefined) {
+      TP.assertTerrainProviderContract(options.provider, contractPoints);
+      this.terrainProvider = options.provider;
+      return true;
+    }
+    const geo = window.Geodesy;
     if (!geo || typeof geo.gameToWgs84 !== 'function') {
       throw new Error('enableTerrainProvider requires geodesy.js');
     }
     const anchor = this.geoAnchor;
-    const simOffset = options.simOffset || { x: 160, z: 1600 };
     const flatZones = options.flatZones ?? [
       { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
       { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
@@ -433,10 +439,7 @@ class AirplaneGame {
       flatZones,
       toWgs84: (x, z) => geo.gameToWgs84(x - simOffset.x, z - simOffset.z, anchor),
     });
-    TP.assertTerrainProviderContract(provider, [
-      [simOffset.x, simOffset.z],
-      [simOffset.x, simOffset.z - 8000],
-    ]);
+    TP.assertTerrainProviderContract(provider, contractPoints);
     this.terrainProvider = provider;
     return true;
   }

@@ -8,6 +8,7 @@ import * as THREE from 'three';
 
 globalThis.THREE = THREE;
 await import(pathToFileURL(resolve('web/js/flightsim_core_bundle.js')).href);
+await import(pathToFileURL(resolve('web/js/tile_engine.js')).href);
 await import(pathToFileURL(resolve('web/js/terrain_provider.js')).href);
 const TP = globalThis.TerrainProvider;
 
@@ -319,6 +320,7 @@ test('physics.js buildFlight3dEnvironment and checkGPWS integrate terrainProvide
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
+  vm.runInContext(readFileSync('web/js/tile_engine.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/terrain_provider.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/physics.js', 'utf8'), sandbox);
 
@@ -369,4 +371,50 @@ test('physics.js buildFlight3dEnvironment and checkGPWS integrate terrainProvide
 
   game.checkGPWS(0.1);
   assert.ok(gpwsAlerts.some(a => a.type === 'PULL_UP'), 'Must warn PULL_UP before hitting rising mountain ahead');
+});
+
+test('core.js attaches an injected provider after contract validation and rejects a bad one', () => {
+  const sandbox = {
+    window: {},
+    THREE,
+    document: { getElementById: () => null },
+    location: { protocol: 'http:', hostname: 'localhost' },
+    URLSearchParams,
+    console,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/core.js', 'utf8'), sandbox);
+  const AirplaneGame = vm.runInContext('AirplaneGame', sandbox);
+  const game = Object.create(AirplaneGame.prototype);
+
+  let validations = 0;
+  sandbox.window.TerrainProvider = {
+    assertTerrainProviderContract(provider, points) {
+      validations++;
+      assert.ok(Array.isArray(points) && points.length > 0);
+      return globalThis.FlightSimCore.assertTerrainProviderContract(provider, points);
+    },
+    createTerrariumProvider() { assert.fail('injected provider must skip default composition'); },
+    createBrowserTileLoader() { assert.fail('injected provider must not build a tile loader'); },
+  };
+  // No Geodesy and no geoAnchor: the injected path must not need either.
+  const provider = {
+    kind: 'injected-test-provider',
+    getHeight: () => 0,
+    getNormal: () => ({ x: 0, y: 1, z: 0 }),
+    isReady: () => true,
+    update() {},
+    dispose() {},
+  };
+  assert.equal(game.enableTerrainProvider({ provider }), true);
+  assert.equal(game.terrainProvider, provider);
+  assert.equal(validations, 1);
+
+  const invalid = { ...provider, getHeight: () => Number.NaN };
+  assert.throws(
+    () => game.enableTerrainProvider({ provider: invalid, force: true }),
+    /must be a finite number or null/
+  );
+  assert.equal(game.terrainProvider, provider, 'rejected provider must not be attached');
+  assert.equal(validations, 2);
 });

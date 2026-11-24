@@ -5500,28 +5500,36 @@
     const u = finite(up ?? 0, "up");
     const c = wgs84ToEcef(o.latitude, o.longitude, o.height);
     const a = axes(o);
-    const px = c.x + a.east[0] * e + a.north[0] * n + a.up[0] * u;
-    const py = c.y + a.east[1] * e + a.north[1] * n + a.up[1] * u;
-    const pz = c.z + a.east[2] * e + a.north[2] * n + a.up[2] * u;
+    const px = c.x + a.east[0] * e + a.north[0] * n;
+    const py = c.y + a.east[1] * e + a.north[1] * n;
+    const pz = c.z + a.east[2] * e + a.north[2] * n;
     const A = (a.up[0] * a.up[0] + a.up[1] * a.up[1]) / A2 + a.up[2] * a.up[2] / B2;
     const B = 2 * ((px * a.up[0] + py * a.up[1]) / A2 + pz * a.up[2] / B2);
     const C = (px * px + py * py) / A2 + pz * pz / B2 - 1;
     const disc = B * B - 4 * A * C;
     if (disc < 0) {
-      const lat = o.latitude * D2R;
-      const sinLat = Math.sin(lat);
+      const lat2 = o.latitude * D2R;
+      const sinLat = Math.sin(lat2);
       const rn = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
       const rm = WGS84_A * (1 - WGS84_E2) / Math.pow(1 - WGS84_E2 * sinLat * sinLat, 1.5);
       return {
         latitude: o.latitude + n / rm * R2D,
-        longitude: o.longitude + e / (rn * Math.cos(lat)) * R2D,
+        longitude: o.longitude + e / (rn * Math.cos(lat2)) * R2D,
         height: o.height + u
       };
     }
     const y1 = (-B + Math.sqrt(disc)) / (2 * A);
     const y2 = (-B - Math.sqrt(disc)) / (2 * A);
     const y = Math.abs(y1) < Math.abs(y2) ? y1 : y2;
-    return ecefToWgs84(px + a.up[0] * y, py + a.up[1] * y, pz + a.up[2] * y);
+    const sx = px + a.up[0] * y;
+    const sy = py + a.up[1] * y;
+    const sz = pz + a.up[2] * y;
+    const surface = ecefToWgs84(sx, sy, sz);
+    const lat = surface.latitude * D2R;
+    const lon = surface.longitude * D2R;
+    const cosLat = Math.cos(lat);
+    const alignment = cosLat * Math.cos(lon) * a.up[0] + cosLat * Math.sin(lon) * a.up[1] + Math.sin(lat) * a.up[2];
+    return { latitude: surface.latitude, longitude: surface.longitude, height: (u - y) * alignment };
   }
   function lonLatToTilePixel(lat, lon, zoom) {
     const n = 2 ** zoom;
@@ -5796,6 +5804,7 @@
     let disposed = false;
     function setPriorityContext(value) {
       priorityContext = value;
+      for (const job of queue) job.priority = priorityOf(job.value, value);
     }
     function pump() {
       queue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
@@ -5803,7 +5812,10 @@
         const job = queue.shift();
         stats.queued = queue.length;
         stats.active++;
-        Promise.resolve().then(() => job.run(job.value)).then(job.resolve, job.reject).finally(() => {
+        Promise.resolve().then(() => job.run(job.value)).then(job.resolve, (error) => {
+          stats.errors++;
+          job.reject(error);
+        }).finally(() => {
           stats.active--;
           pump();
         });

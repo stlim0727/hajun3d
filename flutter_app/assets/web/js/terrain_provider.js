@@ -3,41 +3,28 @@
  *
  * Exposes the shared headless terrain contract and Terrarium elevation
  * provider from `globalThis.FlightSimCore` (loaded via `flightsim_core_bundle.js`)
- * alongside the browser-only PNG tile fetcher (`createBrowserTileLoader`) on
- * `window.TerrainProvider`.
+ * alongside the browser tile loader (`createBrowserTileLoader`), which delegates
+ * exclusively to tile_engine.js.
  */
 (function(root) {
   'use strict';
 
-  const TILE_SIZE = 256;
   const core = root.FlightSimCore || root.Flight3dPhysics;
   if (!core || typeof core.createTerrariumProvider !== 'function') {
     throw new Error('terrain_provider.js requires flightsim_core_bundle.js to load first');
   }
+  if (!root.TileEngine || typeof root.TileEngine.create !== 'function') {
+    throw new Error('terrain_provider.js requires tile_engine.js to load first');
+  }
 
-  /** Browser tile loader: bounded cache + Worker decode when available. */
+  /** Browser tile loader: tile_engine.js cache + Worker decode. */
   function createBrowserTileLoader(urlTemplate, options = {}) {
     const template = urlTemplate
       || 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-    if (root.TileEngine && typeof root.TileEngine.create === 'function') {
-      const engine = root.TileEngine.create({ urlTemplate: template, ...options });
-      const loader = (z, x, y) => engine.loadTile(z, x, y);
-      loader.engine = engine;
-      return loader;
-    }
-    return async function loadTile(z, x, y) {
-      const url = template.replace('{z}', z).replace('{x}', x).replace('{y}', y);
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) throw new Error(`tile ${response.status}`);
-      const bitmap = await createImageBitmap(await response.blob());
-      const canvas = typeof OffscreenCanvas !== 'undefined'
-        ? new OffscreenCanvas(TILE_SIZE, TILE_SIZE)
-        : Object.assign(document.createElement('canvas'), { width: TILE_SIZE, height: TILE_SIZE });
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(bitmap, 0, 0);
-      if (typeof bitmap.close === 'function') bitmap.close();
-      return ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
-    };
+    const engine = root.TileEngine.create({ urlTemplate: template, ...options });
+    const loader = (z, x, y) => engine.loadTile(z, x, y);
+    loader.engine = engine;
+    return loader;
   }
 
   const api = {
