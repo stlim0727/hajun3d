@@ -14,6 +14,7 @@
   <script src="js/geo_config.js?v=20261123b"></script>
   <script src="js/airport_indicators.js?v=20261122a"></script>
   <script src="js/route_model.js?v=20261123a"></script>
+  <script src="js/landmarks.js?v=20261124a"></script>
   <script src="js/tile_engine.js?v=20261123a"></script>
 </head>
 <body>
@@ -74,6 +75,18 @@
         </select>
       </div>
       <div id="airport-indicator-rows"></div>
+    </div>
+
+    <!-- Nearby landmark info from Wikipedia geosearch (bundled fallback offline) -->
+    <div id="landmark-panel" class="landmark-panel glass hidden" aria-label="주변 랜드마크 정보">
+      <div class="landmark-panel-header">
+        <span class="landmark-title">🗺️ 주변 랜드마크</span>
+        <span id="landmark-status" class="landmark-status">대기</span>
+        <button id="landmark-refresh-btn" class="landmark-icon-btn" type="button" title="새로고침" onclick="window.refreshLandmarkPanel()">↻</button>
+        <button id="landmark-close-btn" class="landmark-icon-btn" type="button" title="닫기" onclick="window.toggleLandmarkPanel(true)">✕</button>
+      </div>
+      <div id="landmark-list" class="landmark-list"></div>
+      <div class="landmark-credit"><span id="landmark-source">Wikipedia · CC BY-SA</span></div>
     </div>
 
     <!-- Master Warning / GPWS Warning Banner -->
@@ -205,6 +218,7 @@
       <button id="sound-btn" class="icon-btn glass" title="사운드 온/오프" onclick="window.toggleSound()">🔊</button>
       <button id="fullscreen-btn" class="icon-btn glass" title="전체 화면 전환 / 종료" onclick="window.toggleFullscreen()">⛶ <span id="fullscreen-text">전체 화면</span></button>
       <button id="settings-btn" class="icon-btn glass" title="설정 · 조작 가이드" onclick="window.openSettings()">⚙️ <span id="settings-btn-text">설정</span></button>
+      <button id="landmark-btn" class="icon-btn glass pc-only-hud landmark-btn" title="주변 랜드마크 온라인 정보" onclick="window.toggleLandmarkPanel()">🗺️ <span id="landmark-btn-text">주변 명소</span></button>
       <button id="mobile-menu-btn" class="icon-btn glass mobile-menu-btn mobile-only" title="전체 메뉴 및 기능 설정" onclick="window.toggleMobileMenu()">⚙️ <span class="mobile-menu-label">메뉴</span></button>
     </div>
 
@@ -356,6 +370,10 @@
           <button class="mobile-menu-item-btn" type="button" onclick="window.downloadProblemReport(); window.toggleMobileMenu();">
             <span class="item-icon">🧾</span>
             <div><strong>문제 보고서 다운로드</strong><small>스크린샷 · 위치 · 로그 ZIP</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.toggleLandmarkPanel(); window.toggleMobileMenu();">
+            <span class="item-icon">🗺️</span>
+            <div><strong>주변 랜드마크</strong><small>Wikipedia 온라인 정보</small></div>
           </button>
         </div>
       </div>

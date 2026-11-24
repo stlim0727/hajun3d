@@ -172,6 +172,18 @@
         this.airportIndicatorRows.push({ icao: airport.icao, airport, row, dist, brg });
       }
     }
+    this.landmarkPanel = document.getElementById('landmark-panel');
+    this.landmarkList = document.getElementById('landmark-list');
+    this.landmarkStatus = document.getElementById('landmark-status');
+    this.landmarkSource = document.getElementById('landmark-source');
+    this.landmarkBtnText = document.getElementById('landmark-btn-text');
+    this.landmarkPanelOpen = false;
+    this.landmarkItems = [];
+    this.landmarkRows = [];
+    this.landmarkLoadSeq = 0;
+    this.landmarkLastLoad = 0;
+    this.landmarkLastAt = null;
+    this.landmarkLanguage = (typeof navigator !== 'undefined' && /^en/i.test(navigator.language || '')) ? 'en' : 'ko';
     if (this.destinationSelect && this.selectedDestinationIcao) {
       this.destinationSelect.value = this.selectedDestinationIcao;
     }
@@ -1054,6 +1066,173 @@
   },
 
   // ----------------------------------------------------------------
+  // Nearby landmark panel — Wikipedia geosearch, bundled offline fallback
+  // ----------------------------------------------------------------
+  toggleLandmarkPanel(forceClose = false) {
+    const panel = this.landmarkPanel;
+    if (!panel) return;
+    this.landmarkPanelOpen = forceClose ? false : !this.landmarkPanelOpen;
+    panel.classList.toggle('hidden', !this.landmarkPanelOpen);
+    const button = document.getElementById('landmark-btn');
+    if (button) button.classList.toggle('active', Boolean(this.landmarkPanelOpen));
+    if (this.landmarkBtnText) {
+      this.landmarkBtnText.textContent = this.landmarkPanelOpen ? '닫기' : '주변 명소';
+    }
+    if (this.landmarkPanelOpen) {
+      this.loadLandmarks(true);
+    } else {
+      this.landmarkLoadSeq++;
+    }
+  },
+
+  refreshLandmarkPanel() {
+    if (!this.landmarkPanelOpen) this.toggleLandmarkPanel();
+    else this.loadLandmarks(true);
+  },
+
+  landmarkPosition() {
+    const pos = this.planeGroup && this.planeGroup.position;
+    if (!pos) return null;
+    const route = typeof window !== 'undefined' ? window.RouteModel : null;
+    if (route && typeof route.currentLatLon === 'function') {
+      const at = route.currentLatLon(pos.x, pos.z, !this.geoLayer, this.selectedDestinationIcao);
+      if (at && Number.isFinite(at.lat) && Number.isFinite(at.lon)) return at;
+    }
+    if (typeof window.geoLocalToLatLon === 'function') {
+      const base = this.geoSimAnchorBase || window.GEO_SIM_ANCHOR || { x: 160, z: 0 };
+      return window.geoLocalToLatLon(pos.x - base.x, pos.z - (base.z || 0));
+    }
+    return null;
+  },
+
+  setLandmarkStatus(text, kind) {
+    if (!this.landmarkStatus) return;
+    this.landmarkStatus.textContent = text;
+    this.landmarkStatus.classList.toggle('online', kind === 'online');
+    this.landmarkStatus.classList.toggle('local', kind === 'local');
+  },
+
+  loadLandmarks(force = false) {
+    const service = typeof window !== 'undefined' ? window.NearbyLandmarks : null;
+    if (!service || !this.landmarkPanelOpen) return;
+    const at = this.landmarkPosition();
+    if (!at) {
+      this.setLandmarkStatus('위치 확인 중', 'local');
+      return;
+    }
+    const now = Date.now();
+    const nav = window.AirportIndicators;
+    const moved = !this.landmarkLastAt || (nav && typeof nav.distanceKm === 'function'
+      ? nav.distanceKm(at, this.landmarkLastAt)
+      : 0) > 1.5;
+    if (!force && now - (this.landmarkLastLoad || 0) < 20000 && !moved) return;
+    this.landmarkLastLoad = now;
+    this.landmarkLastAt = at;
+    const seq = ++this.landmarkLoadSeq;
+    this.setLandmarkStatus('온라인 검색 중…');
+    service.load({
+      lat: at.lat,
+      lon: at.lon,
+      radiusM: service.DEFAULT_RADIUS_M,
+      limit: service.DEFAULT_LIMIT,
+      language: this.landmarkLanguage,
+      force
+    }).then(result => {
+      if (seq !== this.landmarkLoadSeq || !this.landmarkPanelOpen) return;
+      this.landmarkItems = result.items || [];
+      this.renderLandmarkRows();
+      const online = result.source === 'online';
+      this.setLandmarkStatus(online ? '온라인' : '오프라인', online ? 'online' : 'local');
+      if (this.landmarkSource) {
+        this.landmarkSource.textContent = online
+          ? `Wikipedia · CC BY-SA · ${String(this.landmarkLanguage).toUpperCase()}`
+          : '내장 랜드마크 · 오프라인';
+      }
+    }).catch(() => {
+      if (seq === this.landmarkLoadSeq && this.landmarkPanelOpen) {
+        this.setLandmarkStatus('검색 실패', 'local');
+      }
+    });
+  },
+
+  renderLandmarkRows() {
+    if (!this.landmarkList) return;
+    this.landmarkList.replaceChildren();
+    this.landmarkRows = [];
+    const items = this.landmarkItems || [];
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'landmark-empty';
+      empty.textContent = '주변 8 km 내 정보가 없습니다.';
+      this.landmarkList.appendChild(empty);
+      return;
+    }
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'landmark-row';
+      if (item.thumbnail) {
+        const image = document.createElement('img');
+        image.className = 'landmark-thumb';
+        image.alt = '';
+        image.loading = 'lazy';
+        image.referrerPolicy = 'no-referrer';
+        image.src = item.thumbnail;
+        image.addEventListener('error', () => {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'landmark-thumb-placeholder';
+          placeholder.textContent = '🗺️';
+          image.replaceWith(placeholder);
+        });
+        row.appendChild(image);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'landmark-thumb-placeholder';
+        placeholder.textContent = '🗺️';
+        row.appendChild(placeholder);
+      }
+      const info = document.createElement('div');
+      info.className = 'landmark-info';
+      const title = document.createElement(item.url ? 'a' : 'div');
+      title.className = 'landmark-name';
+      title.textContent = item.title;
+      if (item.url) {
+        title.href = item.url;
+        title.target = '_blank';
+        title.rel = 'noopener noreferrer';
+      }
+      const extract = document.createElement('div');
+      extract.className = 'landmark-extract';
+      extract.textContent = item.extract || '설명 없음';
+      const metrics = document.createElement('div');
+      metrics.className = 'landmark-metrics';
+      const distance = document.createElement('span');
+      distance.className = 'dist';
+      distance.textContent = '--';
+      const bearing = document.createElement('span');
+      bearing.className = 'brg';
+      bearing.textContent = '---°';
+      metrics.append(distance, bearing);
+      info.append(title, extract, metrics);
+      row.appendChild(info);
+      this.landmarkList.appendChild(row);
+      this.landmarkRows.push({ item, distance, bearing });
+    }
+    this.updateLandmarkRows();
+  },
+
+  updateLandmarkRows() {
+    const service = typeof window !== 'undefined' ? window.NearbyLandmarks : null;
+    const at = this.landmarkPosition();
+    if (!service || !at || !this.landmarkRows) return;
+    for (const row of this.landmarkRows) {
+      const km = service.distanceKm(at, row.item);
+      const brg = service.bearingDeg(at, row.item);
+      row.distance.textContent = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+      row.bearing.textContent = `${String(Math.round(brg) % 360).padStart(3, '0')}°`;
+    }
+  },
+
+  // ----------------------------------------------------------------
   // 12. HUD 계기판 수치 갱신 (Layout Reflow 최적화)
   // ----------------------------------------------------------------
   updateHUD() {
@@ -1202,6 +1381,10 @@
         entry.brg.textContent = `${String(Math.round(indicator.bearingDeg)).padStart(3, '0')}°`;
         entry.row.classList.toggle('active', indicator.icao === activeIcao);
       }
+    }
+    if (this.landmarkPanelOpen) {
+      this.updateLandmarkRows();
+      this.loadLandmarks();
     }
     const localVec = targetPos.clone();
     if (this.renderOrigin) localVec.sub(this.renderOrigin);

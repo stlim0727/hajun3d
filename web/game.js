@@ -724,6 +724,18 @@ window.toggleMobileMenu = function() {
   }
 };
 
+window.toggleLandmarkPanel = function (forceClose) {
+  if (window.airplaneGame && typeof window.airplaneGame.toggleLandmarkPanel === 'function') {
+    window.airplaneGame.toggleLandmarkPanel(Boolean(forceClose));
+  }
+};
+
+window.refreshLandmarkPanel = function () {
+  if (window.airplaneGame && typeof window.airplaneGame.refreshLandmarkPanel === 'function') {
+    window.airplaneGame.refreshLandmarkPanel();
+  }
+};
+
 // Deep link from terrainprovider.html: spawn at a WGS84 point and preset the look direction.
 const GEO_LOOK_PRESETS = {
   forward: { yaw: 0, pitch: -0.06 },
