@@ -12,7 +12,7 @@
   const PIN_HEIGHT = 7;
   const BULB_RADIUS = 3.2;
   const MAX_RANGE_M = 15000;
-  const SCALE_REF_M = 300;
+  const SCALE_REF_M = 120;
 
   let game = null;
   let group = null;
@@ -59,33 +59,61 @@
     const bulbGeometry = new THREE.SphereGeometry(BULB_RADIUS, 12, 8);
     const ringGeometry = new THREE.RingGeometry(3.4, 4.4, 20);
     ringGeometry.rotateX(-Math.PI / 2);
+    const haloGeometry = new THREE.RingGeometry(5.0, 7.2, 24);
+    haloGeometry.rotateX(-Math.PI / 2);
 
+    const overlay = { transparent: true, depthTest: false, depthWrite: false };
     shapes = {
       coneGeometry,
       bulbGeometry,
       ringGeometry,
-      normal: new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.92, depthWrite: false }),
-      selected: new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.98, depthWrite: false }),
-      normalRing: new THREE.MeshBasicMaterial({
-        color: 0x38bdf8, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false
+      haloGeometry,
+      outline: new THREE.MeshBasicMaterial({ color: 0x0b1220, opacity: 0.95, ...overlay }),
+      coneNormal: new THREE.MeshBasicMaterial({ color: 0xff4d4d, opacity: 1, ...overlay }),
+      coneSelected: new THREE.MeshBasicMaterial({ color: 0xfbbf24, opacity: 1, ...overlay }),
+      bulb: new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 1, ...overlay }),
+      ringNormal: new THREE.MeshBasicMaterial({
+        color: 0xff4d4d, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false
       }),
-      selectedRing: new THREE.MeshBasicMaterial({
-        color: 0xfbbf24, transparent: true, opacity: 0.65, side: THREE.DoubleSide, depthWrite: false
-      })
+      ringSelected: new THREE.MeshBasicMaterial({
+        color: 0xfbbf24, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false
+      }),
+      haloNormal: new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.35, side: THREE.DoubleSide, ...overlay }),
+      haloSelected: new THREE.MeshBasicMaterial({ color: 0xfbbf24, opacity: 0.5, side: THREE.DoubleSide, ...overlay })
     };
   }
 
   function createPin() {
     const node = new THREE.Group();
-    const cone = new THREE.Mesh(shapes.coneGeometry, shapes.normal);
-    const bulb = new THREE.Mesh(shapes.bulbGeometry, shapes.normal);
-    const ring = new THREE.Mesh(shapes.ringGeometry, shapes.normalRing);
-    bulb.position.y = PIN_HEIGHT + BULB_RADIUS * 0.55;
+
+    const halo = new THREE.Mesh(shapes.haloGeometry, shapes.haloNormal);
+    halo.position.y = 0.08;
+    halo.renderOrder = 4;
+
+    const ring = new THREE.Mesh(shapes.ringGeometry, shapes.ringNormal);
     ring.position.y = 0.12;
-    node.add(cone, bulb, ring);
+    ring.renderOrder = 5;
+
+    const coneOutline = new THREE.Mesh(shapes.coneGeometry, shapes.outline);
+    coneOutline.scale.setScalar(1.2);
+    coneOutline.renderOrder = 6;
+
+    const bulbOutline = new THREE.Mesh(shapes.bulbGeometry, shapes.outline);
+    bulbOutline.position.y = PIN_HEIGHT + BULB_RADIUS * 0.55;
+    bulbOutline.scale.setScalar(1.24);
+    bulbOutline.renderOrder = 7;
+
+    const cone = new THREE.Mesh(shapes.coneGeometry, shapes.coneNormal);
+    cone.renderOrder = 8;
+
+    const bulb = new THREE.Mesh(shapes.bulbGeometry, shapes.bulb);
+    bulb.position.y = PIN_HEIGHT + BULB_RADIUS * 0.55;
+    bulb.renderOrder = 9;
+
+    node.add(halo, ring, coneOutline, bulbOutline, cone, bulb);
     node.visible = false;
 
-    const pin = { node, cone, bulb, ring, item: null, world: null, grounded: false };
+    const pin = { node, cone, bulb, ring, halo, item: null, world: null, grounded: false };
     cone.userData.pin = pin;
     bulb.userData.pin = pin;
     return pin;
@@ -94,11 +122,10 @@
   function applySelection() {
     for (const pin of pins) {
       const selected = Boolean(pin.item && selectedId != null && String(pin.item.id) === String(selectedId));
-      const material = selected ? shapes.selected : shapes.normal;
-      const ringMaterial = selected ? shapes.selectedRing : shapes.normalRing;
-      pin.cone.material = material;
-      pin.bulb.material = material;
-      pin.ring.material = ringMaterial;
+      pin.cone.material = selected ? shapes.coneSelected : shapes.coneNormal;
+      pin.bulb.material = shapes.bulb;
+      pin.ring.material = selected ? shapes.ringSelected : shapes.ringNormal;
+      pin.halo.material = selected ? shapes.haloSelected : shapes.haloNormal;
     }
   }
 
@@ -247,7 +274,7 @@
       pin.node.visible = distance > 25 && distance < MAX_RANGE_M;
       if (pin.node.visible) {
         anyVisible = true;
-        pin.node.scale.setScalar(Math.max(1, Math.min(50, distance / SCALE_REF_M)));
+        pin.node.scale.setScalar(Math.max(2, Math.min(100, distance / SCALE_REF_M)));
       }
     }
     group.visible = Boolean(game.isPlaying && !game.screenPaused && anyVisible);
