@@ -164,7 +164,7 @@ altitude, a transparent drag layer and the N/E/S/W up/down buttons provide look
 controls; the ion/Google credit stays in the viewer container.
 Drag follows the grab-world convention; X/Y/Z buttons and arrow/PageUp/PageDown
 keys translate the camera in 100 m steps (Shift = 500 m) for free exploration.
-A fullscreen button expands the tiles canvas to the viewport; Esc exits.
+A fullscreen button expands the viewer and its navigation controls to the viewport; Esc exits.
 The sticky header folds to a one-line summary via its button or the `F` key,
 keeping the 3D view usable in a short viewport.
 The "Fly in the game" links still deep-link into `index.html`

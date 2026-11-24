@@ -97,11 +97,16 @@
       background: #162438; border: 1px solid var(--border); border-radius: 10px;
       overflow: hidden;
     }
-    .view3d-wrap:fullscreen, .view3d-wrap.is-fake-fullscreen {
-      width: 100vw; height: 100vh; aspect-ratio: auto; margin: 0;
-      border: 0; border-radius: 0;
+    .viewer-root:fullscreen, .viewer-root.is-fake-fullscreen {
+      display: flex; flex-direction: column; width: 100vw; height: 100vh;
+      margin: 0; padding: 10px 12px; background: var(--bg);
+      border: 0; border-radius: 0; overflow: hidden;
     }
-    .view3d-wrap.is-fake-fullscreen { position: fixed; inset: 0; z-index: 60; }
+    .viewer-root.is-fake-fullscreen { position: fixed; inset: 0; z-index: 60; }
+    .viewer-root:fullscreen .view3d-wrap,
+    .viewer-root.is-fake-fullscreen .view3d-wrap {
+      flex: 1; width: 100%; height: auto; aspect-ratio: auto; margin-top: 8px;
+    }
     #tiles3d { display: block; width: 100%; height: 100%; }
     .tiles-credit-host { position: absolute; inset: auto 0 0 0; z-index: 1; pointer-events: none; }
     .preview-drag { position: absolute; inset: 0; z-index: 2; cursor: grab; touch-action: none; }
@@ -228,6 +233,7 @@
         <div class="canvas-tag" id="canvas-tag">loading…</div>
       </div>
       <div class="legend"><span>Low</span><div class="legend-bar"></div><span>High</span></div>
+      <div id="viewer-root" class="viewer-root">
       <div class="look-head">
         <h3>3D Tiles view <span class="look-hint">standalone · drag to look</span></h3>
         <div class="look-buttons">
@@ -254,6 +260,7 @@
         <div id="tiles-credit-host" class="tiles-credit-host"></div>
         <div id="preview-drag" class="preview-drag" title="Drag to look around"></div>
         <div class="canvas-tag" id="view3d-tag">Loading 3D Tiles…</div>
+      </div>
       </div>
       <div class="stats" id="stats"></div>
       <div class="status" id="status" role="status"></div>
@@ -585,20 +592,20 @@
           });
         }
 
-        const wrap = document.querySelector('.view3d-wrap');
+        const root = document.getElementById('viewer-root');
         const fullBtn = document.getElementById('fullscreen-view');
         fullBtn.addEventListener('click', () => {
-          if (document.fullscreenElement === wrap) {
+          if (document.fullscreenElement === root) {
             document.exitFullscreen();
-          } else if (wrap.requestFullscreen) {
-            wrap.requestFullscreen().catch(() => {});
+          } else if (root.requestFullscreen) {
+            root.requestFullscreen().catch(() => {});
           } else {
-            const fake = wrap.classList.toggle('is-fake-fullscreen');
+            const fake = root.classList.toggle('is-fake-fullscreen');
             fullBtn.textContent = fake ? '✕ Exit' : '⛶ Full';
           }
         });
         document.addEventListener('fullscreenchange', () => {
-          fullBtn.textContent = document.fullscreenElement === wrap ? '✕ Exit' : '⛶ Full';
+          fullBtn.textContent = document.fullscreenElement === root ? '✕ Exit' : '⛶ Full';
         });
 
         const layer = document.getElementById('preview-drag');
