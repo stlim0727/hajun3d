@@ -68,7 +68,7 @@
         hasBuiltInGear: true,
         gearMaterialRegex: /^Material\.(034|036|037|040|042|044|045|049|050|056)$/,
         sharedGearMaterials: /^(Material\.016|material_0)$/,
-        fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
+        fans: [{ radius: 0.80, blades: 24, leftX: -5.72, rightX: 5.72, y: -2.27, z: -0.45 }]
       };
       return {
         a320,
@@ -96,13 +96,19 @@
           wingParams:   [4.0, 16.0, 32.0, 5.15],
           wingProfile:  [0.34, 0.31, -1.5, 5.0],
           hasBuiltInGear: false,
-          fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
+          fans: [{ radius: 0.50, blades: 24, leftX: -10.57, rightX: 10.57, y: -0.89, z: -4.10 }],
           gearDefs: {
             // Main gear pivots sit below the thin wing skin, with fixed mounts reaching into it.
             nose: { x: 0, y: -1.0, z: -22.0, isNose: true, is4Wheel: false, strutLength: 2.77 },
             mainL: { x: -5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 },
             mainR: { x: 5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 }
           }
+        },
+        b747: {
+          fans: [
+            { radius: 1.25, blades: 24, leftX: -20.03, rightX: 20.03, y: -6.04, z: 2.30 },
+            { radius: 1.25, blades: 24, leftX: -11.52, rightX: 11.52, y: -6.04, z: -1.70 }
+          ]
         },
         dc10: {
           rudderParams: [22.45, 26.6, 6.05, 0.43],
@@ -112,6 +118,9 @@
           surfaceMaterials: { rudder: /^Body_Purple$/, elevator: /^Metal_Rear_Wings$/, wing: /^Metal_Wings$/ },
           hasBuiltInGear: true,
           hasRiggedAnimation: true
+        },
+        md80: {
+          fans: [{ radius: 0.78, blades: 20, leftX: -2.40, rightX: 2.40, y: -1.74, z: 10.75 }]
         },
         amphibian: {
           rudderParams: [5.3, 6.6, -4.5, 0.10],
@@ -1443,13 +1452,13 @@
       this.engineExhaustPoints = fanExhaustPoints;
     } else {
       const fallbackByType = {
-        a320: [[-5.06, -1.5, 1.8], [5.06, -1.5, 1.8]],
-        a350: [[-9.8, -2.1, 2.8], [9.8, -2.1, 2.8]],
-        b747: [[-11.5, -1.4, -0.5], [-6.2, -1.8, 2.2], [6.2, -1.8, 2.2], [11.5, -1.4, -0.5]],
-        dc10: [[-6.8, -1.8, 2.2], [0, 3.6, 13.5], [6.8, -1.8, 2.2]],
-        md80: [[-2.6, 0.5, 13.0], [2.6, 0.5, 13.0]],
-        concorde: [[-3.8, -1.4, 12.5], [3.8, -1.4, 12.5]],
-        amphibian: [[-4.8, 1.5, 0.8], [4.8, 1.5, 0.8]],
+        a320: [[-5.72, -2.27, 2.98], [5.72, -2.27, 2.98]],
+        a350: [[-10.57, 1.22, 2.53], [10.57, 1.22, 2.53]],
+        b747: [[-20.03, -6.04, 6.50], [-11.52, -6.04, 2.50], [11.52, -6.04, 2.50], [20.03, -6.04, 6.50]],
+        dc10: [[-8.21, -3.30, 3.50], [0, 4.25, 24.50], [8.21, -3.30, 3.50]],
+        md80: [[-2.40, -1.74, 14.80], [2.40, -1.74, 14.80]],
+        concorde: [[-4.30, -3.40, 14.90], [4.30, -3.40, 14.90]],
+        amphibian: [[-2.58, -1.41, 0.50], [2.58, -1.41, 0.50]],
         ancestor: [[0.8, 1.2, 0.6]]
       };
       const coords = fallbackByType[this.currentPlaneType] || fallbackByType.a320;
