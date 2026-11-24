@@ -21,7 +21,7 @@ const SCREEN_PANELS = {
 };
 const SCREEN_SUBPANELS = [
   'mobile-menu-modal', 'cam-mode-menu', 'effect-settings-menu',
-  'emergency-panel', 'glb-modal', 'hotas-modal', 'place-picker-panel'
+  'emergency-panel', 'glb-modal', 'hotas-modal', 'place-picker-panel', 'landmark-panel', 'landmark-detail'
 ];
 
 function showScreenPanel(id, visible) {
@@ -737,6 +737,12 @@ window.toggleLandmarkPanel = function (forceClose) {
 window.refreshLandmarkPanel = function () {
   if (window.airplaneGame && typeof window.airplaneGame.refreshLandmarkPanel === 'function') {
     window.airplaneGame.refreshLandmarkPanel();
+  }
+};
+
+window.closeLandmarkDetail = function () {
+  if (window.airplaneGame && typeof window.airplaneGame.closeLandmarkDetail === 'function') {
+    window.airplaneGame.closeLandmarkDetail();
   }
 };
 

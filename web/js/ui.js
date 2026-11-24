@@ -184,6 +184,15 @@
     this.landmarkLastLoad = 0;
     this.landmarkLastAt = null;
     this.landmarkLanguage = (typeof navigator !== 'undefined' && /^en/i.test(navigator.language || '')) ? 'en' : 'ko';
+    this.landmarkDetail = document.getElementById('landmark-detail');
+    this.landmarkDetailTitle = document.getElementById('landmark-detail-title');
+    this.landmarkDetailExtract = document.getElementById('landmark-detail-extract');
+    this.landmarkDetailCoords = document.getElementById('landmark-detail-coords');
+    this.landmarkDetailDistance = document.getElementById('landmark-detail-distance');
+    this.landmarkDetailBearing = document.getElementById('landmark-detail-bearing');
+    this.landmarkDetailLink = document.getElementById('landmark-detail-link');
+    this.selectedLandmarkItem = null;
+    this.selectedLandmarkId = null;
     if (this.destinationSelect && this.selectedDestinationIcao) {
       this.destinationSelect.value = this.selectedDestinationIcao;
     }
@@ -1068,21 +1077,30 @@
   // ----------------------------------------------------------------
   // Nearby landmark panel — Wikipedia geosearch, bundled offline fallback
   // ----------------------------------------------------------------
-  toggleLandmarkPanel(forceClose = false) {
+  setLandmarkPanelVisible(visible) {
     const panel = this.landmarkPanel;
     if (!panel) return;
-    this.landmarkPanelOpen = forceClose ? false : !this.landmarkPanelOpen;
+    this.landmarkPanelOpen = Boolean(visible);
     panel.classList.toggle('hidden', !this.landmarkPanelOpen);
     const button = document.getElementById('landmark-btn');
-    if (button) button.classList.toggle('active', Boolean(this.landmarkPanelOpen));
+    if (button) button.classList.toggle('active', this.landmarkPanelOpen);
     if (this.landmarkBtnText) {
       this.landmarkBtnText.textContent = this.landmarkPanelOpen ? '닫기' : '주변 명소';
     }
-    if (this.landmarkPanelOpen) {
-      this.loadLandmarks(true);
-    } else {
-      this.landmarkLoadSeq++;
+    if (!this.landmarkPanelOpen) {
+      if (this.landmarkDetail) this.landmarkDetail.classList.add('hidden');
+      this.selectedLandmarkItem = null;
+      this.selectedLandmarkId = null;
+      const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+      if (pins && typeof pins.select === 'function') pins.select(null);
     }
+  },
+
+  toggleLandmarkPanel(forceClose = false) {
+    const next = forceClose ? false : !this.landmarkPanelOpen;
+    this.setLandmarkPanelVisible(next);
+    if (next) this.loadLandmarks(true);
+    else this.landmarkLoadSeq++;
   },
 
   refreshLandmarkPanel() {
@@ -1141,6 +1159,8 @@
       if (seq !== this.landmarkLoadSeq || !this.landmarkPanelOpen) return;
       this.landmarkItems = result.items || [];
       this.renderLandmarkRows();
+      const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+      if (pins && typeof pins.setItems === 'function') pins.setItems(this.landmarkItems);
       const online = result.source === 'online';
       this.setLandmarkStatus(online ? '온라인' : '오프라인', online ? 'online' : 'local');
       if (this.landmarkSource) {
@@ -1170,6 +1190,7 @@
     for (const item of items) {
       const row = document.createElement('div');
       row.className = 'landmark-row';
+      row.addEventListener('click', () => this.showLandmarkDetail(item));
       if (item.thumbnail) {
         const image = document.createElement('img');
         image.className = 'landmark-thumb';
@@ -1215,7 +1236,7 @@
       info.append(title, extract, metrics);
       row.appendChild(info);
       this.landmarkList.appendChild(row);
-      this.landmarkRows.push({ item, distance, bearing });
+      this.landmarkRows.push({ item, row, distance, bearing });
     }
     this.updateLandmarkRows();
   },
@@ -1224,11 +1245,66 @@
     const service = typeof window !== 'undefined' ? window.NearbyLandmarks : null;
     const at = this.landmarkPosition();
     if (!service || !at || !this.landmarkRows) return;
+    const formatKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
     for (const row of this.landmarkRows) {
       const km = service.distanceKm(at, row.item);
       const brg = service.bearingDeg(at, row.item);
-      row.distance.textContent = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+      row.distance.textContent = formatKm(km);
       row.bearing.textContent = `${String(Math.round(brg) % 360).padStart(3, '0')}°`;
+    }
+    if (this.landmarkDetail && !this.landmarkDetail.classList.contains('hidden') && this.selectedLandmarkItem) {
+      const km = service.distanceKm(at, this.selectedLandmarkItem);
+      const brg = service.bearingDeg(at, this.selectedLandmarkItem);
+      if (this.landmarkDetailDistance) this.landmarkDetailDistance.textContent = formatKm(km);
+      if (this.landmarkDetailBearing) {
+        this.landmarkDetailBearing.textContent = `${String(Math.round(brg) % 360).padStart(3, '0')}°`;
+      }
+    }
+  },
+
+  showLandmarkDetail(item) {
+    if (!item) return;
+    this.selectedLandmarkItem = item;
+    this.selectedLandmarkId = item.id;
+    this.setLandmarkPanelVisible(true);
+    if (this.landmarkDetail) {
+      if (this.landmarkDetailTitle) this.landmarkDetailTitle.textContent = item.title || '장소 정보';
+      if (this.landmarkDetailExtract) {
+        this.landmarkDetailExtract.textContent = item.extract || '설명이 없습니다.';
+        this.landmarkDetailExtract.scrollTop = 0;
+      }
+      if (this.landmarkDetailCoords) {
+        this.landmarkDetailCoords.textContent = Number.isFinite(item.lat) && Number.isFinite(item.lon)
+          ? `${item.lat.toFixed(5)}°, ${item.lon.toFixed(5)}°`
+          : '';
+      }
+      if (this.landmarkDetailLink) {
+        if (item.url) {
+          this.landmarkDetailLink.href = item.url;
+          this.landmarkDetailLink.classList.remove('hidden');
+        } else {
+          this.landmarkDetailLink.removeAttribute('href');
+          this.landmarkDetailLink.classList.add('hidden');
+        }
+      }
+      this.landmarkDetail.classList.remove('hidden');
+    }
+    const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+    if (pins && typeof pins.select === 'function') pins.select(item.id);
+    for (const row of this.landmarkRows || []) {
+      if (row.row) row.row.classList.toggle('selected', String(row.item.id) === String(item.id));
+    }
+    this.updateLandmarkRows();
+  },
+
+  closeLandmarkDetail() {
+    this.selectedLandmarkItem = null;
+    this.selectedLandmarkId = null;
+    if (this.landmarkDetail) this.landmarkDetail.classList.add('hidden');
+    const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+    if (pins && typeof pins.select === 'function') pins.select(null);
+    for (const row of this.landmarkRows || []) {
+      if (row.row) row.row.classList.remove('selected');
     }
   },
 

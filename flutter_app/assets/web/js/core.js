@@ -386,6 +386,10 @@ class AirplaneGame {
     // 비행기 최상위 3D 그룹 초기화 & 씬 추가
     this.planeGroup = new THREE.Group();
     this.scene.add(this.planeGroup);
+
+    if (window.LandmarkPins && typeof window.LandmarkPins.init === 'function') {
+      window.LandmarkPins.init(this);
+    }
   }
 
   applyAirfieldMinimalism() {
@@ -841,6 +845,9 @@ class AirplaneGame {
       this.applyGeoTilesFlattenZones();
     }
     if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
+    if (window.LandmarkPins && typeof window.LandmarkPins.update === 'function') {
+      window.LandmarkPins.update();
+    }
     this.renderer.render(this.scene, this.camera);
   }
 }

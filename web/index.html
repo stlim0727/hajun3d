@@ -15,6 +15,7 @@
   <script src="js/airport_indicators.js?v=20261122a"></script>
   <script src="js/route_model.js?v=20261123a"></script>
   <script src="js/landmarks.js?v=20261124a"></script>
+  <script src="js/landmark_pins.js?v=20261124b"></script>
   <script src="js/tile_engine.js?v=20261123a"></script>
 </head>
 <body>
@@ -87,6 +88,21 @@
       </div>
       <div id="landmark-list" class="landmark-list"></div>
       <div class="landmark-credit"><span id="landmark-source">Wikipedia · CC BY-SA</span></div>
+    </div>
+
+    <!-- Detail card opened by clicking a terrain pin or a landmark row -->
+    <div id="landmark-detail" class="landmark-detail glass hidden" aria-live="polite">
+      <div class="landmark-detail-header">
+        <span id="landmark-detail-title" class="landmark-detail-title">장소 정보</span>
+        <button id="landmark-detail-close-btn" class="landmark-icon-btn" type="button" title="닫기" onclick="window.closeLandmarkDetail()">✕</button>
+      </div>
+      <div id="landmark-detail-extract" class="landmark-detail-extract"></div>
+      <div id="landmark-detail-coords" class="landmark-detail-coords"></div>
+      <div class="landmark-detail-meta">
+        <span id="landmark-detail-distance" class="dist">--</span>
+        <span id="landmark-detail-bearing" class="brg">---°</span>
+        <a id="landmark-detail-link" class="landmark-detail-link" href="#" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a>
+      </div>
     </div>
 
     <!-- Master Warning / GPWS Warning Banner -->

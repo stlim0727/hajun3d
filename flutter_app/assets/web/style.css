@@ -624,6 +624,76 @@ a.landmark-name:hover {
   font-size: 9px;
 }
 
+.landmark-row.selected {
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 3px 0 0 #fbbf24;
+}
+.landmark-detail {
+  position: absolute;
+  top: 250px;
+  right: 20px;
+  width: 300px;
+  max-width: calc(100vw - 40px);
+  padding: 12px 14px;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: auto;
+  z-index: 18;
+  border-color: rgba(251, 191, 36, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 18px rgba(251, 191, 36, 0.18);
+}
+.landmark-detail.hidden {
+  display: none !important;
+}
+.landmark-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding-bottom: 6px;
+}
+.landmark-detail-title {
+  flex: 1;
+  min-width: 0;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.landmark-detail-extract {
+  margin-top: 8px;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.55;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.landmark-detail-coords {
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+.landmark-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.landmark-detail-meta .dist { color: #fbbf24; }
+.landmark-detail-meta .brg { color: #38bdf8; }
+.landmark-detail-link {
+  margin-left: auto;
+  color: #38bdf8;
+  text-decoration: none;
+}
+.landmark-detail-link:hover { text-decoration: underline; }
+
 .airport-indicator-row {
   display: grid;
   grid-template-columns: 42px 1fr 58px 42px;
@@ -3523,6 +3593,18 @@ a.landmark-name:hover {
     max-height: 70vh !important;
     z-index: 1150 !important;
     padding: 10px 12px !important;
+  }
+  .landmark-detail {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%) !important;
+    width: 92vw !important;
+    max-width: 420px !important;
+    max-height: 70vh !important;
+    z-index: 1160 !important;
+    padding: 12px 14px !important;
   }
   .glb-modal {
     width: 92vw !important;
