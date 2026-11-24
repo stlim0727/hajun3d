@@ -305,6 +305,9 @@
 
     collectProblemReportData() {
       const pos = this.planeGroup ? this.planeGroup.position : null;
+      const rot = this.planeGroup ? this.planeGroup.rotation : null;
+      const quat = this.planeGroup ? this.planeGroup.quaternion : null;
+      const cam = this.camera || null;
       const vel = this.velocity || null;
       const nav = window.AirportIndicators || null;
       const destination = nav && nav.byIcao ? nav.byIcao[this.selectedDestinationIcao] : null;
@@ -316,6 +319,31 @@
       const providerReady = Boolean(pos && this.terrainProvider && typeof this.terrainProvider.isReady === 'function'
         && this.terrainProvider.isReady(pos.x, pos.z));
       const providerHeight = providerReady ? this.terrainProvider.getHeight(pos.x, pos.z) : null;
+      const radToDeg = 180 / Math.PI;
+      const round2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
+      const vec3Obj = (v) => (v ? { x: round2(v.x), y: round2(v.y), z: round2(v.z) } : null);
+
+      const cameraDiag = cam ? {
+        position: vec3Obj(cam.position),
+        matrixWorldPosition: cam.matrixWorld && cam.matrixWorld.elements
+          ? {
+            x: round2(cam.matrixWorld.elements[12]),
+            y: round2(cam.matrixWorld.elements[13]),
+            z: round2(cam.matrixWorld.elements[14])
+          }
+          : null,
+        rotationDeg: cam.rotation
+          ? { x: round2(cam.rotation.x * radToDeg), y: round2(cam.rotation.y * radToDeg), z: round2(cam.rotation.z * radToDeg) }
+          : null,
+        quaternion: cam.quaternion && typeof cam.quaternion.toArray === 'function'
+          ? cam.quaternion.toArray().map(round2)
+          : null,
+        fov: round2(cam.fov),
+        aspect: round2(cam.aspect),
+        near: round2(cam.near),
+        far: round2(cam.far),
+        zoom: round2(cam.zoom)
+      } : null;
 
       let webgl = null;
       try {
@@ -333,10 +361,43 @@
         webgl = { error: formatValue(err) };
       }
 
+      const rendererInfo = (this.renderer && this.renderer.info) ? {
+        calls: this.renderer.info.render ? this.renderer.info.render.calls : null,
+        triangles: this.renderer.info.render ? this.renderer.info.render.triangles : null,
+        lines: this.renderer.info.render ? this.renderer.info.render.lines : null,
+        points: this.renderer.info.render ? this.renderer.info.render.points : null,
+        geometries: this.renderer.info.memory ? this.renderer.info.memory.geometries : null,
+        textures: this.renderer.info.memory ? this.renderer.info.memory.textures : null,
+        programs: Array.isArray(this.renderer.info.programs) ? this.renderer.info.programs.length : null,
+        pixelRatio: typeof this.renderer.getPixelRatio === 'function' ? round2(this.renderer.getPixelRatio()) : null
+      } : null;
+
       const glbStatus = {};
       document.querySelectorAll('[id^="glb-status-"]').forEach((el) => {
         glbStatus[el.id] = el.textContent.trim();
       });
+
+      const localStorageKeys = (() => {
+        try { return Object.keys(localStorage); } catch (err) { return []; }
+      })();
+
+      // Include only safe non-PII app preference values to aid reproduction.
+      const SAFE_SETTING_PREFIXES = ['flight3d.', 'hajun-airline-skin', 'hajun3d_gyro_enabled', 'hajun_terrain_header_collapsed', 'flight3d_camera_strip_collapsed'];
+      const EXCLUDED_SETTING_PATTERN = /client_id|token|auth|secret|posthog|bookmarks/i;
+      const settings = {};
+      localStorageKeys.forEach((key) => {
+        if (EXCLUDED_SETTING_PATTERN.test(key)) return;
+        if (!SAFE_SETTING_PREFIXES.some((prefix) => key === prefix || key.startsWith(prefix))) return;
+        try {
+          const raw = localStorage.getItem(key);
+          settings[key] = typeof raw === 'string' ? raw.slice(0, 120) : raw;
+        } catch (_err) { /* ignore storage access error */ }
+      });
+
+      const headingBaseDeg = (this.geoAnchor && Number.isFinite(this.geoAnchor.headingDeg)) ? this.geoAnchor.headingDeg : 0;
+      const yawDeg = rot ? rot.y * radToDeg : null;
+      const headingDeg = yawDeg != null ? round2(((headingBaseDeg - yawDeg) % 360 + 360) % 360) : null;
+      const groundYM = typeof this.groundY === 'number' ? round2(this.groundY) : null;
 
       return {
         generatedAt: new Date().toISOString(),
@@ -349,6 +410,9 @@
           jejuLocal: jeju,
           aircraftLatLon: latLon,
           position: pos ? { x: pos.x, y: pos.y, z: pos.z } : null,
+          renderOrigin: vec3Obj(this.renderOrigin),
+          scenePosition: this.scene ? vec3Obj(this.scene.position) : null,
+          camera: cameraDiag,
           destination: destination || null,
           selectedDestinationIcao: this.selectedDestinationIcao || null,
           geoTilesEnabled: Boolean(this.geoLayer),
@@ -371,8 +435,17 @@
           isOnGround: this.isOnGround,
           isJejuFlyover: Boolean(this.isJejuFlyover),
           speed: this.speed,
+          iasKmh: typeof this.speed === 'number' ? round2(this.speed * 280) : null,
           groundSpeed: this.groundSpeed,
           verticalSpeed: this.verticalSpeed,
+          altitudeM: pos ? round2(pos.y) : null,
+          groundYM,
+          aglM: (pos && groundYM != null) ? round2(pos.y - groundYM) : null,
+          pitchDeg: rot ? round2(rot.x * radToDeg) : null,
+          rollDeg: rot ? round2(rot.z * radToDeg) : null,
+          yawDeg: round2(yawDeg),
+          headingDeg,
+          quaternion: quat && typeof quat.toArray === 'function' ? quat.toArray().map(round2) : null,
           velocity: vel ? { x: vel.x, y: vel.y, z: vel.z } : null,
           throttle: this.throttle,
           n1: this.n1,
@@ -399,14 +472,14 @@
           deviceMemory: navigator.deviceMemory || null,
           onLine: navigator.onLine,
           webgl,
+          rendererInfo,
           memory: performance.memory ? {
             usedJSHeapSize: performance.memory.usedJSHeapSize,
             totalJSHeapSize: performance.memory.totalJSHeapSize,
             jsHeapSizeLimit: performance.memory.jsHeapSizeLimit
           } : null,
-          localStorageKeys: (() => {
-            try { return Object.keys(localStorage); } catch (err) { return []; }
-          })(),
+          localStorageKeys,
+          settings,
           glbStatus,
           buildInfoText: (() => {
             const el = document.querySelector('[data-build-info]');
@@ -419,7 +492,10 @@
 
     downloadProblemReport() {
       try {
+        // Capture structured diagnostics BEFORE screenshot render so matrix/renderer state is untouched,
+        // then capture screenshot (which populates _lastCapturedUIRects) before assembling ui-layout.json.
         const report = this.collectProblemReportData();
+        const screenshot = this.captureProblemScreenshot();
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const files = [
           { name: 'README.txt', data: 'Hajun Plane 3D problem report\n\n' +
@@ -440,7 +516,6 @@
             `${entry.time} [${entry.level}] ${entry.message}${entry.stack ? `\n${entry.stack}` : ''}`).join('\n') || '(no console activity captured)' }
         ];
 
-        const screenshot = this.captureProblemScreenshot();
         if (screenshot && screenshot.startsWith('data:image/png;base64,')) {
           files.push({ name: 'screenshot.png', data: base64ToBytes(screenshot.split(',')[1]) });
         } else {

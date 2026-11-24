@@ -161,12 +161,27 @@ export function create(options = {}) {
   }
 
   function debug() {
+    const trStats = tiles.stats ? {
+      inFrustum: tiles.stats.inFrustum,
+      active: tiles.stats.active,
+      visible: tiles.stats.visible,
+      loaded: tiles.stats.loaded,
+      downloading: tiles.stats.downloading,
+      failed: tiles.stats.failed,
+      inCache: tiles.stats.inCache,
+    } : null;
+    const camInfoPos = tiles.cameraInfo && tiles.cameraInfo[0] && tiles.cameraInfo[0].position
+      ? tiles.cameraInfo[0].position.toArray()
+      : null;
     return {
       position: tiles.group.position.toArray(),
       quaternion: tiles.group.quaternion.toArray(),
       root: Boolean(tiles.root),
       tiles: stats.tiles,
       maxDepth: tiles.maxDepth,
+      errorTarget: tiles.errorTarget,
+      tilesStats: trStats,
+      cameraInfoPos: camInfoPos,
     };
   }
 
