@@ -8,12 +8,12 @@
 (function (root) {
   'use strict';
 
-  const DEFAULT_RADIUS_M = 8000;
-  const DEFAULT_LIMIT = 6;
-  const CACHE_TTL_MS = 10 * 60 * 1000;
+  const DEFAULT_RADIUS_M = 10000;
+  const DEFAULT_LIMIT = 12;
+  const CACHE_TTL_MS = 3 * 60 * 1000;
   const LOCAL_TTL_MS = 60 * 1000;
   const REQUEST_TIMEOUT_MS = 15000;
-  const CELL_DEG = 0.05;
+  const CELL_DEG = 0.02;
 
   const cache = new Map();
   const inflight = new Map();

@@ -1150,8 +1150,8 @@
     const nav = window.AirportIndicators;
     const moved = !this.landmarkLastAt || (nav && typeof nav.distanceKm === 'function'
       ? nav.distanceKm(at, this.landmarkLastAt)
-      : 0) > 1.5;
-    if (!force && now - (this.landmarkLastLoad || 0) < 20000 && !moved) return;
+      : 0) > 0.8;
+    if (!force && now - (this.landmarkLastLoad || 0) < 8000 && !moved) return;
     this.landmarkLastLoad = now;
     this.landmarkLastAt = at;
     const seq = ++this.landmarkLoadSeq;
@@ -1191,7 +1191,7 @@
     if (!items.length) {
       const empty = document.createElement('div');
       empty.className = 'landmark-empty';
-      empty.textContent = '주변 8 km 내 정보가 없습니다.';
+      empty.textContent = '주변 10 km 내 정보가 없습니다.';
       this.landmarkList.appendChild(empty);
       return;
     }
