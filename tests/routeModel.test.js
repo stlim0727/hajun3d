@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -11,9 +12,10 @@ const ANCHOR = {
 };
 
 function loadRouteModel() {
-  const sandbox = { window: {}, Math, Number };
+  const sandbox = { window: {}, THREE, Math, Number };
   sandbox.window.GEO_ANCHOR = { ...ANCHOR };
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/geodesy.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/airport_indicators.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/route_model.js', 'utf8'), sandbox);

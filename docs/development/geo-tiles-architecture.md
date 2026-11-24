@@ -95,13 +95,15 @@ streamed terrain covers the whole map without overlap.
 Known limit: other procedural scenery along the old corridor is not yet
 georeferenced; only Gimhae, Haeundae and Incheon are placed at real coordinates.
 
-Phase 0 frame migration: `web/js/geodesy.js` provides exact WGS84↔ECEF↔ENU and
-game-frame transforms, and `geo_config.js` now uses them for `geoLocalDelta()` /
-`geoLocalToLatLon()`. `terrain_provider.js` exposes
-`createExactFrameTerrariumProvider()`, which converts sim coordinates into the
-vendored flat frame before delegating to `flightsim-core`; `core.js` uses it so
-tile lookup and flat zones stay aligned with the exact landmark frame. The
-vendored bundle itself is untouched.
+Phase 0 frame migration: `web/js/geodesy.js` is a thin adapter over the core
+WGS84/ECEF/ENU primitives and keeps hajun3d's `+X` right / `-Z` forward game
+frame; `geo_config.js` uses it for `geoLocalDelta()` / `geoLocalToLatLon()`.
+`createTerrariumProvider()` now takes an injected `toWgs84` frame, so `core.js`
+and both terrain-lab pages pass `Geodesy.gameToWgs84()` directly: tile lookup
+and flat zones stay aligned with the exact landmark frame without a local
+coordinate-conversion shim. Tile scheduling similarly delegates to the core
+`createTileScheduler`, leaving this repo with only browser fetch/decode and
+byte-budget LRU caching.
 
 `web/js/floating_origin.js` adds a camera-rebased double frame: simulation
 positions stay JS numbers, `toCameraEnu()` removes the camera ECEF origin, and

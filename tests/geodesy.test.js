@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import * as THREE from 'three';
 
+globalThis.THREE = THREE;
+await import(pathToFileURL(resolve('web/js/flightsim_core_bundle.js')).href);
 await import(pathToFileURL(resolve('web/js/geodesy.js')).href);
 const geo = globalThis.Geodesy;
 

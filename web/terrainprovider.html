@@ -300,11 +300,11 @@
     </div>
   </div>
 
+  <script src="js/three_core_bundle.js"></script>
+  <script src="js/flightsim_core_bundle.js"></script>
   <script src="js/geodesy.js"></script>
   <script src="js/geo_config.js"></script>
   <script src="js/airport_indicators.js"></script>
-  <script src="js/three_core_bundle.js"></script>
-  <script src="js/flightsim_core_bundle.js"></script>
   <script src="js/tile_engine.js"></script>
   <script src="js/terrain_provider.js"></script>
   <script>
@@ -702,7 +702,8 @@
         const presetName = document.getElementById('options-select').value;
         const preset = PRESETS[presetName];
         const status = document.getElementById('status');
-        if (!TP || !window.Geodesy || !window.FlightSimCore) {
+        const geo = window.Geodesy;
+        if (!TP || !geo || !window.FlightSimCore) {
           status.textContent = 'Terrain provider modules are unavailable.';
           return;
         }
@@ -711,10 +712,14 @@
           headingDeg: (window.GEO_ANCHOR && window.GEO_ANCHOR.headingDeg) || 0,
           height: 0
         };
+        const simOffset = { x: 0, z: 0 };
         const loader = TP.createBrowserTileLoader();
         engine = loader.engine || null;
-        provider = TP.createExactFrameTerrariumProvider(Object.assign({
-          anchor, simOffset: { x: 0, z: 0 }, loadTile: loader
+        provider = TP.createTerrariumProvider(Object.assign({
+          anchor,
+          simOffset,
+          loadTile: loader,
+          toWgs84: (x, z) => geo.gameToWgs84(x - simOffset.x, z - simOffset.z, anchor),
         }, preset));
         if (engine && typeof engine.setCamera === 'function') engine.setCamera(region.lat, region.lon, preset.zoom);
         status.textContent = 'Requesting terrain tiles…';

@@ -1,17 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 function loadCoreClass() {
   const sandbox = {
     window: {},
+    THREE,
     document: { getElementById: () => null },
     location: { protocol: 'http:', hostname: 'localhost' },
     URLSearchParams,
     console
   };
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/geodesy.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/geo_config.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/core.js', 'utf8'), sandbox);
@@ -68,10 +71,11 @@ test('Incheon Airport remains at the playable -45000 route and stays visible wit
   // enableTerrainProvider flattens both Gimhae (z = 0) and Incheon (z = -45000)
   let capturedConfig = null;
   window.TerrainProvider = {
-    createExactFrameTerrariumProvider(cfg) {
+    createTerrariumProvider(cfg) {
       capturedConfig = cfg;
       return { sampleHeight: () => 0 };
     },
+    assertTerrainProviderContract() { return true; },
     createBrowserTileLoader() {
       return async () => new Uint8Array(0);
     }

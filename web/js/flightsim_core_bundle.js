@@ -68,11 +68,16 @@
     MassProperties: () => MassProperties,
     PROFILES: () => PROFILES,
     WATER_DITCHING_LIMITS: () => WATER_DITCHING_LIMITS,
+    WGS84_A: () => WGS84_A,
+    WGS84_B: () => WGS84_B,
+    WGS84_E2: () => WGS84_E2,
+    WGS84_E2_PRIME: () => WGS84_E2_PRIME,
     WaterDitching: () => WaterDitching,
     analyticTerrainProvider: () => analyticTerrainProvider,
     angleDelta: () => angleDelta,
     applyDeadzone: () => applyDeadzone,
     approachDeviation: () => approachDeviation,
+    assertTerrainProviderConformance: () => assertTerrainProviderConformance,
     assertTerrainProviderContract: () => assertTerrainProviderContract,
     asymmetricThrustYawMoment: () => asymmetricThrustYawMoment,
     autopilotState: () => autopilotState,
@@ -82,8 +87,11 @@
     createGroundHeightQuery: () => createGroundHeightQuery,
     createGroundSurfaceQueries: () => createGroundSurfaceQueries,
     createTerrariumProvider: () => createTerrariumProvider,
+    createTileScheduler: () => createTileScheduler,
     decodeTerrarium: () => decodeTerrarium,
     degrees: () => degrees,
+    ecefToWgs84: () => ecefToWgs84,
+    enuToWgs84: () => enuToWgs84,
     getAircraftSpecs: () => getAircraftSpecs,
     isGyroSupportedDevice: () => isGyroSupportedDevice,
     lonLatToTilePixel: () => lonLatToTilePixel,
@@ -93,9 +101,14 @@
     screenTilt: () => screenTilt,
     shapeTouchStick: () => shapeTouchStick,
     solveTrim: () => solveTrim,
+    surfaceNormal: () => surfaceNormal,
     terrainConflictSeconds: () => terrainConflictSeconds,
+    terrainProviderConformanceFailures: () => terrainProviderConformanceFailures,
     thrustFactorToN1: () => thrustFactorToN1,
+    tilePixelToLonLat: () => tilePixelToLonLat,
     toNormalVector3: () => toNormalVector3,
+    wgs84ToEcef: () => wgs84ToEcef,
+    wgs84ToEnu: () => wgs84ToEnu,
     wrapHeading: () => wrapHeading
   });
 
@@ -5281,6 +5294,19 @@
     if (normal2.isVector3) return normal2;
     return typeof Vector3Ctor === "function" ? new Vector3Ctor(x, y, z) : { x, y, z };
   }
+  function surfaceNormal(sample, x, z, stepM = 30) {
+    const d = Number.isFinite(stepM) && stepM > 0 ? stepM : 30;
+    const hl = sample(x - d, z);
+    const hr = sample(x + d, z);
+    const hf = sample(x, z - d);
+    const hb = sample(x, z + d);
+    if ([hl, hr, hf, hb].some((v) => v === null || !Number.isFinite(v))) return null;
+    const nx = hl - hr;
+    const nz = hf - hb;
+    const ny = 2 * d;
+    const len = Math.hypot(nx, ny, nz);
+    return { x: nx / len, y: ny / len, z: nz / len };
+  }
   function sampleReadyHeight(provider, x, z) {
     if (!provider) return null;
     const ready = Boolean(provider.isReady?.(x, z));
@@ -5383,18 +5409,119 @@
     return true;
   }
 
-  // node_modules/@stlim0727/flightsim-core/src/terrain/TerrariumElevationProvider.js
-  var TILE_SIZE = 256;
-  var DEFAULT_ZOOM = 11;
+  // node_modules/@stlim0727/flightsim-core/src/geo/Geodesy.js
   var D2R = Math.PI / 180;
-  var DEFAULT_RETRY_MS = 5e3;
+  var R2D = 180 / Math.PI;
   var MAX_MERCATOR_LAT = 85.05112878;
-  function decodeTerrarium(rgba) {
-    const heights = new Float32Array(rgba.length / 4);
-    for (let i = 0, j = 0; i < heights.length; i++, j += 4) {
-      heights[i] = rgba[j] * 256 + rgba[j + 1] + rgba[j + 2] / 256 - 32768;
+  var WGS84_A = 6378137;
+  var WGS84_B = 6356752314245e-6;
+  var WGS84_E2 = (WGS84_A * WGS84_A - WGS84_B * WGS84_B) / (WGS84_A * WGS84_A);
+  var WGS84_E2_PRIME = (WGS84_A * WGS84_A - WGS84_B * WGS84_B) / (WGS84_B * WGS84_B);
+  var A2 = WGS84_A * WGS84_A;
+  var B2 = WGS84_B * WGS84_B;
+  function finite(value, name) {
+    if (!Number.isFinite(value)) throw new TypeError(`${name} must be a finite number`);
+    return value;
+  }
+  function originOf(origin) {
+    if (!origin) throw new TypeError("origin is required");
+    const latitude = origin.latitude ?? origin.lat;
+    const longitude = origin.longitude ?? origin.lon;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new TypeError("origin needs finite latitude/longitude (or lat/lon)");
     }
-    return heights;
+    return {
+      latitude,
+      longitude,
+      height: finite(origin.height ?? 0, "origin.height")
+    };
+  }
+  function axes({ latitude, longitude }) {
+    const lat = latitude * D2R;
+    const lon = longitude * D2R;
+    const sl = Math.sin(lat);
+    const cl = Math.cos(lat);
+    const so = Math.sin(lon);
+    const co = Math.cos(lon);
+    return {
+      east: [-so, co, 0],
+      north: [-sl * co, -sl * so, cl],
+      up: [cl * co, cl * so, sl]
+    };
+  }
+  function wgs84ToEcef(latitude, longitude, height = 0) {
+    const lat = finite(latitude, "latitude") * D2R;
+    const lon = finite(longitude, "longitude") * D2R;
+    const h = finite(height, "height");
+    const sinLat = Math.sin(lat);
+    const n = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
+    return {
+      x: (n + h) * Math.cos(lat) * Math.cos(lon),
+      y: (n + h) * Math.cos(lat) * Math.sin(lon),
+      z: (n * (1 - WGS84_E2) + h) * sinLat
+    };
+  }
+  function ecefToWgs84(x, y, z) {
+    const X = finite(x, "x");
+    const Y = finite(y, "y");
+    const Z = finite(z, "z");
+    const p2 = Math.hypot(X, Y);
+    const theta = Math.atan2(Z * WGS84_A, p2 * WGS84_B);
+    const st = Math.sin(theta);
+    const ct = Math.cos(theta);
+    const lat = Math.atan2(
+      Z + WGS84_E2_PRIME * WGS84_B * st * st * st,
+      p2 - WGS84_E2 * WGS84_A * ct * ct * ct
+    );
+    const sinLat = Math.sin(lat);
+    const n = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
+    const cosLat = Math.cos(lat);
+    const height = Math.abs(cosLat) > 1e-12 ? p2 / cosLat - n : Z / sinLat - n * (1 - WGS84_E2);
+    return { latitude: lat * R2D, longitude: Math.atan2(Y, X) * R2D, height };
+  }
+  function wgs84ToEnu(latitude, longitude, origin, height = 0) {
+    const o = originOf(origin);
+    const p2 = wgs84ToEcef(latitude, longitude, height);
+    const c = wgs84ToEcef(o.latitude, o.longitude, o.height);
+    const a = axes(o);
+    const dx = p2.x - c.x;
+    const dy = p2.y - c.y;
+    const dz = p2.z - c.z;
+    return {
+      east: a.east[0] * dx + a.east[1] * dy + a.east[2] * dz,
+      north: a.north[0] * dx + a.north[1] * dy + a.north[2] * dz,
+      up: a.up[0] * dx + a.up[1] * dy + a.up[2] * dz
+    };
+  }
+  function enuToWgs84(east, north, up, origin) {
+    const o = originOf(origin);
+    const e = finite(east, "east");
+    const n = finite(north, "north");
+    const u = finite(up ?? 0, "up");
+    const c = wgs84ToEcef(o.latitude, o.longitude, o.height);
+    const a = axes(o);
+    const px = c.x + a.east[0] * e + a.north[0] * n + a.up[0] * u;
+    const py = c.y + a.east[1] * e + a.north[1] * n + a.up[1] * u;
+    const pz = c.z + a.east[2] * e + a.north[2] * n + a.up[2] * u;
+    const A = (a.up[0] * a.up[0] + a.up[1] * a.up[1]) / A2 + a.up[2] * a.up[2] / B2;
+    const B = 2 * ((px * a.up[0] + py * a.up[1]) / A2 + pz * a.up[2] / B2);
+    const C = (px * px + py * py) / A2 + pz * pz / B2 - 1;
+    const disc = B * B - 4 * A * C;
+    if (disc < 0) {
+      const lat = o.latitude * D2R;
+      const sinLat = Math.sin(lat);
+      const rn = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
+      const rm = WGS84_A * (1 - WGS84_E2) / Math.pow(1 - WGS84_E2 * sinLat * sinLat, 1.5);
+      return {
+        latitude: o.latitude + n / rm * R2D,
+        longitude: o.longitude + e / (rn * Math.cos(lat)) * R2D,
+        height: o.height + u
+      };
+    }
+    const y1 = (-B + Math.sqrt(disc)) / (2 * A);
+    const y2 = (-B - Math.sqrt(disc)) / (2 * A);
+    const y = Math.abs(y1) < Math.abs(y2) ? y1 : y2;
+    return ecefToWgs84(px + a.up[0] * y, py + a.up[1] * y, pz + a.up[2] * y);
   }
   function lonLatToTilePixel(lat, lon, zoom) {
     const n = 2 ** zoom;
@@ -5405,8 +5532,27 @@
     const fy = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
     return { fx, fy };
   }
+  function tilePixelToLonLat(fx, fy, zoom) {
+    const n = 2 ** zoom;
+    const x = (fx / n % 1 + 1) % 1;
+    const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * fy / n)));
+    return { lat: latRad * R2D, lon: x * 360 - 180 };
+  }
+
+  // node_modules/@stlim0727/flightsim-core/src/terrain/TerrariumElevationProvider.js
+  var TILE_SIZE = 256;
+  var DEFAULT_ZOOM = 11;
+  var D2R2 = Math.PI / 180;
+  var DEFAULT_RETRY_MS = 5e3;
+  function decodeTerrarium(rgba) {
+    const heights = new Float32Array(rgba.length / 4);
+    for (let i = 0, j = 0; i < heights.length; i++, j += 4) {
+      heights[i] = rgba[j] * 256 + rgba[j + 1] + rgba[j + 2] / 256 - 32768;
+    }
+    return heights;
+  }
   function createAnchorFrame(anchor, simOffset = { x: 0, z: 0 }) {
-    const r = anchor.headingDeg * D2R;
+    const r = anchor.headingDeg * D2R2;
     const cos = Math.cos(r);
     const sin = Math.sin(r);
     return {
@@ -5416,7 +5562,7 @@
         const east = a * cos + b * sin;
         const north = -a * sin + b * cos;
         const lat = anchor.lat + north / 110540;
-        const latMid = (anchor.lat + lat) * 0.5 * D2R;
+        const latMid = (anchor.lat + lat) * 0.5 * D2R2;
         const lon = anchor.lon + east / (111320 * Math.cos(latMid));
         return { lat, lon };
       }
@@ -5431,6 +5577,7 @@
     const {
       anchor,
       simOffset = { x: 0, z: 0 },
+      toWgs84,
       loadTile,
       zoom = DEFAULT_ZOOM,
       maxTiles = 24,
@@ -5439,10 +5586,10 @@
       retryMs = DEFAULT_RETRY_MS,
       now = () => Date.now()
     } = options || {};
-    if (!anchor || typeof loadTile !== "function") {
-      throw new Error("createTerrariumProvider needs { anchor, loadTile }");
+    if (!anchor && typeof toWgs84 !== "function" || typeof loadTile !== "function") {
+      throw new Error("createTerrariumProvider needs { loadTile } and either { anchor } or { toWgs84 }");
     }
-    const frame = createAnchorFrame(anchor, simOffset);
+    const frame = typeof toWgs84 === "function" ? { toWgs84 } : createAnchorFrame(anchor, simOffset);
     const tilesAcross = 2 ** zoom;
     const cacheLimit = Number.isFinite(maxTiles) ? Math.max(1, Math.floor(maxTiles)) : maxTiles === Infinity ? Infinity : 24;
     const radius = Number.isFinite(prefetchRadius) ? Math.max(0, Math.floor(prefetchRadius)) : 1;
@@ -5574,17 +5721,7 @@
         return msl !== null && msl <= 0.1;
       },
       getNormal(x, z) {
-        const d = 30;
-        const hl = provider.getHeight(x - d, z);
-        const hr = provider.getHeight(x + d, z);
-        const hf = provider.getHeight(x, z - d);
-        const hb = provider.getHeight(x, z + d);
-        if ([hl, hr, hf, hb].some((v) => v === null)) return null;
-        const nx = hl - hr;
-        const nz = hf - hb;
-        const ny = 2 * d;
-        const len = Math.hypot(nx, ny, nz);
-        return { x: nx / len, y: ny / len, z: nz / len };
+        return surfaceNormal(provider.getHeight, x, z);
       },
       update(position) {
         if (!position || disposed) return;
@@ -5642,6 +5779,112 @@
       }
     };
     return provider;
+  }
+
+  // node_modules/@stlim0727/flightsim-core/src/tile/TileScheduler.js
+  function createTileScheduler(options = {}) {
+    const {
+      maxConcurrent = 4,
+      priorityOf = () => 0
+    } = options;
+    const limit = Math.max(1, Math.floor(maxConcurrent));
+    const inFlight = /* @__PURE__ */ new Map();
+    const queue = [];
+    const stats = { misses: 0, errors: 0, active: 0, queued: 0 };
+    let priorityContext = null;
+    let sequence = 0;
+    let disposed = false;
+    function setPriorityContext(value) {
+      priorityContext = value;
+    }
+    function pump() {
+      queue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
+      while (stats.active < limit && queue.length > 0) {
+        const job = queue.shift();
+        stats.queued = queue.length;
+        stats.active++;
+        Promise.resolve().then(() => job.run(job.value)).then(job.resolve, job.reject).finally(() => {
+          stats.active--;
+          pump();
+        });
+      }
+    }
+    function schedule(key, value, run) {
+      if (disposed) return Promise.reject(new Error("tile scheduler disposed"));
+      if (inFlight.has(key)) return inFlight.get(key);
+      const promise = new Promise((resolve, reject) => {
+        queue.push({
+          key,
+          value,
+          run,
+          resolve,
+          reject,
+          priority: priorityOf(value, priorityContext),
+          seq: sequence++
+        });
+        stats.misses++;
+        stats.queued = queue.length;
+      });
+      inFlight.set(key, promise);
+      promise.finally(() => inFlight.delete(key)).catch(() => {
+      });
+      Promise.resolve().then(pump);
+      return promise;
+    }
+    function dispose() {
+      disposed = true;
+      for (const job of queue) job.reject(new Error("tile scheduler disposed"));
+      queue.length = 0;
+      stats.queued = 0;
+      inFlight.clear();
+    }
+    return {
+      schedule,
+      setPriorityContext,
+      stats: () => ({ ...stats }),
+      inFlightCount: () => inFlight.size,
+      dispose
+    };
+  }
+
+  // node_modules/@stlim0727/flightsim-core/src/terrain/conformance.js
+  function terrainProviderConformanceFailures(provider, points = [[0, 0]]) {
+    const failures = [];
+    try {
+      assertTerrainProviderContract(provider, points);
+    } catch (error) {
+      failures.push(error.message);
+      return failures;
+    }
+    for (const [x, z] of points) {
+      const height = provider.getHeight(x, z);
+      if (height !== null && !Number.isFinite(height)) {
+        failures.push(`getHeight(${x}, ${z}) must be finite or null`);
+      }
+      if (provider.isReady(x, z) && !Number.isFinite(height)) {
+        failures.push(`isReady(${x}, ${z}) is true but getHeight is not authoritative`);
+      }
+      const normal2 = provider.getNormal(x, z);
+      if (normal2 !== null) {
+        const finite2 = [normal2.x, normal2.y, normal2.z].every(Number.isFinite);
+        const length = Math.hypot(normal2.x, normal2.y, normal2.z);
+        if (!finite2 || Math.abs(length - 1) > 1e-3 || normal2.y <= 0) {
+          failures.push(`getNormal(${x}, ${z}) must be a finite upward unit vector`);
+        }
+      }
+      const water = provider.isWater?.(x, z);
+      if (water !== void 0 && water !== null && typeof water !== "boolean") {
+        failures.push(`isWater(${x}, ${z}) must be boolean or null`);
+      }
+    }
+    return failures;
+  }
+  function assertTerrainProviderConformance(provider, points = [[0, 0]]) {
+    const failures = terrainProviderConformanceFailures(provider, points);
+    if (failures.length) {
+      throw new Error(`terrain provider conformance failed: ${failures.join("; ")}`);
+    }
+    return true;
   }
 
   // flightsim-core-bundle-entry.js

@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 function loadCore() {
   const sandbox = {
     window: {},
+    THREE,
     document: { getElementById: () => null },
     location: { protocol: 'http:', hostname: 'localhost' },
     URLSearchParams,
@@ -13,6 +15,8 @@ function loadCore() {
     Math,
   };
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
+  vm.runInContext(readFileSync('web/js/geodesy.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/core.js', 'utf8'), sandbox);
   return { AirplaneGame: vm.runInContext('AirplaneGame', sandbox), window: sandbox.window };
 }
@@ -32,10 +36,11 @@ test('retargetGeo disposes the old layer/provider and re-anchors tiles and physi
     },
   };
   window.TerrainProvider = {
-    createExactFrameTerrariumProvider(config) {
+    createTerrariumProvider(config) {
       providerConfig = config;
       return { dispose() {} };
     },
+    assertTerrainProviderContract() { return true; },
     createBrowserTileLoader() { return async () => new Uint8Array(0); },
   };
 
@@ -84,7 +89,8 @@ test('retargetGeo refuses to re-anchor without a tile token', () => {
   window.GEO_ANCHOR = { lat: 35.165199, lon: 128.938995, headingDeg: 353.9, height: 33.25 };
   window.HajunGeoTiles = { create() { throw new Error('should not create'); } };
   window.TerrainProvider = {
-    createExactFrameTerrariumProvider() { throw new Error('should not create'); },
+    createTerrariumProvider() { throw new Error('should not create'); },
+    assertTerrainProviderContract() { return true; },
     createBrowserTileLoader() { return async () => new Uint8Array(0); },
   };
 

@@ -1,13 +1,17 @@
 /**
  * tile_engine.js — bounded Terrarium tile cache with Worker-side decode.
  *
- * The vendored terrain provider keeps its own small tile cache; this layer
- * bounds total RGBA bytes, deduplicates in-flight requests, limits concurrent
- * fetches and moves PNG decode off the main thread when Workers are available.
- * All state stays outside the renderer; no external CDN is introduced.
+ * In-flight dedup, the priority queue, concurrency limit, scheduling metrics
+ * and disposal come from core.createTileScheduler (flightsim_core_bundle.js).
+ * This layer owns fetch/decode, Worker fallback and byte-budget LRU eviction.
  */
 (function (root) {
   'use strict';
+
+  const core = root.FlightSimCore || root.Flight3dPhysics;
+  if (!core || typeof core.createTileScheduler !== 'function') {
+    throw new Error('tile_engine.js requires flightsim_core_bundle.js to load first');
+  }
 
   const DEFAULT_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
   const DEFAULT_MAX_BYTES = 32 * 1024 * 1024;
@@ -66,25 +70,22 @@
     let workerId = 0;
 
     const cache = new Map();
-    const inFlight = new Map();
-    const queue = [];
     const stats = {
-      hits: 0, misses: 0, evictions: 0, errors: 0,
-      bytes: 0, tiles: 0, active: 0, queued: 0, worker: Boolean(worker),
+      hits: 0, evictions: 0, bytes: 0, tiles: 0, worker: Boolean(worker),
     };
     let cameraTile = { x: 0, y: 0, zoom: 0 };
+    let disposed = false;
 
-    function urlOf(z, x, y) {
-      return urlTemplate.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
+    function priorityOf(value, context) {
+      const center = context && context.zoom ? context : cameraTile;
+      if (!center.zoom) return 0;
+      const scale = 2 ** Math.abs(value.z - center.zoom);
+      const cx = center.x * (value.z >= center.zoom ? scale : 1 / scale);
+      const cy = center.y * (value.z >= center.zoom ? scale : 1 / scale);
+      return Math.hypot(value.x - cx, value.y - cy);
     }
 
-    function priorityOf(z, x, y) {
-      if (!cameraTile.zoom) return 0;
-      const scale = 2 ** Math.abs(z - cameraTile.zoom);
-      const cx = cameraTile.x * (z >= cameraTile.zoom ? scale : 1 / scale);
-      const cy = cameraTile.y * (z >= cameraTile.zoom ? scale : 1 / scale);
-      return Math.hypot(x - cx, y - cy);
-    }
+    const scheduler = core.createTileScheduler({ maxConcurrent, priorityOf });
 
     function cacheGet(key) {
       if (!cache.has(key)) return null;
@@ -95,6 +96,7 @@
     }
 
     function cachePut(key, data) {
+      if (disposed) return;
       const bytes = data.byteLength;
       cache.set(key, { data, bytes });
       stats.bytes += bytes;
@@ -160,26 +162,10 @@
       return decodeMain(blob);
     }
 
-    function pump() {
-      queue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
-      while (stats.active < maxConcurrent && queue.length > 0) {
-        const job = queue.shift();
-        stats.active++;
-        stats.queued = queue.length;
-        decode(job.z, job.x, job.y).then((data) => {
-          cachePut(job.key, data);
-          job.resolve(data);
-        }).catch((error) => {
-          stats.errors++;
-          job.reject(error);
-        }).finally(() => {
-          stats.active--;
-          pump();
-        });
-      }
+    function urlOf(z, x, y) {
+      return urlTemplate.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
     }
 
-    let sequence = 0;
     function loadTile(z, x, y) {
       const key = keyOf(z, x, y);
       const cached = cacheGet(key);
@@ -187,21 +173,18 @@
         stats.hits++;
         return Promise.resolve(cached);
       }
-      if (inFlight.has(key)) return inFlight.get(key);
-      stats.misses++;
-      const promise = new Promise((resolve, reject) => {
-        queue.push({ z, x, y, key, priority: priorityOf(z, x, y), seq: sequence++, resolve, reject });
-        stats.queued = queue.length;
-        Promise.resolve().then(pump);
-      });
-      inFlight.set(key, promise);
-      promise.finally(() => inFlight.delete(key));
-      return promise;
+      return scheduler.schedule(key, { z, x, y, key }, (value) =>
+        decode(value.z, value.x, value.y).then((data) => {
+          cachePut(value.key, data);
+          return data;
+        })
+      );
     }
 
     function setCamera(lat, lon, zoom) {
       if (![lat, lon, zoom].every(Number.isFinite)) return;
       cameraTile = tileOf(lat, lon, Math.max(0, Math.floor(zoom)));
+      scheduler.setPriorityContext(cameraTile);
     }
 
     function neighborhood(lat, lon, zoom, radius = 1) {
@@ -223,6 +206,9 @@
     }
 
     function dispose() {
+      if (disposed) return;
+      disposed = true;
+      scheduler.dispose();
       if (worker && typeof worker.terminate === 'function') worker.terminate();
       worker = null;
       workerPending.clear();
@@ -234,7 +220,16 @@
 
     return {
       loadTile, setCamera, neighborhood, dispose,
-      stats: () => ({ ...stats }),
+      stats: () => {
+        const scheduled = scheduler.stats();
+        return {
+          ...stats,
+          misses: scheduled.misses,
+          errors: scheduled.errors,
+          active: scheduled.active,
+          queued: scheduled.queued,
+        };
+      },
     };
   }
 

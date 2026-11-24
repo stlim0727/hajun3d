@@ -25,7 +25,7 @@ function createThreeMock() {
       return this;
     }
   }
-  return { Vector3 };
+  return { Vector3, Quaternion: class {} };
 }
 
 function loadUiRuntime() {
@@ -40,6 +40,7 @@ function loadUiRuntime() {
     }
   };
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/flightsim_core_bundle.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/geodesy.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/geo_config.js', 'utf8'), sandbox);
   vm.runInContext(readFileSync('web/js/airport_indicators.js', 'utf8'), sandbox);
