@@ -10,8 +10,9 @@ function loadPipeline() {
     },
     Box3: class {
       setFromObject(scene) {
-        this.min = { y: scene.worldMinY };
-        this.max = { y: scene.worldMinY + 10 };
+        const parentY = scene.parent?.matrixWorldY || 0;
+        this.min = { y: scene.worldMinY + parentY };
+        this.max = { y: this.min.y + 10 };
         return this;
       }
     }
@@ -26,7 +27,11 @@ function makeGame(proto, groundY, groupWorldY) {
   const game = Object.create(proto);
   game.groundY = groundY;
   game.planeGroup = {
-    getWorldPosition: () => ({ y: groupWorldY })
+    matrixWorldY: 0,
+    getWorldPosition() {
+      this.matrixWorldY = groupWorldY;
+      return { y: groupWorldY };
+    }
   };
   return game;
 }
@@ -70,4 +75,22 @@ test('alignment respects non-jet ground height and leaves already aligned models
   const jetGame = makeGame(AirplaneGame.prototype, 6.84, 6.84);
   jetGame.alignGLBToRunway(aligned);
   assert.equal(aligned.position.y, 0);
+});
+
+test('airborne rebuild does not bake current altitude into GLB alignment', () => {
+  const AirplaneGame = loadPipeline();
+  const game = makeGame(AirplaneGame.prototype, 6.84, 1100);
+  const scene = {
+    worldMinY: 12.48,
+    userData: { normalizedMinY: 12.48 },
+    position: { y: 0 },
+    updated: false,
+    updateMatrixWorld() { this.updated = true; }
+  };
+
+  game.alignGLBToRunway(scene);
+
+  assert.ok(Math.abs(scene.position.y + 17.2) < 1e-6);
+  assert.ok(Math.abs((scene.userData.normalizedMinY + scene.position.y) - (2.12 - 6.84)) < 1e-6);
+  assert.equal(scene.updated, true);
 });

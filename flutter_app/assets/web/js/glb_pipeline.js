@@ -184,6 +184,8 @@
 
       scene.updateMatrixWorld(true);
       const finalBox = new THREE.Box3().setFromObject(scene);
+      scene.userData = scene.userData || {};
+      scene.userData.normalizedMinY = finalBox.min.y;
       const finalSize = finalBox.getSize(new THREE.Vector3());
       return { scale, size: finalSize, box: finalBox };
     }
@@ -1351,11 +1353,15 @@
     if (!scene || typeof THREE === 'undefined') return;
     const runwaySurfaceY = 2.12;
     const groundY = Number.isFinite(this.groundY) ? this.groundY : 6.84;
-    const bounds = new THREE.Box3().setFromObject(scene);
+    // Prefer the parent-free bound captured during normalization. A live Box3
+    // can mix floating-origin and simulation frames when a GLB finishes loading
+    // after the aircraft has already been repositioned for a new phase.
+    const storedMinY = scene.userData?.normalizedMinY;
     const groupWorldY = this.planeGroup && typeof this.planeGroup.getWorldPosition === 'function'
       ? this.planeGroup.getWorldPosition(new THREE.Vector3()).y
       : 0;
-    const localMinY = bounds.min.y - groupWorldY;
+    const bounds = Number.isFinite(storedMinY) ? null : new THREE.Box3().setFromObject(scene);
+    const localMinY = Number.isFinite(storedMinY) ? storedMinY : bounds.min.y - groupWorldY;
     const correction = (runwaySurfaceY - groundY) - localMinY;
     if (!Number.isFinite(correction) || Math.abs(correction) < 1e-3) return;
     // Attached fans, gear and nav lights are calibrated against the unaligned
