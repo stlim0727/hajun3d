@@ -196,3 +196,40 @@ test('_curveGeoFallbackPlane curves fallback ground downward with Earth curvatur
   assert.ok(pos.getZ(1) < -65, '20km fallback must curve below -31m Earth drop');
   assert.ok(pos.getZ(2) < -3830, '220km fallback must curve below -3800m Earth drop');
 });
+
+test('enableGeoTiles keeps Korea-wide tiles clamped to maxDepth 17 above 600 m altitude to prevent missing-tile holes', () => {
+  const sandbox = {
+    window: {},
+    document: { getElementById: () => null },
+    location: { protocol: 'http:', hostname: 'localhost' },
+    URLSearchParams,
+    console
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync('web/js/core.js', 'utf8'), sandbox);
+  const AirplaneGame = vm.runInContext('AirplaneGame', sandbox);
+  const game = Object.create(AirplaneGame.prototype);
+
+  let capturedOpts = null;
+  sandbox.window.HajunGeoTiles = {
+    create(opts) {
+      capturedOpts = opts;
+      return { update() {}, dispose() {} };
+    }
+  };
+  game.scene = { children: [] };
+  game.camera = {};
+  game.renderer = {};
+  game.container = null;
+  game.geoAnchor = { lat: 35.165, lon: 128.939, headingDeg: 353.9, height: 33.25 };
+  game.geoAzimuth = 173.9;
+  game.enableTerrainProvider = () => false;
+  game.applyAirfieldMinimalism = () => {};
+
+  assert.equal(game.enableGeoTiles('test-token'), true);
+  assert.equal(capturedOpts.nearAnchorMaxDepth, 17);
+  assert.ok(
+    capturedOpts.focusAnchors.some((a) => a.radius >= 500000 && a.maxAltitude >= 25000),
+    'Korea-wide focus anchor must cover flight altitudes above 600 m so depth-17 tiles are never unloaded'
+  );
+});

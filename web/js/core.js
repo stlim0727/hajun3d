@@ -436,9 +436,15 @@ class AirplaneGame {
     const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
     const worldSimAnchor = { x: 160, y: 0, z: 1600 };
     const renderSimAnchor = { ...worldSimAnchor };
-    const focusBase = jejuFocus
-      ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }]
-      : [];
+    // Keep Korea-wide tiles clamped to nearAnchorMaxDepth (17) at all flight altitudes
+    // so 3d-tiles-renderer does not unload valid depth-17 parent tiles beneath the aircraft
+    // when climbing above 600 m (Google 3D Tiles lacks depth 18+ over Korea).
+    const focusBase = [
+      { x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000 }
+    ];
+    if (jejuFocus) {
+      focusBase.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 });
+    }
     this.geoSimAnchorBase = { ...worldSimAnchor };
     this.geoRenderSimAnchor = renderSimAnchor;
     if (typeof window !== 'undefined') {
@@ -619,9 +625,17 @@ class AirplaneGame {
     this.geoIonToken = token;
 
     const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+    const isKoreaRegion = next.lat >= 32 && next.lat <= 39 && next.lon >= 124 && next.lon <= 132;
+    const defaultFocus = [];
+    if (isKoreaRegion) {
+      defaultFocus.push({ x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000 });
+    }
+    if (jejuFocus) {
+      defaultFocus.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 });
+    }
     const focusSource = Array.isArray(options.focusAnchors) && options.focusAnchors.length
       ? options.focusAnchors
-      : (jejuFocus ? [{ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 }] : []);
+      : defaultFocus;
     const focusBase = focusSource.map(anchor => ({ ...anchor }));
     this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
     const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
