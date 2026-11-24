@@ -12,10 +12,27 @@ await import(pathToFileURL(resolve('web/js/tile_engine.js')).href);
 await import(pathToFileURL(resolve('web/js/terrain_provider.js')).href);
 const TP = globalThis.TerrainProvider;
 
-test('terrain_provider.js exposes shared flightsim-core v0.2.1 implementations and browser tile loader', () => {
-  assert.equal(TP.createTerrariumProvider, globalThis.FlightSimCore.createTerrariumProvider);
-  assert.equal(TP.createGroundSurfaceQueries, globalThis.FlightSimCore.createGroundSurfaceQueries);
+test('terrain_provider.js exposes shared flightsim-core implementations, browser tile loader, and authority-zone helpers', () => {
+  const core = globalThis.FlightSimCore;
+  assert.equal(TP.createTerrariumProvider, core.createTerrariumProvider);
+  assert.equal(TP.createGroundSurfaceQueries, core.createGroundSurfaceQueries);
   assert.equal(typeof TP.createBrowserTileLoader, 'function');
+
+  assert.equal(typeof core.createAuthorityZones, 'function');
+  assert.equal(typeof core.authorityZonesFromBounds, 'function');
+  assert.equal(typeof core.zoneDistance, 'function');
+  assert.equal(typeof core.validateTerrainProviderOverride, 'function');
+
+  const zones = core.createAuthorityZones([
+    { minX: -10, maxX: 10, minZ: -20, maxZ: 20, height: 5, blendMargin: 4 },
+    { minX: 100, maxX: 200, minZ: -50, maxZ: 50, mode: 'exclude' }
+  ]);
+  assert.deepEqual(zones.zones.map(zone => zone.mode), ['flatten', 'exclude']);
+  assert.equal(zones.flatten(0, 0, 100), 5);
+  assert.equal(zones.contains(150, 0), true);
+  assert.equal(zones.protects(150, 0), true);
+  assert.equal(zones.protects(0, 0), false);
+  assert.equal(zones.distanceTo(50, 0), 40);
 });
 
 const ANCHOR = { lat: 35.1652, lon: 128.939, headingDeg: 353.9 };

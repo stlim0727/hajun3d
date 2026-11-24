@@ -121,6 +121,7 @@ test('flutter_app/assets/web runtime scripts initialize TerrainProvider and tile
   vm.runInContext(readFileSync(join(FLUTTER_WEB_DIR, 'js', 'physics.js'), 'utf8'), sandbox);
 
   assert.equal(sandbox.TerrainProvider.createTerrariumProvider, sandbox.FlightSimCore.createTerrariumProvider);
+  assert.equal(typeof sandbox.FlightSimCore.createAuthorityZones, 'function');
   assert.equal(typeof sandbox.TerrainProvider.createBrowserTileLoader, 'function');
   assert.equal(typeof sandbox.TileEngine.create, 'function');
 

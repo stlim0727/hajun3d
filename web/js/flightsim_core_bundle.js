@@ -80,10 +80,12 @@
     assertTerrainProviderConformance: () => assertTerrainProviderConformance,
     assertTerrainProviderContract: () => assertTerrainProviderContract,
     asymmetricThrustYawMoment: () => asymmetricThrustYawMoment,
+    authorityZonesFromBounds: () => authorityZonesFromBounds,
     autopilotState: () => autopilotState,
     classifyLanding: () => classifyLanding,
     createAeroResult: () => createAeroResult,
     createAnchorFrame: () => createAnchorFrame,
+    createAuthorityZones: () => createAuthorityZones,
     createGroundHeightQuery: () => createGroundHeightQuery,
     createGroundSurfaceQueries: () => createGroundSurfaceQueries,
     createTerrariumProvider: () => createTerrariumProvider,
@@ -107,9 +109,11 @@
     thrustFactorToN1: () => thrustFactorToN1,
     tilePixelToLonLat: () => tilePixelToLonLat,
     toNormalVector3: () => toNormalVector3,
+    validateTerrainProviderOverride: () => validateTerrainProviderOverride,
     wgs84ToEcef: () => wgs84ToEcef,
     wgs84ToEnu: () => wgs84ToEnu,
-    wrapHeading: () => wrapHeading
+    wrapHeading: () => wrapHeading,
+    zoneDistance: () => zoneDistance
   });
 
   // node_modules/@stlim0727/flightsim-core/src/physics/configurationOverspeed.js
@@ -5547,6 +5551,66 @@
     return { lat: latRad * R2D, lon: x * 360 - 180 };
   }
 
+  // node_modules/@stlim0727/flightsim-core/src/terrain/AuthorityZones.js
+  function normalizeZone(zone) {
+    if (Array.isArray(zone)) {
+      const [west, north, east, south] = zone;
+      return { minX: west, maxX: east, minZ: north, maxZ: south, mode: "exclude" };
+    }
+    return {
+      minX: zone.minX,
+      maxX: zone.maxX,
+      minZ: zone.minZ,
+      maxZ: zone.maxZ,
+      height: zone.height,
+      blendMargin: zone.blendMargin,
+      mode: zone.mode ?? (zone.height !== void 0 ? "flatten" : "exclude")
+    };
+  }
+  function authorityZonesFromBounds(bounds = []) {
+    return bounds.map(normalizeZone);
+  }
+  function zoneDistance(x, z, zone) {
+    const dx = x < zone.minX ? zone.minX - x : x > zone.maxX ? x - zone.maxX : 0;
+    const dz = z < zone.minZ ? zone.minZ - z : z > zone.maxZ ? z - zone.maxZ : 0;
+    return Math.hypot(dx, dz);
+  }
+  function createAuthorityZones(zones = []) {
+    const items = (zones || []).map(normalizeZone);
+    function distanceTo(x, z) {
+      let best = Infinity;
+      for (const zone of items) best = Math.min(best, zoneDistance(x, z, zone));
+      return best;
+    }
+    function contains(x, z) {
+      return items.some((zone) => zoneDistance(x, z, zone) === 0);
+    }
+    function protects(x, z) {
+      return items.some((zone) => zone.mode === "exclude" && zoneDistance(x, z, zone) === 0);
+    }
+    function flatten(x, z, rawHeight) {
+      let bestW = 0;
+      let bestH = rawHeight;
+      for (const zone of items) {
+        if (zone.mode !== "flatten") continue;
+        const dist = zoneDistance(x, z, zone);
+        const targetH = zone.height ?? 0;
+        if (dist === 0) return targetH;
+        const margin = zone.blendMargin ?? 400;
+        if (margin > 0 && dist < margin) {
+          const t = dist / margin;
+          const w = 1 - t * t * (3 - 2 * t);
+          if (w > bestW) {
+            bestW = w;
+            bestH = targetH * w + rawHeight * (1 - w);
+          }
+        }
+      }
+      return bestH;
+    }
+    return { zones: items, distanceTo, contains, protects, flatten };
+  }
+
   // node_modules/@stlim0727/flightsim-core/src/terrain/TerrariumElevationProvider.js
   var TILE_SIZE = 256;
   var DEFAULT_ZOOM = 11;
@@ -5576,11 +5640,6 @@
       }
     };
   }
-  function zoneDistance(x, z, zone) {
-    const dx = x < zone.minX ? zone.minX - x : x > zone.maxX ? x - zone.maxX : 0;
-    const dz = z < zone.minZ ? zone.minZ - z : z > zone.maxZ ? z - zone.maxZ : 0;
-    return Math.hypot(dx, dz);
-  }
   function createTerrariumProvider(options) {
     const {
       anchor,
@@ -5597,6 +5656,7 @@
     if (!anchor && typeof toWgs84 !== "function" || typeof loadTile !== "function") {
       throw new Error("createTerrariumProvider needs { loadTile } and either { anchor } or { toWgs84 }");
     }
+    const authority = createAuthorityZones(flatZones.map((zone) => ({ ...zone, mode: zone.mode ?? "flatten" })));
     const frame = typeof toWgs84 === "function" ? { toWgs84 } : createAnchorFrame(anchor, simOffset);
     const tilesAcross = 2 ** zoom;
     const cacheLimit = Number.isFinite(maxTiles) ? Math.max(1, Math.floor(maxTiles)) : maxTiles === Infinity ? Infinity : 24;
@@ -5612,27 +5672,6 @@
       const value = tiles.get(key);
       tiles.delete(key);
       tiles.set(key, value);
-    }
-    function applyFlatZones(x, z, rawHeight) {
-      if (!flatZones.length) return rawHeight;
-      let bestW = 0;
-      let bestH = rawHeight;
-      for (let i = 0; i < flatZones.length; i++) {
-        const zone = flatZones[i];
-        const dist = zoneDistance(x, z, zone);
-        const targetH = zone.height ?? 0;
-        if (dist === 0) return targetH;
-        const margin = zone.blendMargin ?? 400;
-        if (margin > 0 && dist < margin) {
-          const t = dist / margin;
-          const w = 1 - t * t * (3 - 2 * t);
-          if (w > bestW) {
-            bestW = w;
-            bestH = targetH * w + rawHeight * (1 - w);
-          }
-        }
-      }
-      return bestH;
     }
     function request(tx, ty) {
       if (disposed) return "disposed";
@@ -5715,16 +5754,14 @@
         }
         const h = sampleMsl(x, z, true);
         if (!hasDatum && !ensureDatum(true)) return null;
-        return h === null ? null : applyFlatZones(x, z, h - datumM);
+        return h === null ? null : authority.flatten(x, z, h - datumM);
       },
       isReady(x, z) {
         return ensureDatum(false) && sampleMsl(x, z, false) !== null;
       },
       isWater(x, z) {
         if (!ensureDatum(false)) return false;
-        for (let i = 0; i < flatZones.length; i++) {
-          if (zoneDistance(x, z, flatZones[i]) === 0) return false;
-        }
+        if (authority.contains(x, z)) return false;
         const msl = sampleMsl(x, z, false);
         return msl !== null && msl <= 0.1;
       },
@@ -5897,6 +5934,17 @@
       throw new Error(`terrain provider conformance failed: ${failures.join("; ")}`);
     }
     return true;
+  }
+  function validateTerrainProviderOverride(getProvider, points = [[0, 0]]) {
+    let validated = null;
+    return () => {
+      const provider = getProvider?.() ?? null;
+      if (provider && provider !== validated) {
+        assertTerrainProviderConformance(provider, points);
+        validated = provider;
+      }
+      return provider;
+    };
   }
 
   // flightsim-core-bundle-entry.js
