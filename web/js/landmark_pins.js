@@ -13,6 +13,10 @@
   const BULB_RADIUS = 3.2;
   const MAX_RANGE_M = 15000;
   const SCALE_REF_M = 120;
+  const LABEL_CANVAS_W = 512;
+  const LABEL_CANVAS_H = 128;
+  const LABEL_WIDTH = 22;
+  const LABEL_HEIGHT = 5.5;
 
   let game = null;
   let group = null;
@@ -83,6 +87,44 @@
     };
   }
 
+  function drawLabel(pin, selected) {
+    if (!pin.labelCtx) return;
+    const ctx = pin.labelCtx;
+    const canvas = pin.labelCanvas;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!pin.item || !pin.item.title) {
+      pin.labelTexture.needsUpdate = true;
+      return;
+    }
+
+    ctx.font = '700 44px system-ui, -apple-system, "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const maxWidth = canvas.width - 48;
+    let text = String(pin.item.title);
+    if (ctx.measureText(text).width > maxWidth) {
+      while (text.length > 1 && ctx.measureText(`${text}…`).width > maxWidth) text = text.slice(0, -1);
+      text += '…';
+    }
+
+    const x = 8;
+    const y = 18;
+    const width = canvas.width - 16;
+    const height = canvas.height - 36;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, width, height, 20);
+    else ctx.rect(x, y, width, height);
+    ctx.fillStyle = 'rgba(8, 15, 30, 0.88)';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = selected ? '#fbbf24' : '#38bdf8';
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2, maxWidth);
+    pin.labelTexture.needsUpdate = true;
+  }
+
   function createPin() {
     const node = new THREE.Group();
 
@@ -111,9 +153,30 @@
     bulb.renderOrder = 9;
 
     node.add(halo, ring, coneOutline, bulbOutline, cone, bulb);
-    node.visible = false;
 
-    const pin = { node, cone, bulb, ring, halo, item: null, world: null, grounded: false };
+    let label = null;
+    let labelCanvas = null;
+    let labelCtx = null;
+    let labelTexture = null;
+    if (typeof document !== 'undefined') {
+      labelCanvas = document.createElement('canvas');
+      labelCanvas.width = LABEL_CANVAS_W;
+      labelCanvas.height = LABEL_CANVAS_H;
+      labelCtx = labelCanvas.getContext('2d');
+      labelTexture = new THREE.CanvasTexture(labelCanvas);
+      if (THREE.SRGBColorSpace) labelTexture.colorSpace = THREE.SRGBColorSpace;
+      label = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: labelTexture, transparent: true, depthTest: false, depthWrite: false
+      }));
+      label.scale.set(LABEL_WIDTH, LABEL_HEIGHT, 1);
+      label.position.y = PIN_HEIGHT + BULB_RADIUS * 0.55 + BULB_RADIUS + LABEL_HEIGHT * 0.55;
+      label.renderOrder = 10;
+      node.add(label);
+    }
+
+    node.visible = false;
+    const pin = { node, cone, bulb, ring, halo, label, labelCanvas, labelCtx, labelTexture,
+      item: null, world: null, grounded: false };
     cone.userData.pin = pin;
     bulb.userData.pin = pin;
     return pin;
@@ -126,6 +189,7 @@
       pin.bulb.material = shapes.bulb;
       pin.ring.material = selected ? shapes.ringSelected : shapes.ringNormal;
       pin.halo.material = selected ? shapes.haloSelected : shapes.haloNormal;
+      drawLabel(pin, selected);
     }
   }
 
