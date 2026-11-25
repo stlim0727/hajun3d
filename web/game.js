@@ -868,8 +868,32 @@ window.applyFixedPose = function(pose) {
   game.isOnGround = !isAirborne;
   game.gearExtended = !isAirborne;
   game.gearPhase = isAirborne ? 'UP' : 'DOWN';
+  game.gearPhaseTimer = 0.0;
   if (typeof game.updateGearUI === 'function') {
     game.updateGearUI(game.gearPhase, isAirborne ? 'gear-up' : 'gear-down');
+  }
+  if (game.glbMovingPartsController) {
+    game.glbMovingPartsController.setGearProgress(isAirborne ? 0.0 : 1.0, game.gearPhase);
+  }
+  if (game.glbGearNodes) {
+    game.glbGearNodes.forEach(n => { n.visible = !isAirborne; });
+  }
+  if (game.glbGearMaterials) {
+    game.glbGearMaterials.forEach(m => { m.visible = !isAirborne; });
+  }
+  if (game.landingGears) {
+    game.landingGears.forEach(gear => {
+      const u = gear.userData;
+      if (u) {
+        if (u.doorL) u.doorL.rotation.z = 0;
+        if (u.doorR) u.doorR.rotation.z = 0;
+        if (u.strutPivot) {
+          u.strutPivot.rotation.x = isAirborne ? -Math.PI / 2 : 0;
+          u.strutPivot.visible = !isAirborne;
+        }
+        if (u.bogieBeam) u.bogieBeam.rotation.x = 0;
+      }
+    });
   }
 
   // Freeze state
@@ -893,7 +917,10 @@ window.applyFixedPose = function(pose) {
       game.groundSpeed = 0;
       game.throttle = 0.8;
       game.n1 = 85;
-      if (game.velocity) game.velocity.set(Math.sin(yaw) * 80, 0, -Math.cos(yaw) * 80);
+      if (game.velocity) {
+        const forwardVec = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        game.velocity.copy(forwardVec.multiplyScalar(80));
+      }
     } else {
       game.speed = 0;
       game.groundSpeed = 0;
