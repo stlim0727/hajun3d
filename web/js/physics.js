@@ -1003,9 +1003,20 @@
 
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
     if (this.planeGroup) {
+      const rawDeltaY = result.position.y - groundOffset;
+      const onSolidRunwayWithGear = Boolean(
+        (result.telemetry?.wow || core.gear?.onGround) &&
+        !result.telemetry?.onWater &&
+        !this._isOverWaterSurface &&
+        this.gearExtended !== false &&
+        !this.isGearCollapsed &&
+        !this.isBellySliding
+      );
+      // Allow up to 8 cm realistic tire flex on touchdown without letting tires sink into runway asphalt.
+      const clampedDeltaY = onSolidRunwayWithGear ? Math.max(-0.08, rawDeltaY) : rawDeltaY;
       this.planeGroup.position.set(
         result.position.x,
-        (this.groundY || 6.84) + (result.position.y - groundOffset),
+        (this.groundY || 6.84) + clampedDeltaY,
         result.position.z
       );
       this.planeGroup.quaternion.copy(result.quaternion);

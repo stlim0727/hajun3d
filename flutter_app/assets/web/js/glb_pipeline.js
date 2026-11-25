@@ -318,6 +318,7 @@
 
       gearAssembly.add(strutPivot);
 
+      const wheelRadius = is4WheelBogie ? 0.75 : (isNose ? 0.65 : 0.78);
       gearAssembly.userData = {
         gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
         strutPivot,
@@ -327,6 +328,7 @@
         bogieBeam: bogieBeamGroup,
         isNose,
         is4WheelBogie,
+        localBottomY: y - strutLength - wheelRadius,
         origPos: new THREE.Vector3(x, y, z)
       };
 
@@ -1361,7 +1363,22 @@
       ? this.planeGroup.getWorldPosition(new THREE.Vector3()).y
       : 0;
     const bounds = Number.isFinite(storedMinY) ? null : new THREE.Box3().setFromObject(scene);
-    const localMinY = Number.isFinite(storedMinY) ? storedMinY : bounds.min.y - groupWorldY;
+    let localMinY = Number.isFinite(storedMinY) ? storedMinY : bounds.min.y - groupWorldY;
+    // Include procedural/attached landing gear (e.g. A350) whose tires extend lower than
+    // the bare GLB fuselage/engines captured during normalizeAircraftScene().
+    if (Array.isArray(this.landingGears) && this.landingGears.length > 0) {
+      for (const gear of this.landingGears) {
+        if (!gear) continue;
+        if (Number.isFinite(gear.userData?.localBottomY)) {
+          localMinY = Math.min(localMinY, gear.userData.localBottomY);
+        } else if (typeof THREE.Box3 === 'function') {
+          const gb = new THREE.Box3().setFromObject(gear);
+          if (Number.isFinite(gb.min?.y)) {
+            localMinY = Math.min(localMinY, gb.min.y - groupWorldY);
+          }
+        }
+      }
+    }
     const correction = (runwaySurfaceY - groundY) - localMinY;
     if (!Number.isFinite(correction) || Math.abs(correction) < 1e-3) return;
     // Attached fans, gear and nav lights are calibrated against the unaligned

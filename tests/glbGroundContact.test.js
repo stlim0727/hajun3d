@@ -94,3 +94,25 @@ test('airborne rebuild does not bake current altitude into GLB alignment', () =>
   assert.ok(Math.abs((scene.userData.normalizedMinY + scene.position.y) - (2.12 - 6.84)) < 1e-6);
   assert.equal(scene.updated, true);
 });
+
+test('alignGLBToRunway includes attached landing gear (e.g. A350) so tires sit on runway instead of sinking', () => {
+  const AirplaneGame = loadPipeline();
+  const game = makeGame(AirplaneGame.prototype, 6.84, 6.84);
+  const scene = {
+    worldMinY: 6.84 - 2.0,
+    userData: { normalizedMinY: -2.0 },
+    position: { y: 0 },
+    updateMatrixWorld() {}
+  };
+  const noseGear = { position: { y: -1.0 }, userData: { localBottomY: -4.42 } };
+  const mainGear = { position: { y: 0.39 }, userData: { localBottomY: -4.01 } };
+  game.landingGears = [noseGear, mainGear];
+  game.planeGroup.children = [scene, noseGear, mainGear];
+
+  game.alignGLBToRunway(scene);
+
+  // Lowest tire (-4.42) + correction must equal runwaySurfaceY - groundY (2.12 - 6.84 = -4.72)
+  const expectedCorrection = (2.12 - 6.84) - (-4.42);
+  assert.ok(Math.abs(scene.position.y - expectedCorrection) < 1e-6);
+  assert.ok(Math.abs((noseGear.userData.localBottomY + scene.position.y) - (2.12 - 6.84)) < 1e-6);
+});
