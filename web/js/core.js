@@ -487,7 +487,7 @@ class AirplaneGame {
 
   getGeoTilesErrorTarget() {
     if (typeof window !== 'undefined') {
-      const geoParams = new URLSearchParams(window.location.search);
+      const geoParams = new URLSearchParams(window.location?.search || '');
       const param = geoParams.get('geoErrorTarget');
       if (param && Number.isFinite(Number(param))) return Number(param);
       if (Number.isFinite(window.GEO_TILES_ERROR_TARGET)) return window.GEO_TILES_ERROR_TARGET;
