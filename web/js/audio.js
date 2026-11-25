@@ -537,11 +537,11 @@
     const n1 = Math.max(20, Math.min(100, this.n1 || 20));
     const n1Ratio = Math.max(0.0, Math.min(1.0, (n1 - 20) / 80.0)); // 0.0 ~ 1.0
 
-    // 1. 제트 연소 핑크 노이즈 굉음 (300Hz ~ 1650Hz, 게인 0.42 ~ 1.62)
+    // 1. 제트 연소 핑크 노이즈 굉음 (300Hz ~ 1650Hz, 게인 0.21 ~ 0.81)
     if (this.jetNoiseFilter && this.jetNoiseGain) {
       const engineCutoff = 300 + n1Ratio * 1350;
       const reverseBoost = this.reverseThrustActive ? 0.25 : 0.0;
-      const engineVol = 0.42 + Math.pow(n1Ratio, 1.15) * 0.95 + reverseBoost;
+      const engineVol = 0.5 * (0.42 + Math.pow(n1Ratio, 1.15) * 0.95 + reverseBoost);
       this.jetNoiseFilter.frequency.setTargetAtTime(engineCutoff, now, 0.08);
       this.jetNoiseGain.gain.setTargetAtTime(engineVol, now, 0.08);
     }

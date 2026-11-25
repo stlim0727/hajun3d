@@ -541,14 +541,45 @@ window.applyFixedPose = function(pose) {
   const gateAction = document.getElementById('gate-action-container');
   if (gateAction) gateAction.classList.add('hidden');
 
+  const isAirborne = targetY > groundY + 2.0;
+  game.isOnGround = !isAirborne;
+  game.gearExtended = !isAirborne;
+  game.gearPhase = isAirborne ? 'UP' : 'DOWN';
+  if (typeof game.updateGearUI === 'function') {
+    game.updateGearUI(game.gearPhase, isAirborne ? 'gear-up' : 'gear-down');
+  }
+
   // Freeze state
   game.isDestroyed = false;
   game.isBellySliding = false;
   game.isWaterLanding = false;
-  game.speed = 0;
-  game.groundSpeed = 0;
-  game.throttle = 0;
-  if (game.velocity) game.velocity.set(0, 0, 0);
+
+  const freeze = Boolean(pose.freeze !== false);
+  game.isFixed = freeze;
+  game.isPlaying = !freeze;
+
+  if (freeze) {
+    game.speed = 0;
+    game.groundSpeed = 0;
+    game.throttle = 0;
+    if (game.velocity) game.velocity.set(0, 0, 0);
+  } else {
+    game.flightPhase = isAirborne ? 'CLIMB_CRUISE' : 'TAKEOFF_RUN';
+    if (isAirborne) {
+      game.speed = 1.0;
+      game.groundSpeed = 0;
+      game.throttle = 0.8;
+      game.n1 = 85;
+      if (game.velocity) game.velocity.set(Math.sin(yaw) * 80, 0, -Math.cos(yaw) * 80);
+    } else {
+      game.speed = 0;
+      game.groundSpeed = 0;
+      game.throttle = 1.0;
+      game.n1 = 92;
+      if (game.velocity) game.velocity.set(0, 0, 0);
+    }
+    if (typeof game.startJetSound === 'function') game.startJetSound();
+  }
 
   // Build aircraft if not built
   if (!game.planeGroup) {
@@ -561,10 +592,9 @@ window.applyFixedPose = function(pose) {
   game.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   game.planeGroup.visible = true;
 
-  // Stationary / fixed flag
-  game.isFixed = Boolean(pose.freeze !== false);
-  game.isPlaying = false; // When isFixed is true, animate() processes camera & HUD without physics
-
+  if (typeof game.updateHUD === 'function') {
+    game.updateHUD();
+  }
   if (typeof game.updateCameraFromPhysics === 'function') {
     game.updateCameraFromPhysics(0, 0.016);
   }
