@@ -42,7 +42,7 @@ export function create(options = {}) {
   if (!ionToken || !scene || !camera || !renderer) return null;
   if (![lat, lon, height].every(Number.isFinite)) return null;
 
-  let activeErrorTarget = Number.isFinite(configuredErrorTarget) ? configuredErrorTarget : 24;
+  let activeErrorTarget = Number.isFinite(configuredErrorTarget) ? configuredErrorTarget : 16;
 
   const tiles = new TilesRenderer();
   tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: ionToken, assetId, autoRefreshToken: true }));
@@ -100,8 +100,27 @@ export function create(options = {}) {
   tiles.setCamera(camera);
   tiles.setResolutionFromRenderer(camera, renderer);
 
+  const maxAnisotropy = renderer && renderer.capabilities && typeof renderer.capabilities.getMaxAnisotropy === 'function'
+    ? Math.min(8, renderer.capabilities.getMaxAnisotropy() || 1)
+    : 4;
   const stats = { tiles: 0, errors: 0, source: 'ion' };
-  tiles.addEventListener('load-model', () => { stats.tiles += 1; });
+  tiles.addEventListener('load-model', (event) => {
+    stats.tiles += 1;
+    const modelScene = event && (event.scene || (event.tile && event.tile.cached && event.tile.cached.scene));
+    if (modelScene && typeof modelScene.traverse === 'function') {
+      modelScene.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach((mat) => {
+            if (mat && mat.map && mat.map.anisotropy !== maxAnisotropy) {
+              mat.map.anisotropy = maxAnisotropy;
+              mat.map.needsUpdate = true;
+            }
+          });
+        }
+      });
+    }
+  });
   tiles.addEventListener('load-error', () => { stats.errors += 1; });
 
   if (container) {
@@ -136,12 +155,20 @@ export function create(options = {}) {
     // Keep the available parent tiles around Gimhae during ground operations.
     const nearAnchor = camera.position.y < activeAnchor.y + 600 &&
       Math.hypot(camera.position.x - activeAnchor.x, camera.position.z - activeAnchor.z) < 6000;
-    const nearFocusAnchor = activeFocus.some((anchor) => {
-      const y = anchor.y ?? 0;
-      return camera.position.y < (anchor.maxAltitude ?? y + 600) &&
-        Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6000);
-    });
-    tiles.maxDepth = (nearAnchor || nearFocusAnchor) ? nearAnchorMaxDepth : 0;
+    let targetMaxDepth = 0;
+    if (nearAnchor) {
+      targetMaxDepth = nearAnchorMaxDepth;
+    } else if (activeFocus.length > 0) {
+      const matched = activeFocus.find((anchor) => {
+        const y = anchor.y ?? 0;
+        return camera.position.y < (anchor.maxAltitude ?? y + 600) &&
+          Math.hypot(camera.position.x - anchor.x, camera.position.z - anchor.z) < (anchor.radius ?? 6000);
+      });
+      if (matched) {
+        targetMaxDepth = matched.maxDepth !== undefined ? matched.maxDepth : (options.maxDepth || 19);
+      }
+    }
+    tiles.maxDepth = targetMaxDepth;
     if (scene && typeof scene.updateMatrixWorld === 'function') scene.updateMatrixWorld();
     if (camera && typeof camera.updateMatrixWorld === 'function') camera.updateMatrixWorld();
     tiles.setResolutionFromRenderer(camera, renderer);

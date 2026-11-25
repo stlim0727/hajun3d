@@ -125,7 +125,7 @@ test('collectProblemReportData includes camera, render origin, attitude, tilesSt
   assert.deepEqual(report.geo.camera.matrixWorldPosition, { x: 0, y: 2.5, z: 49.4 });
   assert.equal(report.geo.camera.fov, 72);
   assert.ok(report.geo.geoTilesDebug.tilesStats, 'geoTilesDebug.tilesStats should be present');
-  assert.equal(report.geo.geoTilesDebug.errorTarget, 24);
+  assert.equal(report.geo.geoTilesDebug.errorTarget, 16);
 
   assert.equal(report.flight.pitchDeg, 10);
   assert.equal(report.flight.rollDeg, -5);

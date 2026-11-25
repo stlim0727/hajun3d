@@ -493,11 +493,11 @@ class AirplaneGame {
       if (Number.isFinite(window.GEO_TILES_ERROR_TARGET)) return window.GEO_TILES_ERROR_TARGET;
     }
     const quality = (typeof localStorage !== 'undefined' && localStorage.getItem('flight3d.renderQuality')) || 'high';
-    if (quality === 'ultra') return 16;
-    if (quality === 'high') return 24;
-    if (quality === 'medium') return 32;
-    if (quality === 'low') return 48;
-    return 24;
+    if (quality === 'ultra') return 12;
+    if (quality === 'high') return 16;
+    if (quality === 'medium') return 24;
+    if (quality === 'low') return 36;
+    return 16;
   }
 
   enableGeoTiles(ionToken) {
@@ -510,10 +510,10 @@ class AirplaneGame {
     // so 3d-tiles-renderer does not unload valid depth-17 parent tiles beneath the aircraft
     // when climbing above 600 m (Google 3D Tiles lacks depth 18+ over Korea).
     const focusBase = [
-      { x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000 }
+      { x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000, maxDepth: 19 }
     ];
     if (jejuFocus) {
-      focusBase.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 });
+      focusBase.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000, maxDepth: 19 });
     }
     this.geoSimAnchorBase = { ...worldSimAnchor };
     this.geoRenderSimAnchor = renderSimAnchor;
@@ -699,10 +699,10 @@ class AirplaneGame {
     const isKoreaRegion = next.lat >= 32 && next.lat <= 39 && next.lon >= 124 && next.lon <= 132;
     const defaultFocus = [];
     if (isKoreaRegion) {
-      defaultFocus.push({ x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000 });
+      defaultFocus.push({ x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000, maxDepth: 19 });
     }
     if (jejuFocus) {
-      defaultFocus.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000 });
+      defaultFocus.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000, maxDepth: 19 });
     }
     const focusSource = Array.isArray(options.focusAnchors) && options.focusAnchors.length
       ? options.focusAnchors
