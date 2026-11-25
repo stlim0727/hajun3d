@@ -743,6 +743,7 @@
     };
     this._partSparkFrame = 0;
     this._partSmokeFrame = 0;
+    if (typeof this.clearAirframeDebris === 'function') this.clearAirframeDebris();
   },
 
   _collapseGearAssembly(gear, idx) {
@@ -1313,8 +1314,198 @@
     }
   },
 
+  clearAirframeDebris() {
+    if (!Array.isArray(this.debrisPieces)) {
+      this.debrisPieces = [];
+      return;
+    }
+    for (const piece of this.debrisPieces) {
+      if (this.scene && typeof this.scene.remove === 'function') {
+        this.scene.remove(piece);
+      }
+      if (piece && typeof piece.traverse === 'function') {
+        piece.traverse((obj) => {
+          if (obj && obj.userData && obj.userData._disposeGeometryOnClear && obj.geometry && typeof obj.geometry.dispose === 'function') {
+            obj.geometry.dispose();
+          }
+        });
+      }
+    }
+    this.debrisPieces = [];
+  },
+
+  // 현재 탑승 중인 비행기(GLB / 프로시저럴) 메쉬 자체를 1:1 실물 크기 6개 구조 파편으로 절단·생성
+  // (좌주익, 우주익, 기수/조종석, 중앙동체, 수직꼬리날개, 후방동체/수평꼬리날개)
+  buildAirframeMeshDebrisChunks(pos) {
+    if (!this.planeGroup || !this.scene || typeof THREE === 'undefined') return [];
+    if (!THREE.Box3 || !THREE.Matrix4 || !THREE.BufferGeometry || !THREE.Group || !THREE.Mesh) return [];
+
+    if (typeof this.planeGroup.updateMatrixWorld === 'function') {
+      this.planeGroup.updateMatrixWorld(true);
+    }
+    if (!this.planeGroup.matrixWorld) return [];
+
+    const planeInv = new THREE.Matrix4().copy(this.planeGroup.matrixWorld).invert();
+    const localBox = new THREE.Box3();
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const meshToPlane = new THREE.Matrix4();
+
+    const sourceMeshes = [];
+    if (typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.geometry) return;
+        const posAttr = obj.geometry.attributes && obj.geometry.attributes.position;
+        if (!posAttr || posAttr.count < 3) return;
+        sourceMeshes.push(obj);
+        meshToPlane.multiplyMatrices(planeInv, obj.matrixWorld);
+        for (let i = 0; i < posAttr.count; i++) {
+          vA.fromBufferAttribute(posAttr, i).applyMatrix4(meshToPlane);
+          localBox.expandByPoint(vA);
+        }
+      });
+    }
+
+    if (sourceMeshes.length === 0 || localBox.isEmpty()) return [];
+
+    const length = Math.max(1, localBox.max.z - localBox.min.z);
+    const span = Math.max(1, localBox.max.x - localBox.min.x);
+    const height = Math.max(1, localBox.max.y - localBox.min.y);
+    const fuselageHalfW = Math.max(1.8, span * 0.085);
+    const noseMaxZ = localBox.min.z + length * 0.28;
+    const tailMinZ = localBox.max.z - length * 0.28;
+    const finMinY = localBox.max.y - height * 0.52;
+
+    const sectionSpecs = {
+      leftWing:       { impulse: [-8.5, 4.8, -1.5], ang: [0.09, 0.13, 0.07] },
+      rightWing:      { impulse: [8.5, 4.8, -1.5],  ang: [-0.09, -0.13, 0.07] },
+      nose:           { impulse: [0.0, 4.0, -9.5],  ang: [0.11, 0.06, 0.09] },
+      centerFuselage: { impulse: [0.0, 2.8, -2.5],  ang: [0.05, 0.03, 0.07] },
+      tailFin:        { impulse: [1.5, 6.2, 7.5],   ang: [0.13, 0.11, 0.15] },
+      aftTail:        { impulse: [-1.5, 3.6, 6.5],  ang: [-0.08, 0.07, -0.10] }
+    };
+
+    const buckets = {};
+    for (const key of Object.keys(sectionSpecs)) {
+      buckets[key] = { pieces: [], box: new THREE.Box3(), triCount: 0 };
+    }
+
+    const classifyCentroid = (cx, cy, cz) => {
+      if (cx < -fuselageHalfW && cz > noseMaxZ * 0.9 && cz < tailMinZ) return 'leftWing';
+      if (cx > fuselageHalfW && cz > noseMaxZ * 0.9 && cz < tailMinZ) return 'rightWing';
+      if (cz < noseMaxZ) return 'nose';
+      if (cz > tailMinZ) return (cy > finMinY && Math.abs(cx) <= Math.max(1.8, span * 0.06)) ? 'tailFin' : 'aftTail';
+      return 'centerFuselage';
+    };
+
+    for (const mesh of sourceMeshes) {
+      const geom = mesh.geometry;
+      const posAttr = geom.attributes.position;
+      const origIndex = geom.index;
+      const indexCount = origIndex ? origIndex.count : posAttr.count;
+      if (Math.floor(indexCount / 3) <= 0) continue;
+
+      meshToPlane.multiplyMatrices(planeInv, mesh.matrixWorld);
+      const localIndices = {
+        leftWing: [], rightWing: [], nose: [], centerFuselage: [], tailFin: [], aftTail: []
+      };
+
+      for (let i = 0; i + 2 < indexCount; i += 3) {
+        const ia = origIndex ? origIndex.getX(i) : i;
+        const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+        const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+        vA.fromBufferAttribute(posAttr, ia).applyMatrix4(meshToPlane);
+        vB.fromBufferAttribute(posAttr, ib).applyMatrix4(meshToPlane);
+        vC.fromBufferAttribute(posAttr, ic).applyMatrix4(meshToPlane);
+        const cx = (vA.x + vB.x + vC.x) / 3;
+        const cy = (vA.y + vB.y + vC.y) / 3;
+        const cz = (vA.z + vB.z + vC.z) / 3;
+        const key = classifyCentroid(cx, cy, cz);
+        localIndices[key].push(ia, ib, ic);
+        buckets[key].box.expandByPoint(vA);
+        buckets[key].box.expandByPoint(vB);
+        buckets[key].box.expandByPoint(vC);
+        buckets[key].triCount += 1;
+      }
+
+      for (const key of Object.keys(localIndices)) {
+        const idxArr = localIndices[key];
+        if (idxArr.length === 0) continue;
+        const pieceGeom = new THREE.BufferGeometry();
+        for (const attrName of Object.keys(geom.attributes)) {
+          pieceGeom.setAttribute(attrName, geom.attributes[attrName]);
+        }
+        pieceGeom.setIndex(idxArr);
+        const pieceMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        buckets[key].pieces.push({ geom: pieceGeom, mat: pieceMat, matrix: meshToPlane.clone() });
+      }
+    }
+
+    const planeQuat = this.planeGroup.quaternion ? this.planeGroup.quaternion.clone() : new THREE.Quaternion();
+    const basePos = pos ? pos.clone() : this.planeGroup.position.clone();
+    const carryVel = this.velocity ? this.velocity.clone().multiplyScalar(0.03) : new THREE.Vector3();
+    const spawned = [];
+
+    for (const [key, bucket] of Object.entries(buckets)) {
+      if (bucket.pieces.length === 0 || bucket.box.isEmpty()) continue;
+      const chunkCenter = bucket.box.getCenter(new THREE.Vector3());
+      const chunkGroup = new THREE.Group();
+      chunkGroup.name = `Debris_${key}`;
+      chunkGroup.userData = { debrisSection: key, sourceAircraft: this.currentPlaneType || 'a320', triCount: bucket.triCount };
+
+      const innerOffset = new THREE.Group();
+      innerOffset.position.set(-chunkCenter.x, -chunkCenter.y, -chunkCenter.z);
+      for (const p of bucket.pieces) {
+        const pieceMesh = new THREE.Mesh(p.geom, p.mat);
+        pieceMesh.userData = { _disposeGeometryOnClear: true };
+        pieceMesh.applyMatrix4(p.matrix);
+        innerOffset.add(pieceMesh);
+      }
+      chunkGroup.add(innerOffset);
+
+      // 정확히 원래 비행기의 해당 부위 위치에서 분리되어 튕겨 나가도록 배치
+      const worldCenterOffset = chunkCenter.clone().applyQuaternion(planeQuat);
+      chunkGroup.position.copy(basePos).add(worldCenterOffset);
+      chunkGroup.quaternion.copy(planeQuat);
+
+      const spec = sectionSpecs[key];
+      const jitter = (s) => (Math.random() - 0.5) * s;
+      const localImpulse = new THREE.Vector3(
+        spec.impulse[0] + jitter(3.0),
+        spec.impulse[1] + Math.random() * 3.0,
+        spec.impulse[2] + jitter(3.0)
+      ).applyQuaternion(planeQuat);
+      localImpulse.y = Math.max(1.8, localImpulse.y);
+      chunkGroup.velocity = localImpulse.add(carryVel);
+      chunkGroup.angularVel = new THREE.Vector3(
+        spec.ang[0] + jitter(0.04),
+        spec.ang[1] + jitter(0.04),
+        spec.ang[2] + jitter(0.04)
+      );
+
+      this.scene.add(chunkGroup);
+      this.debrisPieces.push(chunkGroup);
+      spawned.push(chunkGroup);
+    }
+
+    return spawned;
+  },
+
   // 기체 구조 분해 잔해 조각 생성 (Debris Physics)
   spawnAirframeDebris(pos, rot) {
+    // 1. 실제 비행기 3D 메쉬에서 1:1 크기 구조 파편 직접 생성
+    const realChunks = this.buildAirframeMeshDebrisChunks(pos);
+    if (realChunks.length > 0) return realChunks;
+
+    // 2. 메쉬가 없는 폴백 환경에서도 기종 실제 전장(m)에 비례한 크기로 잔해 생성
+    const lengthByType = {
+      a320: 37.6, a320_detailed: 37.6, a320_simplified: 37.6,
+      a350: 66.8, b747: 70.6, dc10: 55.5, md80: 45.1,
+      concorde: 61.7, amphibian: 19.8, ancestor: 12.3
+    };
+    const scale = (lengthByType[(this.currentPlaneType || 'a320').toLowerCase()] || 37.6) / 37.6;
+
     const scorchedMat = new THREE.MeshStandardMaterial({
       color: 0x1e293b,
       roughness: 0.9,
@@ -1326,33 +1517,33 @@
     });
 
     // 1. 기수/조종석 잔해
-    const noseDebris = new THREE.Mesh(new THREE.ConeGeometry(2.6, 6, 12), scorchedMat);
-    noseDebris.position.copy(pos).add(new THREE.Vector3(0, 2, -10));
+    const noseDebris = new THREE.Mesh(new THREE.ConeGeometry(2.6 * scale, 9 * scale, 12), scorchedMat);
+    noseDebris.position.copy(pos).add(new THREE.Vector3(0, 2, -11 * scale));
     noseDebris.velocity = new THREE.Vector3((Math.random() - 0.5) * 6, 4 + Math.random() * 4, -8 - Math.random() * 6);
     noseDebris.angularVel = new THREE.Vector3(0.08, 0.05, 0.12);
     this.scene.add(noseDebris);
     this.debrisPieces.push(noseDebris);
 
     // 2. 좌측 주익 잔해
-    const leftWingDebris = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 4), burningWingMat);
-    leftWingDebris.position.copy(pos).add(new THREE.Vector3(-8, 1, 0));
+    const leftWingDebris = new THREE.Mesh(new THREE.BoxGeometry(16 * scale, 0.5 * scale, 5 * scale), burningWingMat);
+    leftWingDebris.position.copy(pos).add(new THREE.Vector3(-9 * scale, 1, 0));
     leftWingDebris.velocity = new THREE.Vector3(-7 - Math.random() * 5, 5 + Math.random() * 5, (Math.random() - 0.5) * 5);
     leftWingDebris.angularVel = new THREE.Vector3(0.1, 0.15, 0.06);
     this.scene.add(leftWingDebris);
     this.debrisPieces.push(leftWingDebris);
 
     // 3. 우측 주익 잔해
-    const rightWingDebris = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 4), burningWingMat);
-    rightWingDebris.position.copy(pos).add(new THREE.Vector3(8, 1, 0));
+    const rightWingDebris = new THREE.Mesh(new THREE.BoxGeometry(16 * scale, 0.5 * scale, 5 * scale), burningWingMat);
+    rightWingDebris.position.copy(pos).add(new THREE.Vector3(9 * scale, 1, 0));
     rightWingDebris.velocity = new THREE.Vector3(7 + Math.random() * 5, 5 + Math.random() * 5, (Math.random() - 0.5) * 5);
     rightWingDebris.angularVel = new THREE.Vector3(-0.1, -0.15, 0.06);
     this.scene.add(rightWingDebris);
     this.debrisPieces.push(rightWingDebris);
 
     // 4. 동체 중앙 잔해
-    const fuselageDebris = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 15, 16), scorchedMat);
+    const fuselageDebris = new THREE.Mesh(new THREE.CylinderGeometry(2.8 * scale, 2.8 * scale, 18 * scale, 16), scorchedMat);
     fuselageDebris.rotation.x = Math.PI / 2;
-    fuselageDebris.position.copy(pos).add(new THREE.Vector3(0, 2, 2));
+    fuselageDebris.position.copy(pos).add(new THREE.Vector3(0, 2, 2 * scale));
     fuselageDebris.velocity = new THREE.Vector3((Math.random() - 0.5) * 4, 3 + Math.random() * 3, -3);
     fuselageDebris.angularVel = new THREE.Vector3(0.04, 0.02, 0.08);
     this.scene.add(fuselageDebris);
@@ -1360,14 +1551,15 @@
 
     // 5. 엔진 잔해들 (구르고 튕김)
     for (let e = 0; e < 2; e++) {
-      const engDebris = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 5, 12), scorchedMat);
+      const engDebris = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * scale, 1.4 * scale, 5 * scale, 12), scorchedMat);
       engDebris.rotation.x = Math.PI / 2;
-      engDebris.position.copy(pos).add(new THREE.Vector3((e === 0 ? -7 : 7), 1, 0));
+      engDebris.position.copy(pos).add(new THREE.Vector3((e === 0 ? -7 : 7) * scale, 1, 0));
       engDebris.velocity = new THREE.Vector3((e === 0 ? -9 : 9), 6, -5 + Math.random() * 3);
       engDebris.angularVel = new THREE.Vector3(0.2, 0.1, 0.15);
       this.scene.add(engDebris);
       this.debrisPieces.push(engDebris);
     }
+    return this.debrisPieces;
   },
 
   // 거대한 다단계 화염구, 충격파, 솟구치는 짙은 연기 기둥
