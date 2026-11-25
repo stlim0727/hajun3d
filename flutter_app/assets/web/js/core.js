@@ -808,7 +808,12 @@ class AirplaneGame {
       this.updateAudio(dt);
     }
 
-    if (this.isPlaying && !this.isDestroyed && !this.screenPaused) {
+    if (this.isFixed) {
+      this.updateControlSurfaces(dt);
+      this.updateLandingGearAnimation(dt);
+      this.updateHUD();
+      this.updateCameraFromPhysics(0, dt);
+    } else if (this.isPlaying && !this.isDestroyed && !this.screenPaused) {
       if (this.currentEmergency) this.updateEmergency(dt);
       this.updateFlightPhysics(dt);
       this.updateControlSurfaces(dt);

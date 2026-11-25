@@ -824,6 +824,135 @@ if (document.readyState === 'loading') {
   initGame();
 }
 window.addEventListener('load', initGame);
+window.applyFixedPose = function(pose) {
+  if (!pose) return;
+  if (!window.airplaneGame) initGame();
+  const game = window.airplaneGame;
+  if (!game) return;
+
+  const ANCHOR_LAT = 35.165199;
+  const ANCHOR_LON = 128.938995;
+  const ANCHOR_X = 160;
+  const ANCHOR_Z = 1400;
+  const METERS_PER_LAT = 111132.95;
+  const METERS_PER_LON = 111412.84 * Math.cos(ANCHOR_LAT * Math.PI / 180);
+
+  let targetX = ANCHOR_X;
+  let targetZ = ANCHOR_Z;
+
+  if (Number.isFinite(pose.lat) && Number.isFinite(pose.lon)) {
+    const dLat = pose.lat - ANCHOR_LAT;
+    const dLon = pose.lon - ANCHOR_LON;
+    targetX = ANCHOR_X + dLon * METERS_PER_LON;
+    targetZ = ANCHOR_Z - dLat * METERS_PER_LAT;
+  } else if (Number.isFinite(pose.x) && Number.isFinite(pose.z)) {
+    targetX = pose.x;
+    targetZ = pose.z;
+  }
+
+  const groundY = game.groundY || 6.84;
+  const targetY = Number.isFinite(pose.alt) ? pose.alt : groundY;
+  const heading = Number.isFinite(pose.heading) ? pose.heading : 0;
+  const yaw = -((heading % 360) * Math.PI / 180);
+
+  // Close overlay modal
+  const overlay = document.getElementById('overlay-screen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.style.display = 'none';
+  }
+  const gateAction = document.getElementById('gate-action-container');
+  if (gateAction) gateAction.classList.add('hidden');
+
+  const isAirborne = targetY > groundY + 2.0;
+  game.isOnGround = !isAirborne;
+  game.gearExtended = !isAirborne;
+  game.gearPhase = isAirborne ? 'UP' : 'DOWN';
+  game.gearPhaseTimer = 0.0;
+  if (typeof game.updateGearUI === 'function') {
+    game.updateGearUI(game.gearPhase, isAirborne ? 'gear-up' : 'gear-down');
+  }
+  if (game.glbMovingPartsController) {
+    game.glbMovingPartsController.setGearProgress(isAirborne ? 0.0 : 1.0, game.gearPhase);
+  }
+  if (game.glbGearNodes) {
+    game.glbGearNodes.forEach(n => { n.visible = !isAirborne; });
+  }
+  if (game.glbGearMaterials) {
+    game.glbGearMaterials.forEach(m => { m.visible = !isAirborne; });
+  }
+  if (game.landingGears) {
+    game.landingGears.forEach(gear => {
+      const u = gear.userData;
+      if (u) {
+        if (u.doorL) u.doorL.rotation.z = 0;
+        if (u.doorR) u.doorR.rotation.z = 0;
+        if (u.strutPivot) {
+          u.strutPivot.rotation.x = isAirborne ? -Math.PI / 2 : 0;
+          u.strutPivot.visible = !isAirborne;
+        }
+        if (u.bogieBeam) u.bogieBeam.rotation.x = 0;
+      }
+    });
+  }
+
+  // Freeze state
+  game.isDestroyed = false;
+  game.isBellySliding = false;
+  game.isWaterLanding = false;
+
+  const freeze = Boolean(pose.freeze !== false);
+  game.isFixed = freeze;
+  game.isPlaying = !freeze;
+
+  if (freeze) {
+    game.speed = 0;
+    game.groundSpeed = 0;
+    game.throttle = 0;
+    if (game.velocity) game.velocity.set(0, 0, 0);
+  } else {
+    game.flightPhase = isAirborne ? 'CLIMB_CRUISE' : 'TAKEOFF_RUN';
+    if (isAirborne) {
+      game.speed = 1.0;
+      game.groundSpeed = 0;
+      game.throttle = 0.8;
+      game.n1 = 85;
+      if (game.velocity) {
+        const forwardVec = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        game.velocity.copy(forwardVec.multiplyScalar(80));
+      }
+    } else {
+      game.speed = 0;
+      game.groundSpeed = 0;
+      game.throttle = 1.0;
+      game.n1 = 92;
+      if (game.velocity) game.velocity.set(0, 0, 0);
+    }
+    if (typeof game.startJetSound === 'function') game.startJetSound();
+  }
+
+  // Build aircraft if not built
+  if (!game.planeGroup) {
+    game.buildAircraft(game.currentPlaneType || 'a320');
+  }
+  game.planeGroup.position.set(targetX, targetY, targetZ);
+  game.yaw = yaw;
+  game.pitch = 0;
+  game.roll = 0;
+  game.planeGroup.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  game.planeGroup.visible = true;
+
+  if (typeof game.updateHUD === 'function') {
+    game.updateHUD();
+  }
+  if (typeof game.updateCameraFromPhysics === 'function') {
+    game.updateCameraFromPhysics(0, 0.016);
+  }
+  if (typeof game.updateSunShadowTarget === 'function') {
+    game.updateSunShadowTarget();
+  }
+};
+
 (function autoStartGeoInspect() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('flyHere') !== '1' || !params.has('geoLat') || !params.has('geoLon')) return;
