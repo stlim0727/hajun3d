@@ -311,8 +311,9 @@
       : '🛫 3,800m 초대형 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!');
     this.startJetSound();
   },
-
-  // 모드 2: 게이트 탑승 & 유도로 주행 (Full Gate Departure - 1번 게이트 정지선)
+  startTakeoffPhase() {
+    this.startDirectTakeoff();
+  },
   startGateDeparture() {
     this.overlay.classList.add('hidden');
     this.showGateActionPrompt(false);
@@ -510,6 +511,96 @@
   // ----------------------------------------------------------------
   // 12. HUD 계기판 수치 갱신 (Layout Reflow 최적화)
   // ----------------------------------------------------------------
+
+  // 로비 페이즈 시작: 상공 순항 (Selected destination or place)
+  startCruisePhase() {
+    const place = typeof this.getSelectedPlace === 'function' ? this.getSelectedPlace() : null;
+    if (place) {
+      this.startAtPlace(place);
+      return;
+    }
+    this.overlay.classList.add('hidden');
+    this.startAirbornePhase('CLIMB_CRUISE', '상공 순항 비행 (Cruise)');
+    const dest = (window.AirportIndicators && window.AirportIndicators.byIcao && window.AirportIndicators.byIcao[this.selectedDestinationIcao])
+      || (window.AirportIndicators && window.AirportIndicators.destination);
+    this.showPopup(dest
+      ? `✈️ ${dest.name} 방향 순항 비행 시작! 목적지까지 항법 유도선을 따르세요.`
+      : '✈️ 상공 순항 비행 시작! 항법 유도선을 따라 목적지로 향하세요.');
+  },
+
+  // 로비 페이즈 시작: 착륙 접근 (Selected destination or place, 5 km final)
+  startApproachPhase() {
+    this.overlay.classList.add('hidden');
+    const place = typeof this.getSelectedPlace === 'function' ? this.getSelectedPlace() : null;
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const icao = this.selectedDestinationIcao || 'RKSI';
+    const airport = (nav && nav.byIcao && nav.byIcao[icao]) || (nav && nav.destination);
+    const targetLat = place ? place.lat : (airport ? airport.lat : 37.4690);
+    const targetLon = place ? place.lon : (airport ? airport.lon : 126.4510);
+    const target = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
+      ? window.geoLocalDelta({ lat: targetLat, lon: targetLon, old: { x: 0, z: 0 } }).local
+      : { x: 160, z: -45000 };
+    this.startAirbornePhase('FINAL_APPROACH', '착륙 접근 (Final Approach)', {
+      x: target.x,
+      y: 450 + (place ? (Number(place.elevationM) || 0) : ((airport && airport.elevationM) || 0)),
+      z: target.z + 5000,
+      gearDown: true,
+      flapIndex: 3
+    });
+    this.showPopup(place
+      ? `🛬 ${place.name} 착륙 접근 시작! 기어·플랩 FULL 전개, 활주로 정렬 후 접지하세요.`
+      : `🛬 ${airport ? airport.name : '목적지'} 착륙 접근 시작! 기어·플랩 FULL 전개, 활주로 정렬 후 접지하세요.`);
+  },
+
+  // Shared reset for airborne lobby starts (cruise / final approach).
+  startAirbornePhase(phase, label, options) {
+    const opts = options || {};
+    this.isJejuFlyover = false;
+    this.showGateActionPrompt(false);
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = opts.gearDown !== false;
+    this.gearPhase = this.gearExtended ? 'DOWN' : 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI(this.gearPhase, this.gearPhase === 'DOWN' ? 'gear-down' : 'gear-up');
+    this.flapIndex = opts.flapIndex || 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.buildAircraft(this.currentPlaneType);
+    const spawn = (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+    this.setupAirborneCruiseState(
+      Number.isFinite(opts.x) ? opts.x : spawn.x,
+      Number.isFinite(opts.y) ? opts.y : 1100,
+      Number.isFinite(opts.z) ? opts.z : -15000
+    );
+    if (opts.gearDown) this.velocity.set(0, -12, -85);
+    this.flightPhase = phase;
+    this.phaseDisplay.textContent = label;
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+    this.startJetSound();
+  },
   updateHUD() {
     // 1. 자세계 (인공수평의 PFD) 갱신: 매 프레임 즉각 회전
     if (this.attitudeHorizon) {

@@ -840,6 +840,10 @@
               <span class="key">↑ 위 화살표</span>
               <span>기수 하강 (Pitch Down)</span>
             </div>
+        <label class="setup-field">
+          <span class="setup-label">출발 장소</span>
+          <select id="place-select" aria-label="비행 시작 장소 선택"></select>
+        </label>
             <div class="guide-item">
               <span class="key">W / S 키</span>
               <span>W: 고속 가속 / S: 지상 제동 및 착륙 역추진</span>
@@ -909,6 +913,33 @@
   <script>
     window.addEventListener('load', () => {
       const p = new URLSearchParams(window.location.search);
+      const latStr = p.get('lat') ?? p.get('latitude');
+      const lonStr = p.get('lon') ?? p.get('longitude');
+      const xStr = p.get('x');
+      const zStr = p.get('z');
+      const altStr = p.get('alt') ?? p.get('altitude') ?? p.get('height') ?? p.get('y');
+      const hdgStr = p.get('heading') ?? p.get('hdg') ?? p.get('yaw');
+      const freezeStr = p.get('freeze') ?? p.get('pause') ?? p.get('fixed');
+
+      const hasGeo = latStr !== null && lonStr !== null;
+      const hasLocal = xStr !== null && zStr !== null;
+
+      if (hasGeo || hasLocal) {
+        const pose = {
+          lat: hasGeo ? Number(latStr) : null,
+          lon: hasGeo ? Number(lonStr) : null,
+          x: hasLocal ? Number(xStr) : null,
+          z: hasLocal ? Number(zStr) : null,
+          alt: altStr !== null ? Number(altStr) : null,
+          heading: hdgStr !== null ? Number(hdgStr) : 0,
+          freeze: freezeStr !== null ? (freezeStr !== '0' && freezeStr !== 'false') : true,
+        };
+        setTimeout(() => {
+          if (window.applyFixedPose) window.applyFixedPose(pose);
+        }, 300);
+        return;
+      }
+
       const action = p.get('action');
       if (action === 'takeoff') {
         setTimeout(() => { if (window.startDirectTakeoff) window.startDirectTakeoff(); }, 500);
