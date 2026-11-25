@@ -32,6 +32,7 @@ export function create(options = {}) {
     nearAnchorMaxDepth = 0,
     focusAnchors = [],
     focusAnchorsRender = options.focusAnchorsRender || focusAnchors,
+    errorTarget: configuredErrorTarget,
     scene,
     camera,
     renderer,
@@ -41,13 +42,15 @@ export function create(options = {}) {
   if (!ionToken || !scene || !camera || !renderer) return null;
   if (![lat, lon, height].every(Number.isFinite)) return null;
 
+  let activeErrorTarget = Number.isFinite(configuredErrorTarget) ? configuredErrorTarget : 24;
+
   const tiles = new TilesRenderer();
   tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: ionToken, assetId, autoRefreshToken: true }));
   tiles.registerPlugin(new ReorientationPlugin({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
   tiles.registerPlugin(new TileCompressionPlugin());
   tiles.registerPlugin(new TilesFadePlugin());
-  // Korea has no photogrammetric high-LOD tiles; request coarser available levels.
-  tiles.errorTarget = 128;
+  // Standard errorTarget for balanced texture crispness and mobile bandwidth.
+  tiles.errorTarget = activeErrorTarget;
 
   // Position root tileset in scene simulation space.
   tiles.addEventListener('load-root-tileset', () => {
@@ -111,8 +114,8 @@ export function create(options = {}) {
   }
 
   function update() {
-    // GoogleCloudAuthPlugin resets this on init; keep Korean LOD requests available.
-    tiles.errorTarget = 128;
+    // Keep active errorTarget applied across plugin resets.
+    tiles.errorTarget = activeErrorTarget;
 
     // Both camera.position and simAnchorRender/focusAnchorsRender are in render-space.
     // Fall back to scene-offset compensation if explicit render anchors are omitted.
@@ -185,5 +188,16 @@ export function create(options = {}) {
     };
   }
 
-  return { update, dispose, stats, debug };
+  function setErrorTarget(val) {
+    if (Number.isFinite(val) && val > 0) {
+      activeErrorTarget = val;
+      tiles.errorTarget = val;
+    }
+  }
+
+  function getErrorTarget() {
+    return activeErrorTarget;
+  }
+
+  return { update, dispose, stats, debug, setErrorTarget, getErrorTarget };
 }

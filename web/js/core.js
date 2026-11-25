@@ -485,6 +485,21 @@ class AirplaneGame {
     return true;
   }
 
+  getGeoTilesErrorTarget() {
+    if (typeof window !== 'undefined') {
+      const geoParams = new URLSearchParams(window.location.search);
+      const param = geoParams.get('geoErrorTarget');
+      if (param && Number.isFinite(Number(param))) return Number(param);
+      if (Number.isFinite(window.GEO_TILES_ERROR_TARGET)) return window.GEO_TILES_ERROR_TARGET;
+    }
+    const quality = (typeof localStorage !== 'undefined' && localStorage.getItem('flight3d.renderQuality')) || 'high';
+    if (quality === 'ultra') return 16;
+    if (quality === 'high') return 24;
+    if (quality === 'medium') return 32;
+    if (quality === 'low') return 48;
+    return 24;
+  }
+
   enableGeoTiles(ionToken) {
     if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
     this.geoIonToken = ionToken;
@@ -521,6 +536,7 @@ class AirplaneGame {
       simAnchorRender: renderSimAnchor,
       // Deeper tiles around Gimhae leave holes and intersect the runway.
       nearAnchorMaxDepth: 17,
+      errorTarget: this.getGeoTilesErrorTarget(),
       focusAnchors: focusBase,
       focusAnchorsRender: renderFocusAnchors,
       scene: this.scene,
@@ -707,6 +723,7 @@ class AirplaneGame {
       simAnchorBase: this.geoSimAnchorBase,
       simAnchorRender: renderSimAnchor,
       nearAnchorMaxDepth: 17,
+      errorTarget: options.errorTarget !== undefined ? options.errorTarget : this.getGeoTilesErrorTarget(),
       focusAnchors: focusBase,
       focusAnchorsRender: renderFocusAnchors,
       scene: this.scene,

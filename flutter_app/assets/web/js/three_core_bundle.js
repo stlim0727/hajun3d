@@ -53169,6 +53169,7 @@ void main() {
       nearAnchorMaxDepth = 0,
       focusAnchors = [],
       focusAnchorsRender = options.focusAnchorsRender || focusAnchors,
+      errorTarget: configuredErrorTarget,
       scene,
       camera,
       renderer,
@@ -53176,12 +53177,13 @@ void main() {
     } = options;
     if (!ionToken || !scene || !camera || !renderer) return null;
     if (![lat, lon, height].every(Number.isFinite)) return null;
+    let activeErrorTarget = Number.isFinite(configuredErrorTarget) ? configuredErrorTarget : 24;
     const tiles = new Yt();
     tiles.registerPlugin(new er({ apiToken: ionToken, assetId, autoRefreshToken: true }));
     tiles.registerPlugin(new oi({ lat: lat * D2R, lon: lon * D2R, height, azimuth: azimuth * D2R }));
     tiles.registerPlugin(new or());
     tiles.registerPlugin(new bi());
-    tiles.errorTarget = 128;
+    tiles.errorTarget = activeErrorTarget;
     tiles.addEventListener("load-root-tileset", () => {
       tiles.group.position.x += worldAnchor.x;
       tiles.group.position.y += worldAnchor.y;
@@ -53236,7 +53238,7 @@ void main() {
       container.appendChild(credit);
     }
     function update() {
-      tiles.errorTarget = 128;
+      tiles.errorTarget = activeErrorTarget;
       const activeAnchor = simAnchorRender || (scene && scene.position ? {
         x: worldAnchor.x + scene.position.x,
         y: worldAnchor.y + scene.position.y,
@@ -53295,7 +53297,16 @@ void main() {
         cameraInfoPos: camInfoPos
       };
     }
-    return { update, dispose, stats, debug };
+    function setErrorTarget(val) {
+      if (Number.isFinite(val) && val > 0) {
+        activeErrorTarget = val;
+        tiles.errorTarget = val;
+      }
+    }
+    function getErrorTarget() {
+      return activeErrorTarget;
+    }
+    return { update, dispose, stats, debug, setErrorTarget, getErrorTarget };
   }
   return __toCommonJS(three_core_bundle_source_exports);
 })();
