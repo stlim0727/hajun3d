@@ -6,7 +6,1061 @@
 (function() {
   'use strict';
 
+  // Ensure AirplaneGame namespace exists for standalone viewer compatibility
+  if (typeof window !== 'undefined') {
+    window.AirplaneGame = window.AirplaneGame || function() {};
+    window.AirplaneGame.prototype = window.AirplaneGame.prototype || {};
+  }
+
+  // ================================================================
+  // ★ GLBMovingPartsController: 비행 시뮬레이터와 3D 모델 갤러리 공유 통합 컨트롤러
+  // GPU 버텍스 셰이더 디포메이션(제어평면) + 착륙장치 수납/전개 + 터보팬/프로펠러 회전
+  // 중복 코드 없이 게임 비행 모드와 갤러리 연속 가동(데모 루프) 모드를 단일 클래스로 제공
+  // ================================================================
+  class GLBMovingPartsController {
+    constructor(options = {}) {
+      this.scene = options.scene;
+      this.planeType = (options.planeType || 'a320').toLowerCase();
+      this.planeGroup = options.planeGroup || options.scene;
+      this.demoLoop = !!options.demoLoop;
+      this.animations = options.animations || [];
+      this.demoTime = 0;
+      this.enabled = true;
+
+      // Moving parts collections
+      this.parts = { fans: [], rudder: null, flaps: [], landingGear: null };
+      this.fans = [];
+      this.landingGears = [];
+      this.gearNodes = [];
+      this.builtInGear = [];
+      this.gearRotation = new THREE.Matrix4();
+      this.controlPanels = [];
+      this.controlPanelRestorations = [];
+      this.gearDoors = [];
+      this.builtInGearRestorations = [];
+      this.gearMaterials = [];
+      this.mixer = null;
+      this.gearAction = null;
+      this.gearDuration = 1.0;
+      this.gearState = 'DOWN'; // 'DOWN' | 'UP' | 'TRANSIT'
+      this.gearProgress = 1.0; // 0 = UP, 1 = DOWN
+
+      // Shader uniforms & state
+      this.shaderUniforms = null;
+      this.hasMovingParts = false;
+
+      this.init();
+    }
+
+    static get AIRCRAFT_DEFS() {
+      // The three A320 GLBs share one airframe and material layout.
+      const a320 = {
+        rudderParams: [21.84, 24.6, 1.88, 0.30],
+        elevParams:   [21.85, 24.5, 0.62, 0.40],
+        wingParams:   [2.6, 13.05, 16.1, 7.55],
+        wingProfile:  [0.255, 0.22, -1.85, 0.9],
+        rigidPanels: true,
+        surfaceMaterials: {
+          rudder: /^Material\.033$/,
+          elevator: /^Material\.033$/,
+          wing: /^Material\.(016|019|051|052)$/
+        },
+        hasBuiltInGear: true,
+        gearMaterialRegex: /^Material\.(034|036|037|040|042|044|045|049|050|056)$/,
+        sharedGearMaterials: /^(Material\.016|material_0)$/,
+        fans: [{ radius: 0.80, blades: 24, leftX: -5.72, rightX: 5.72, y: -2.27, z: -0.45 }]
+      };
+      return {
+        a320,
+        a320_simplified: a320,
+        a320_detailed: a320,
+        a350: {
+          // The A350 GLB shares one material across the fixed and moving tail.
+          tailPanels: [
+            {
+              control: 'rudder', material: /^07___Default$/,
+              pivot: [0, 5.78, 24.8], axis: [0, 1, 0.84],
+              planes: [[0, 1, 0, -5.78], [0, -1, 0, 13.23],
+                [0, -0.84, 1, 5.78 * 0.84 - 24.8], [1, 0, 0, 0.95], [-1, 0, 0, 0.95]]
+            },
+            ...[-1, 1].map(side => ({
+              control: 'elevator', material: /^07___Default$/,
+              // Negative deflection must raise the trailing edge, matching the
+              // procedural and rigid A320 elevator pivots.
+              pivot: [side * 2.5, 3.08, 27.7], axis: [1, side * 0.11, side * 0.66],
+              planes: [[side, 0, 0, -2.5], [-side, 0, 0, 9.39],
+                [-side * 0.66, 0, 1, 2.5 * 0.66 - 27.7],
+                [-side * 0.11, 1, 0, -2.35], [side * 0.11, -1, 0, 3.20]]
+            }))
+          ],
+          wingParams:   [4.0, 16.0, 32.0, 5.15],
+          wingProfile:  [0.34, 0.31, -1.5, 5.0],
+          hasBuiltInGear: false,
+          fans: [{ radius: 0.50, blades: 24, leftX: -10.57, rightX: 10.57, y: -0.89, z: -4.10 }],
+          gearDefs: {
+            // Main gear pivots sit below the thin wing skin, with fixed mounts reaching into it.
+            nose: { x: 0, y: -1.0, z: -22.0, isNose: true, is4Wheel: false, strutLength: 2.77 },
+            mainL: { x: -5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 },
+            mainR: { x: 5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 }
+          }
+        },
+        b747: {
+          fans: [
+            { radius: 1.25, blades: 24, leftX: -20.03, rightX: 20.03, y: -6.04, z: 2.30 },
+            { radius: 1.25, blades: 24, leftX: -11.52, rightX: 11.52, y: -6.04, z: -1.70 }
+          ]
+        },
+        dc10: {
+          rudderParams: [22.45, 26.6, 6.05, 0.43],
+          elevParams:   [20.0, 26.0, 2.0, 0.43],
+          wingParams:   [2.7, 12.7, 25.4, 7.1],
+          wingProfile:  [0.34, 0.46, -3.5, 0.0],
+          surfaceMaterials: { rudder: /^Body_Purple$/, elevator: /^Metal_Rear_Wings$/, wing: /^Metal_Wings$/ },
+          hasBuiltInGear: true,
+          hasRiggedAnimation: true
+        },
+        md80: {
+          fans: [{ radius: 0.78, blades: 20, leftX: -2.40, rightX: 2.40, y: -1.74, z: 10.75 }]
+        },
+        amphibian: {
+          rudderParams: [5.3, 6.6, -4.5, 0.10],
+          elevParams:   [5.8, 6.6, 2.0, 0.15],
+          wingParams:   [2.8, 6.3, 9.95, -0.76],
+          wingProfile:  [0.0, 0.19, -2.1, -1.55],
+          hasBuiltInGear: true
+        }
+      };
+    }
+
+    static get TARGET_LENGTHS() {
+      return {
+        a320: 37.6,
+        a320_detailed: 37.6,
+        a320_simplified: 37.6,
+        a350: 66.8,
+        b747: 70.6,
+        dc10: 55.5,
+        md80: 45.1,
+        concorde: 61.7,
+        amphibian: 19.8,
+        ancestor: 12.3
+      };
+    }
+
+    static normalizeAircraftScene(scene, planeType, options = {}) {
+      if (!scene || typeof THREE === 'undefined') return { scale: 1, size: new THREE.Vector3() };
+      const type = (planeType || 'a320').toLowerCase();
+      const targetLengths = GLBMovingPartsController.TARGET_LENGTHS;
+      const targetLength = targetLengths[type] || (type === 'ancestor' ? 14.0 : 38.0);
+
+      const box = new THREE.Box3().setFromObject(scene);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = targetLength / (maxDim || 1.0);
+      scene.scale.set(scale, scale, scale);
+
+      scene.position.x = 0;
+      if (type === 'amphibian') {
+        scene.position.y = -box.min.y * scale - 4.72;
+      } else if (type.startsWith('a320')) {
+        scene.position.y = -center.y * scale + 1.83;
+      } else if (type === 'a350') {
+        scene.position.y = -center.y * scale + 5.26;
+      } else if (type === 'dc10') {
+        scene.position.y = -center.y * scale + 3.69;
+      } else if (type === 'ancestor') {
+        scene.position.y = -center.y * scale + 0.35;
+      } else {
+        scene.position.y = -center.y * scale + 1.2;
+      }
+      scene.position.z = -center.z * scale;
+
+      if (type.startsWith('a320') || type === 'a350') {
+        scene.rotation.set(0, Math.PI, 0);
+      } else {
+        scene.rotation.set(0, 0, 0);
+      }
+
+      scene.updateMatrixWorld(true);
+      const finalBox = new THREE.Box3().setFromObject(scene);
+      scene.userData = scene.userData || {};
+      scene.userData.normalizedMinY = finalBox.min.y;
+      const finalSize = finalBox.getSize(new THREE.Vector3());
+      return { scale, size: finalSize, box: finalBox };
+    }
+
+    static createTurbofanFan(radius, bladeCount = 20, chromeMat) {
+      if (typeof THREE === 'undefined') return null;
+      const fanGroup = new THREE.Group();
+      const spinnerMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.25,
+        metalness: 0.75
+      });
+      const spinner = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.26, radius * 0.58, 18), spinnerMat);
+      spinner.rotation.x = -Math.PI / 2;
+      fanGroup.add(spinner);
+
+      const spiral = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius * 0.04, radius * 0.08, radius * 0.35, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.9 })
+      );
+      spiral.rotation.x = -Math.PI / 2;
+      spiral.position.z = radius * 0.18;
+      fanGroup.add(spiral);
+
+      const bladeMat = chromeMat || new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.92, roughness: 0.18 });
+      const bladeGeo = new THREE.BoxGeometry(radius * 0.11, radius * 0.74, radius * 0.035);
+      bladeGeo.translate(0, radius * 0.52, 0);
+
+      for (let i = 0; i < bladeCount; i++) {
+        const angle = (i / bladeCount) * Math.PI * 2;
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.rotation.z = angle;
+        blade.rotation.y = 0.48;
+        fanGroup.add(blade);
+      }
+      return fanGroup;
+    }
+
+    static createGLBLandingGear(x, y, z, isNose, is4WheelBogie, chromeMat, tireMat, strutLength = 2.6, mountHeight = 0) {
+      if (typeof THREE === 'undefined') return null;
+      const gearAssembly = new THREE.Group();
+      gearAssembly.position.set(x, y, z);
+
+      const doorLGroup = new THREE.Group();
+      const doorRGroup = new THREE.Group();
+      gearAssembly.add(doorLGroup);
+      gearAssembly.add(doorRGroup);
+
+      const strutPivot = new THREE.Group();
+      strutPivot.position.set(0, 0, 0);
+
+      const mainStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, strutLength, 12), chromeMat);
+      mainStrut.position.y = -strutLength / 2;
+      mainStrut.castShadow = true;
+      strutPivot.add(mainStrut);
+
+      let fixedMount = null;
+      if (mountHeight > 0) {
+        const pivotOverlap = 0.06;
+        fixedMount = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, mountHeight + pivotOverlap, 12), chromeMat);
+        fixedMount.position.y = (mountHeight - pivotOverlap) / 2;
+        fixedMount.castShadow = true;
+        gearAssembly.add(fixedMount);
+      }
+
+      let bogieBeamGroup = null;
+
+      if (is4WheelBogie) {
+        bogieBeamGroup = new THREE.Group();
+        bogieBeamGroup.position.y = -strutLength;
+
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.35, 2.2), chromeMat);
+        beam.castShadow = true;
+        bogieBeamGroup.add(beam);
+
+        [-0.85, 0.85].forEach(axleZ => {
+          const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.0, 10), chromeMat);
+          axle.rotation.z = Math.PI / 2;
+          axle.position.set(0, 0, axleZ);
+          bogieBeamGroup.add(axle);
+
+          [-0.85, 0.85].forEach(wheelX => {
+            const wheelGroup = new THREE.Group();
+            wheelGroup.position.set(wheelX, 0, axleZ);
+
+            const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.48, 16), tireMat);
+            tire.rotation.z = Math.PI / 2;
+            tire.castShadow = true;
+            wheelGroup.add(tire);
+
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.50, 12), chromeMat);
+            hub.rotation.z = Math.PI / 2;
+            wheelGroup.add(hub);
+
+            bogieBeamGroup.add(wheelGroup);
+          });
+        });
+
+        strutPivot.add(bogieBeamGroup);
+      } else {
+        const axleGroup = new THREE.Group();
+        axleGroup.position.y = -strutLength;
+
+        const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, isNose ? 1.4 : 1.8, 10), chromeMat);
+        axle.rotation.z = Math.PI / 2;
+        axleGroup.add(axle);
+
+        const wheelOffset = isNose ? 0.55 : 0.75;
+        [-wheelOffset, wheelOffset].forEach(wheelX => {
+          const wheel = new THREE.Mesh(
+            new THREE.CylinderGeometry(isNose ? 0.65 : 0.78, isNose ? 0.65 : 0.78, isNose ? 0.40 : 0.48, 16),
+            tireMat
+          );
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(wheelX, 0, 0);
+          wheel.castShadow = true;
+          axleGroup.add(wheel);
+
+          const hub = new THREE.Mesh(
+            new THREE.CylinderGeometry(isNose ? 0.35 : 0.42, isNose ? 0.35 : 0.42, isNose ? 0.42 : 0.50, 12),
+            chromeMat
+          );
+          hub.rotation.z = Math.PI / 2;
+          hub.position.set(wheelX, 0, 0);
+          axleGroup.add(hub);
+        });
+
+        strutPivot.add(axleGroup);
+      }
+
+      gearAssembly.add(strutPivot);
+
+      const wheelRadius = is4WheelBogie ? 0.75 : (isNose ? 0.65 : 0.78);
+      gearAssembly.userData = {
+        gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
+        strutPivot,
+        fixedMount,
+        doorL: doorLGroup,
+        doorR: doorRGroup,
+        bogieBeam: bogieBeamGroup,
+        isNose,
+        is4WheelBogie,
+        localBottomY: y - strutLength - wheelRadius,
+        origPos: new THREE.Vector3(x, y, z)
+      };
+
+      return gearAssembly;
+    }
+
+    init() {
+      if (!this.scene) return;
+      const def = GLBMovingPartsController.AIRCRAFT_DEFS[this.planeType];
+      const chromeMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.95, roughness: 0.15 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9, metalness: 0.1 });
+
+      // 1. 노드 기반 가동 파츠 탐색
+      this.scene.traverse((node) => {
+        if (node.name) {
+          if (/^Fan[_ ]?Blades/i.test(node.name)) {
+            this.parts.fans.push(node);
+            this.hasMovingParts = true;
+          } else if (/^Rudder/i.test(node.name)) {
+            node.userData.baseRotY = node.rotation.y;
+            this.parts.rudder = node;
+            this.hasMovingParts = true;
+          } else if (/^Flaps[_ ]?(Inner|Outer)/i.test(node.name)) {
+            node.userData.baseRotX = node.rotation.x;
+            this.parts.flaps.push(node);
+            this.hasMovingParts = true;
+          } else if (/^Landing[_ ]?Gear/i.test(node.name)) {
+            node.userData.basePosY = node.position.y;
+            this.parts.landingGear = node;
+            this.hasMovingParts = true;
+          }
+        }
+      });
+
+      if (def?.gearMaterialRegex) {
+        this.setupBuiltInGear(def);
+        if (this.builtInGear.length) this.setupBuiltInGearDoors();
+      }
+
+      // 3. 엔진 터보팬 블레이드 장착 (A320, A350)
+      if (def && def.fans && Array.isArray(def.fans)) {
+        def.fans.forEach(f => {
+          [f.leftX, f.rightX].forEach(x => {
+            const fan = GLBMovingPartsController.createTurbofanFan(f.radius, f.blades, chromeMat);
+            fan.position.set(x, f.y, f.z);
+            this.planeGroup.add(fan);
+            this.fans.push(fan);
+            this.hasMovingParts = true;
+          });
+        });
+      }
+
+      // 4. 전용 랜딩기어 장착 (A350 등)
+      if (def && def.gearDefs) {
+        const g = def.gearDefs;
+        [g.nose, g.mainL, g.mainR].forEach(gearSpec => {
+          const gearObj = GLBMovingPartsController.createGLBLandingGear(
+            gearSpec.x, gearSpec.y, gearSpec.z,
+            gearSpec.isNose, gearSpec.is4Wheel,
+            chromeMat, tireMat, gearSpec.strutLength, gearSpec.mountHeight
+          );
+          this.planeGroup.add(gearObj);
+          this.landingGears.push(gearObj);
+          this.hasMovingParts = true;
+        });
+      }
+
+      // 5. 키프레임 애니메이션 믹서 연결 (DC-10 등)
+      if (this.animations && this.animations.length > 0 && typeof THREE.AnimationMixer !== 'undefined') {
+        this.mixer = new THREE.AnimationMixer(this.scene);
+        this.gearAction = this.mixer.clipAction(this.animations[0]);
+        this.gearDuration = this.animations[0].duration || 1.0;
+        this.gearAction.play();
+        this.gearAction.paused = true;
+        this.gearAction.time = this.gearDuration;
+        this.mixer.update(0);
+        this.hasMovingParts = true;
+      }
+
+      // 6. 버텍스 셰이더 디포메이션 셋업 (제어평면)
+      if (def?.wingParams && (def.tailPanels || (def.rudderParams && def.elevParams))) {
+        this.setupShaders(def);
+        this.hasMovingParts = true;
+      }
+    }
+
+    setupBuiltInGear(def) {
+      this.planeGroup.updateMatrixWorld(true);
+      const planeInverse = this.planeGroup.matrixWorld.clone().invert();
+      const point = new THREE.Vector3();
+      // A320 gear attachment points in aircraft coordinates. Nose folds forward,
+      // while each main strut folds toward the centerline.
+      const hinges = [
+        { pivot: [0, -1.95, -7.35], axis: new THREE.Vector3(1, 0, 0) },
+        { pivot: [-3.78, -1.18, 5.32], axis: new THREE.Vector3(0, 0, 1) },
+        { pivot: [3.78, -1.18, 5.32], axis: new THREE.Vector3(0, 0, -1) }
+      ];
+      this.scene.traverse(node => {
+        if (!node.isMesh || !node.material || Array.isArray(node.material) || node.userData.builtInGear) return;
+        const name = node.material.name;
+        const shared = def.sharedGearMaterials.test(name);
+        if (!shared && !def.gearMaterialRegex.test(name)) return;
+
+        const geometry = node.geometry;
+        const index = geometry.index;
+        if (!index) return;
+        const position = geometry.attributes.position;
+        const meshToPlane = new THREE.Matrix4().multiplyMatrices(planeInverse, node.matrixWorld);
+        const planeToMesh = meshToPlane.clone().invert();
+        const gearVertices = new Int8Array(position.count).fill(-1);
+        for (let i = 0; i < position.count; i++) {
+          point.fromBufferAttribute(position, i).applyMatrix4(meshToPlane);
+          const x = Math.abs(point.x);
+          const nose = x < 0.65 && point.z > -8.1 && point.z < -6.7;
+          const main = x > 2.25 && x < 4.7 && point.z > 4.1 && point.z < 6.2;
+          if (shared && (point.y >= -1 || !(nose || main))) continue;
+          gearVertices[i] = (shared ? nose : point.z < 0) ? 0 : (point.x < 0 ? 1 : 2);
+        }
+
+        const fixedIndices = [];
+        const gearIndices = hinges.map(() => []);
+        for (let i = 0; i < index.count; i += 3) {
+          const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+          const leg = gearVertices[a];
+          const indices = leg >= 0 && leg === gearVertices[b] && leg === gearVertices[c]
+            ? gearIndices[leg] : fixedIndices;
+          indices.push(a, b, c);
+        }
+        if (!gearIndices.some(indices => indices.length)) return;
+
+        // Keep wing, engine and fuselage triangles on the original mesh.
+        geometry.setIndex(fixedIndices);
+        const gearMeshes = [];
+        gearIndices.forEach((indices, leg) => {
+          if (!indices.length) return;
+          const gearGeometry = new THREE.BufferGeometry();
+          for (const [attribute, buffer] of Object.entries(geometry.attributes)) {
+            gearGeometry.setAttribute(attribute, buffer);
+          }
+          gearGeometry.setIndex(indices);
+          const gear = new THREE.Mesh(gearGeometry, node.material.clone());
+          gear.userData.builtInGear = true;
+          gear.castShadow = node.castShadow;
+          gear.receiveShadow = node.receiveShadow;
+          gear.matrixAutoUpdate = false;
+          node.add(gear);
+          gearMeshes.push(gear);
+
+          const { pivot: [x, y, z], axis } = hinges[leg];
+          const fromPivot = planeToMesh.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z));
+          const toPivot = fromPivot.clone().invert();
+          this.builtInGear.push({ node: gear, axis, fromPivot, toPivot });
+          this.gearNodes.push(gear);
+        });
+        this.builtInGearRestorations.push(() => {
+          geometry.setIndex(index);
+          for (const gear of gearMeshes) {
+            node.remove(gear);
+            gear.geometry.dispose();
+            gear.material.dispose();
+          }
+        });
+        this.hasMovingParts = true;
+      });
+    }
+
+    setupBuiltInGearDoors() {
+      const material = new THREE.MeshStandardMaterial({ color: 0xdedede, roughness: 0.42 });
+      for (const side of [-1, 1]) {
+        for (const [x, y, z, width, length, openAngle] of [
+          [0.58, -1.98, -8.72, 0.57, 2.15, Math.PI / 2],
+          [3.05, -1.90, 5.24, 1.45, 1.55, THREE.MathUtils.degToRad(82.5)]
+        ]) {
+          const door = new THREE.Mesh(new THREE.BoxGeometry(width, 0.035, length), material);
+          const pivot = new THREE.Group();
+          pivot.position.set(side * x, y, z);
+          door.position.x = -side * width / 2;
+          door.castShadow = true;
+          pivot.add(door);
+          this.planeGroup.add(pivot);
+          this.gearDoors.push({ pivot, door, openAngle: side * openAngle });
+        }
+      }
+    }
+
+    getRigidControlPanels(def) {
+      // Planes use aircraft coordinates and are positive inside a movable panel.
+      const panels = [];
+      for (const side of [-1, 1]) {
+        const [start, split, end, hinge] = def.wingParams;
+        for (const [control, min, max, slope, z, y] of [
+          ['flap', start, 6.33, def.wingProfile[0], hinge - 0.10, -0.47],
+          ['flap', 6.37, split - 0.02, def.wingProfile[0], hinge - 0.10, -0.47],
+          [side < 0 ? 'left' : 'right', split + 0.22, end, def.wingProfile[1], hinge + 0.05, -0.26]
+        ]) {
+          panels.push({
+            control, material: def.surfaceMaterials.wing,
+            pivot: [side * split, y, z], axis: [1, 0, side * slope],
+            planes: [[side, 0, 0, -min], [-side, 0, 0, max],
+              [-side * slope, 0, 1, split * slope - z],
+              [-0.095 * side, 1, 0, 1.7]]
+          });
+        }
+        const [z, zMax, root, slope] = def.elevParams;
+        panels.push({
+          control: 'elevator', material: def.surfaceMaterials.elevator,
+          pivot: [side * root, 0.85, z], axis: [1, 0, side * slope],
+          planes: [[side, 0, 0, -root], [0, -1, 0, 1.42],
+            [-side * slope, 0, 1, root * slope - z], [0, 0, -1, zMax]]
+        });
+      }
+      const [z, zMax, root, slope] = def.rudderParams;
+      panels.push({
+        control: 'rudder', material: def.surfaceMaterials.rudder,
+        pivot: [0, root, z], axis: [0, 1, slope],
+        planes: [[0, 1, 0, -root], [0, -slope, 1, root * slope - z], [0, 0, -1, zMax]]
+      });
+
+      return panels;
+    }
+
+    setupRigidControlPanels(panels) {
+      this.planeGroup.updateMatrixWorld(true);
+      const planeInverse = this.planeGroup.matrixWorld.clone().invert();
+      this.scene.traverse(node => {
+        if (!node.isMesh || node.userData.builtInGear || node.userData.controlPanel) return;
+        const candidates = panels.filter(panel => panel.material.test(node.material?.name))
+          .map(panel => ({
+            ...panel,
+            distances: panel.planes.map(([x, y, z, d]) => vertex => x * vertex[0] + y * vertex[1] + z * vertex[2] + d)
+          }));
+        const geometry = node.geometry;
+        if (!candidates.length || !geometry.index) return;
+        const attributes = Object.entries(geometry.attributes);
+        const position = geometry.attributes.position;
+        const toPlane = planeInverse.clone().multiply(node.matrixWorld);
+        const toMesh = toPlane.clone().invert();
+        const point = new THREE.Vector3();
+        // Vertices carry source triangle interpolation weights, preserving seams and UVs.
+        const fixed = [];
+        const moving = candidates.map(() => []);
+        const append = (output, polygon, indices) => {
+          for (let i = 1; i + 1 < polygon.length; i++) {
+            output.push([indices, polygon[0]], [indices, polygon[i]], [indices, polygon[i + 1]]);
+          }
+        };
+        for (let i = 0; i < geometry.index.count; i += 3) {
+          const indices = [geometry.index.getX(i), geometry.index.getX(i + 1), geometry.index.getX(i + 2)];
+          const triangle = indices.map((index, j) => {
+            const vertex = point.fromBufferAttribute(position, index).applyMatrix4(toPlane).toArray();
+            return vertex.concat([Number(j === 0), Number(j === 1), Number(j === 2)]);
+          });
+          let remaining = [triangle];
+          candidates.forEach(({ distances: planes }, panelIndex) => {
+            if (planes.some(distance => triangle.every(vertex => distance(vertex) < -1e-7))) return;
+            const outside = [];
+            for (let polygon of remaining) {
+              for (const distance of planes) {
+                const distances = polygon.map(distance);
+                if (distances.every(value => value >= -1e-7)) continue;
+                if (distances.every(value => value <= 1e-7)) {
+                  outside.push(polygon);
+                  polygon = [];
+                  break;
+                }
+                const inside = [], rejected = [];
+                polygon.forEach((v, j) => {
+                  const k = (j + 1) % polygon.length;
+                  const a = distances[j], b = distances[k];
+                  if (a >= 0) inside.push(v);
+                  if (a <= 0) rejected.push(v);
+                  if (a * b < 0) {
+                    const edge = v.map((value, axis) => value + (polygon[k][axis] - value) * a / (a - b));
+                    inside.push(edge);
+                    rejected.push(edge);
+                  }
+                });
+                outside.push(rejected);
+                polygon = inside;
+              }
+              append(moving[panelIndex], polygon, indices);
+            }
+            remaining = outside;
+          });
+          for (const polygon of remaining) append(fixed, polygon, indices);
+        }
+        if (!moving.some(vertices => vertices.length)) return;
+        const makeGeometry = vertices => {
+          const result = new THREE.BufferGeometry();
+          for (const [name, attribute] of attributes) {
+            const { array, itemSize, normalized } = attribute;
+            const stride = attribute.isInterleavedBufferAttribute ? attribute.data.stride : itemSize;
+            const offset = attribute.isInterleavedBufferAttribute ? attribute.offset : 0;
+            const values = new array.constructor(vertices.length * itemSize);
+            vertices.forEach(([indices, weights], i) => {
+              for (let component = 0; component < itemSize; component++) {
+                values[i * itemSize + component] = indices.reduce((sum, index, j) =>
+                  sum + array[index * stride + offset + component] * weights[j + 3], 0);
+              }
+            });
+            result.setAttribute(name, new THREE.BufferAttribute(values, itemSize, normalized));
+          }
+          return result;
+        };
+        const fixedGeometry = makeGeometry(fixed);
+        node.geometry = fixedGeometry;
+        const meshes = [];
+        moving.forEach((vertices, index) => {
+          if (!vertices.length) return;
+          const { control, pivot, axis } = candidates[index];
+          const panel = new THREE.Mesh(makeGeometry(vertices), node.material.clone());
+          panel.userData.controlPanel = control;
+          panel.matrixAutoUpdate = false;
+          panel.castShadow = node.castShadow;
+          panel.receiveShadow = node.receiveShadow;
+          node.add(panel);
+          meshes.push(panel);
+          const fromPivot = toMesh.clone().multiply(new THREE.Matrix4().makeTranslation(...pivot));
+          this.controlPanels.push({
+            node: panel, control, axis: new THREE.Vector3(...axis).normalize(),
+            fromPivot, toPivot: fromPivot.clone().invert()
+          });
+        });
+        this.controlPanelRestorations.push(() => {
+          node.geometry = geometry;
+          fixedGeometry.dispose();
+          for (const panel of meshes) {
+            node.remove(panel);
+            panel.geometry.dispose();
+            panel.material.dispose();
+          }
+        });
+      });
+    }
+
+    updateRigidControlPanels() {
+      if (!this.controlPanels.length) return;
+      const u = this.shaderUniforms;
+      const angles = {
+        left: -u.uAileronL.value, right: -u.uAileronR.value,
+        flap: u.uFlap.value, elevator: u.uElevator.value, rudder: u.uRudder.value
+      };
+      for (const { node, control, axis, fromPivot, toPivot } of this.controlPanels) {
+        this.gearRotation.makeRotationAxis(axis, angles[control]);
+        node.matrix.copy(fromPivot).multiply(this.gearRotation).multiply(toPivot);
+        node.matrixWorldNeedsUpdate = true;
+      }
+    }
+
+    setupShaders(def) {
+      if (this.planeGroup) {
+        this.planeGroup.updateMatrixWorld(true);
+      }
+      const planeGroupInv = new THREE.Matrix4();
+      if (this.planeGroup && this.planeGroup.matrixWorld) {
+        planeGroupInv.copy(this.planeGroup.matrixWorld).invert();
+      }
+
+      this.shaderUniforms = {
+        uMeshToPlane: { value: new THREE.Matrix4() },
+        uPlaneToMesh: { value: new THREE.Matrix4() },
+        uAileronL: { value: 0.0 },
+        uAileronR: { value: 0.0 },
+        uElevator: { value: 0.0 },
+        uRudder:   { value: 0.0 },
+        uFlap:     { value: 0.0 },
+        uRudderParams: { value: new THREE.Vector4(...(def.rudderParams || [])) },
+        uElevParams:   { value: new THREE.Vector4(...(def.elevParams || [])) },
+        uWingParams:   { value: new THREE.Vector4(...def.wingParams) },
+        uWingProfile:  { value: new THREE.Vector4(...def.wingProfile) }
+      };
+
+      if (def.rigidPanels) {
+        this.setupRigidControlPanels(this.getRigidControlPanels(def));
+        if (this.controlPanels.length) return;
+      }
+
+      if (def.tailPanels) this.setupRigidControlPanels(def.tailPanels);
+
+      const meshToPlaneMat = new THREE.Matrix4();
+      const planeToMeshMat = new THREE.Matrix4();
+      const self = this;
+
+      this.scene.traverse((node) => {
+        if (!node.isMesh || !node.material || node.userData.builtInGear || node.userData.controlPanel) return;
+        const mats = Array.isArray(node.material) ? node.material : [node.material];
+
+        // 0번 프레임 사전 연산 (렌더링 시작 전 유효한 행렬 보장)
+        if (self.planeGroup && self.planeGroup.matrixWorld) {
+          node.updateMatrixWorld(true);
+          meshToPlaneMat.multiplyMatrices(planeGroupInv, node.matrixWorld);
+          planeToMeshMat.copy(meshToPlaneMat).invert();
+          self.shaderUniforms.uMeshToPlane.value.copy(meshToPlaneMat);
+          self.shaderUniforms.uPlaneToMesh.value.copy(planeToMeshMat);
+        }
+
+        const origOnBeforeRender = node.onBeforeRender;
+        node.onBeforeRender = function(renderer, renderScene, camera, geometry, material, group) {
+          if (origOnBeforeRender) {
+            try {
+              origOnBeforeRender.call(this, renderer, renderScene, camera, geometry, material, group);
+            } catch (e) {}
+          }
+          if (self.planeGroup && self.planeGroup.matrixWorld && self.shaderUniforms) {
+            try {
+              planeGroupInv.copy(self.planeGroup.matrixWorld).invert();
+              meshToPlaneMat.multiplyMatrices(planeGroupInv, node.matrixWorld);
+              planeToMeshMat.copy(meshToPlaneMat).invert();
+              self.shaderUniforms.uMeshToPlane.value.copy(meshToPlaneMat);
+              self.shaderUniforms.uPlaneToMesh.value.copy(planeToMeshMat);
+            } catch (e) {}
+          }
+        };
+
+        mats.forEach((m) => {
+          if (def.gearMaterialRegex && def.gearMaterialRegex.test(m.name || '')) return;
+
+          const surfaces = def.surfaceMaterials;
+          const surfaceMask = new THREE.Vector3(
+            Number(!def.tailPanels && (!surfaces || surfaces.rudder.test(m.name))),
+            Number(!def.tailPanels && (!surfaces || surfaces.elevator.test(m.name))),
+            Number(!surfaces || surfaces.wing.test(m.name))
+          );
+          if (surfaceMask.lengthSq() === 0) return;
+
+          m.onBeforeCompile = (shader) => {
+            Object.assign(shader.uniforms, self.shaderUniforms);
+            shader.uniforms.uSurfaceMask = { value: surfaceMask };
+
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <common>',
+              `#include <common>
+              uniform mat4 uMeshToPlane;
+              uniform mat4 uPlaneToMesh;
+              uniform float uAileronL;
+              uniform float uAileronR;
+              uniform float uElevator;
+              uniform float uRudder;
+              uniform float uFlap;
+              uniform vec4 uRudderParams;
+              uniform vec4 uElevParams;
+              uniform vec4 uWingParams;
+              uniform vec4 uWingProfile;
+              uniform vec3 uSurfaceMask;
+              `
+            );
+
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <begin_vertex>',
+              `#include <begin_vertex>
+              vec4 _planeP = uMeshToPlane * vec4( position, 1.0 );
+              bool _deflected = false;
+
+              // 1. Rudder Deflection (Swept Hinge Rigid Planar Rotation)
+              // uRudderParams: [zBase, zMax, yBase, sweepSlope]
+              float _rZBase = uRudderParams.x;
+              float _rZMax = uRudderParams.y;
+              float _rYBase = uRudderParams.z;
+              float _rSweep = uRudderParams.w;
+              float _zRudderHinge = _rZBase + max(0.0, _planeP.y - _rYBase) * _rSweep;
+
+              if (uSurfaceMask.x > 0.5 && _planeP.z > _zRudderHinge && _planeP.z <= _rZMax &&
+                  _planeP.y >= _rYBase && abs(_planeP.x) < 0.95) {
+                float dist = _planeP.z - _zRudderHinge;
+                // Narrow blend across hinge line to prevent skin tearing; rigid rotation across panel
+                float weight = smoothstep(0.0, 0.12, dist);
+                float angle = uRudder * weight;
+                float arm = dist;
+                _planeP.x += arm * sin(angle);
+                _planeP.z = _zRudderHinge + arm * cos(angle);
+                _deflected = true;
+              }
+
+              // 2. Elevator Deflection (Swept Hinge Rigid Planar Rotation)
+              // uElevParams: [zBase, zMax, xBase, sweepSlope]
+              float _eZBase = uElevParams.x;
+              float _eZMax = uElevParams.y;
+              float _eXBase = uElevParams.z;
+              float _eSweep = uElevParams.w;
+              float _absX = abs(_planeP.x);
+              float _zElevHinge = _eZBase + max(0.0, _absX - _eXBase) * _eSweep;
+
+              if (!_deflected && uSurfaceMask.y > 0.5 && _planeP.z > _zElevHinge && _planeP.z <= _eZMax &&
+                  _absX >= _eXBase && _absX <= (_eXBase + 8.5) &&
+                  _planeP.y < 8.0 && _planeP.y > -3.5) {
+                float dist = _planeP.z - _zElevHinge;
+                float weight = smoothstep(0.0, 0.12, dist);
+                float angle = uElevator * weight;
+                float arm = dist;
+                // Negative elevator raises the trailing edge (nose up), matching
+                // the procedural pivots and the A350/A320 rigid panels.
+                _planeP.y -= arm * sin(angle);
+                _planeP.z = _zElevHinge + arm * cos(angle);
+                _deflected = true;
+              }
+
+              // 3. Wing trailing edge: [flapStart, split, aileronEnd, zAtSplit]
+              // Profile: [inboardSweep, outboardSweep, yMin, yMax]
+              if (!_deflected && uSurfaceMask.z > 0.5 &&
+                  _absX >= uWingParams.x && _absX <= uWingParams.z &&
+                  _planeP.y > uWingProfile.z && _planeP.y < uWingProfile.w) {
+                float fromSplit = _absX - uWingParams.y;
+                float sweep = fromSplit < 0.0 ? uWingProfile.x : uWingProfile.y;
+                float zHinge = uWingParams.w + fromSplit * sweep;
+                float chord = _planeP.z - zHinge;
+                if (chord > 0.0 && chord < 3.0) {
+                  // Keep a 0.4 m neutral strip and taper both panels into the shared skin.
+                  float spanWeight = smoothstep(0.20, 0.75, abs(fromSplit));
+                  float deflection = fromSplit < 0.0 ? -uFlap :
+                    (_planeP.x < 0.0 ? uAileronL : uAileronR);
+                  float angle = deflection * spanWeight * smoothstep(0.0, 0.12, chord);
+                  _planeP.y += chord * sin(angle);
+                  _planeP.z = zHinge + chord * cos(angle);
+                  _deflected = true;
+                }
+              }
+
+              if (_deflected) {
+                transformed = (uPlaneToMesh * _planeP).xyz;
+              }
+              `
+            );
+          };
+          m.needsUpdate = true;
+        });
+      });
+    }
+
+    setGearProgress(progress, phase) {
+      this.gearProgress = Math.max(0.0, Math.min(1.0, progress));
+      this.gearState = phase || (progress >= 0.99 ? 'DOWN' : (progress <= 0.01 ? 'UP' : 'TRANSIT'));
+
+      if (this.builtInGear.length) {
+        const travel = THREE.MathUtils.smoothstep(this.gearProgress, 0.25, 0.75);
+        const doorTravel = THREE.MathUtils.smoothstep(Math.min(this.gearProgress, 1 - this.gearProgress), 0, 0.25);
+        for (const { pivot, openAngle } of this.gearDoors) pivot.rotation.z = openAngle * doorTravel;
+        for (const { node, axis, fromPivot, toPivot } of this.builtInGear) {
+          const foldAngle = THREE.MathUtils.degToRad(axis.x ? 92 : 80.5);
+          this.gearRotation.makeRotationAxis(axis, (1 - travel) * foldAngle);
+          node.matrix.copy(fromPivot).multiply(this.gearRotation).multiply(toPivot);
+          node.matrixWorldNeedsUpdate = true;
+          node.visible = travel > 0 || doorTravel > 0;
+        }
+      }
+
+      // A350 정밀 착륙장치 스트럿/도어 회전
+      if (this.landingGears.length > 0) {
+        const isVis = progress > 0.15;
+        this.landingGears.forEach(gear => {
+          const u = gear.userData;
+          if (!u) return;
+          if (u.strutPivot) {
+            u.strutPivot.rotation.x = -(1.0 - progress) * (Math.PI / 2);
+            u.strutPivot.visible = isVis;
+          }
+          if (u.fixedMount) u.fixedMount.visible = isVis;
+          if (u.doorL) u.doorL.rotation.z = (1.0 - progress) * 0.8;
+          if (u.doorR) u.doorR.rotation.z = -(1.0 - progress) * 0.8;
+          if (u.bogieBeam) u.bogieBeam.rotation.x = -(1.0 - progress) * 0.45;
+        });
+      }
+
+      // DC-10 리깅 키프레임 기어 애니메이션
+      if (this.mixer && this.gearAction) {
+        this.gearAction.time = progress * this.gearDuration;
+        this.mixer.update(0);
+      }
+
+      // CL-215 (Amphibian) 네임드 기어 노드
+      if (this.parts.landingGear) {
+        const node = this.parts.landingGear;
+        node.visible = progress > 0.15;
+        node.position.y = (node.userData.basePosY || 0) + (1.0 - progress) * 1.8;
+      }
+    }
+
+    setDeflections(ailL, ailR, elev, rud, flap) {
+      if (this.shaderUniforms) {
+        this.shaderUniforms.uAileronL.value = ailL;
+        this.shaderUniforms.uAileronR.value = ailR;
+        this.shaderUniforms.uElevator.value = elev;
+        this.shaderUniforms.uRudder.value = rud;
+        this.shaderUniforms.uFlap.value = flap;
+        this.updateRigidControlPanels();
+      }
+      if (this.parts.rudder) {
+        this.parts.rudder.rotation.y = (this.parts.rudder.userData.baseRotY || 0) + rud;
+      }
+      if (this.parts.flaps && this.parts.flaps.length > 0) {
+        for (const f of this.parts.flaps) {
+          f.rotation.x = (f.userData.baseRotX || 0) + flap;
+        }
+      }
+    }
+
+    rotateFans(fanDelta) {
+      for (let i = 0; i < this.fans.length; i++) {
+        this.fans[i].rotation.z += fanDelta;
+      }
+      for (let i = 0; i < this.parts.fans.length; i++) {
+        this.parts.fans[i].rotation.z += fanDelta;
+      }
+    }
+
+    update(dt) {
+      if (!this.enabled) return;
+      dt = Math.max(0.001, Math.min(dt || 0.016, 0.1));
+
+      if (this.demoLoop) {
+        this.demoTime += dt;
+        const t = this.demoTime;
+
+        // 1. 연속 제어평면 시험 가동 (에일러론 롤, 승강타 피치, 방향타 요)
+        const elev = 0.32 * Math.sin(1.4 * t + 0.8);
+        const rud = 0.30 * Math.sin(1.1 * t + 1.5);
+
+        // 플랩 전개 주기 (16초 주기: 전개 -> 풀 플랩 유지 -> 수납)
+        const flapPhase = t % 16.0;
+        // Complete one roll cycle before the flaps begin to extend.
+        const ail = flapPhase < 4.0 ? 0.35 * Math.sin(flapPhase * Math.PI / 2) : 0.0;
+        let flap = 0.0;
+        if (flapPhase >= 4.0 && flapPhase < 8.0) {
+          flap = ((flapPhase - 4.0) / 4.0) * 0.56;
+        } else if (flapPhase >= 8.0 && flapPhase < 12.0) {
+          flap = 0.56;
+        } else if (flapPhase >= 12.0 && flapPhase < 16.0) {
+          flap = (1.0 - (flapPhase - 12.0) / 4.0) * 0.56;
+        }
+
+        this.setDeflections(-ail, ail, elev, rud, flap);
+
+        // 2. 착륙장치 수납/전개 주기 (18초 주기: 전개 5초 -> 수납 3초 -> 수납 유지 5초 -> 전개 3초 -> 락)
+        const gearCycle = (t % 18.0);
+        let progress = 1.0;
+        let phase = 'DOWN';
+        if (gearCycle < 5.0) {
+          progress = 1.0; phase = 'DOWN';
+        } else if (gearCycle < 8.0) {
+          progress = 1.0 - (gearCycle - 5.0) / 3.0; phase = 'TRANSIT';
+        } else if (gearCycle < 13.0) {
+          progress = 0.0; phase = 'UP';
+        } else if (gearCycle < 16.0) {
+          progress = (gearCycle - 13.0) / 3.0; phase = 'TRANSIT';
+        } else {
+          progress = 1.0; phase = 'DOWN';
+        }
+        this.setGearProgress(progress, phase);
+
+        // 3. 엔진 터보팬 및 프로펠러 고속 연속 회전
+        const fanDelta = 25.0 * dt;
+        this.rotateFans(fanDelta);
+      }
+    }
+
+    updateFlightControls(dt, flightState) {
+      if (!this.enabled) return;
+      const { targetAileron = 0, targetElevator = 0, targetRudder = 0, targetFlap = 0, rpmRatio = 0 } = flightState || {};
+
+      if (this.shaderUniforms) {
+        this.shaderUniforms.uAileronL.value = THREE.MathUtils.lerp(this.shaderUniforms.uAileronL.value, -targetAileron, 0.20);
+        this.shaderUniforms.uAileronR.value = THREE.MathUtils.lerp(this.shaderUniforms.uAileronR.value, targetAileron, 0.20);
+        this.shaderUniforms.uElevator.value = THREE.MathUtils.lerp(this.shaderUniforms.uElevator.value, targetElevator, 0.20);
+        this.shaderUniforms.uRudder.value = THREE.MathUtils.lerp(this.shaderUniforms.uRudder.value, targetRudder, 0.22);
+        this.shaderUniforms.uFlap.value = THREE.MathUtils.lerp(this.shaderUniforms.uFlap.value, targetFlap, 0.15);
+        this.updateRigidControlPanels();
+      }
+      if (this.parts.rudder) {
+        const baseY = this.parts.rudder.userData.baseRotY || 0;
+        this.parts.rudder.rotation.y = THREE.MathUtils.lerp(this.parts.rudder.rotation.y, baseY + targetRudder, 0.22);
+      }
+      if (this.parts.flaps && this.parts.flaps.length > 0) {
+        for (const flap of this.parts.flaps) {
+          const baseX = flap.userData.baseRotX || 0;
+          flap.rotation.x = THREE.MathUtils.lerp(flap.rotation.x, baseX + targetFlap, 0.12);
+        }
+      }
+
+      const fanDelta = rpmRatio * 30.0 * dt;
+      this.rotateFans(fanDelta);
+    }
+
+    updateGear(progress, isExtending, phase) {
+      this.setGearProgress(progress, phase);
+    }
+
+    dispose() {
+      if (this.mixer) {
+        this.mixer.stopAllAction();
+        this.mixer = null;
+      }
+      this.fans.forEach(fan => {
+        if (fan.parent) fan.parent.remove(fan);
+        if (fan.geometry) fan.geometry.dispose();
+        if (fan.material) fan.material.dispose();
+      });
+      this.fans = [];
+      this.landingGears.forEach(gear => {
+        if (gear.parent) gear.parent.remove(gear);
+        gear.traverse(child => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        });
+      });
+      this.landingGears = [];
+      for (const { pivot, door } of this.gearDoors) {
+        this.planeGroup.remove(pivot);
+        door.geometry.dispose();
+      }
+      this.gearDoors[0]?.door.material.dispose();
+      this.gearDoors = [];
+      this.controlPanelRestorations.forEach(restore => restore());
+      this.controlPanelRestorations = [];
+      this.controlPanels = [];
+      this.builtInGearRestorations.forEach(restore => restore());
+      this.builtInGearRestorations = [];
+      this.gearNodes = [];
+      this.builtInGear = [];
+      this.gearMaterials = [];
+      this.parts = { fans: [], rudder: null, flaps: [], landingGear: null };
+    }
+  }
+
+  // Global export for gallery viewer and subsystems
+  if (typeof window !== 'undefined') {
+    window.GLBMovingParts = GLBMovingPartsController;
+  }
+
   Object.assign(AirplaneGame.prototype, {
+  GLBMovingParts: GLBMovingPartsController,
   // ----------------------------------------------------------------
   // ★ GLB 3D 모델 시스템 (glTF 2.0 / GLB 3D Pipeline: 비행기 & 배경 전체 자동 지원)
   // ----------------------------------------------------------------
@@ -138,7 +1192,7 @@
     });
 
     // 모든 기종 백그라운드 프리페치 유지 (기종 변경 즉시 반응)
-    ['a320', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'].forEach(m => {
+    ['a320', 'a350', 'b747', 'dc10', 'md80', 'concorde', 'amphibian', 'ancestor'].forEach(m => {
       if (!this.glbBuffers[m]) {
         fetch(`models/${m}.glb`)
           .then(r => r.ok ? r.arrayBuffer() : null)
@@ -160,6 +1214,7 @@
           this.applyEnvironmentTexturesToGLB(scene, 'airport');
         }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
+        scene.name = 'DepartureAirfieldGLB';
         this.airportGroup.add(scene);
         this.glbAirportBuffer = buf;
         if (typeof this.addRunwayVisualDetails === 'function') {
@@ -169,8 +1224,12 @@
             polygonOffsetFactor: -4,
             polygonOffsetUnits: -4
           });
-          this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3800, whiteMat);
+          const runway = new THREE.Group();
+          runway.name = 'DepartureRunway';
+          this.addRunwayVisualDetails(runway, 160, 0, 3200, whiteMat);
+          this.airportGroup.add(runway);
         }
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         this.initPAPILights();
       }
     });
@@ -185,6 +1244,7 @@
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.incheonAirportGroup.add(scene);
         this.glbIncheonBuffer = buf;
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         if (typeof this.addRunwayVisualDetails === 'function') {
           const whiteMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,
@@ -288,6 +1348,47 @@
     }
   },
 
+  // Align the lowest extended-gear point with the airport runway surface.
+  // Per-type normalisation offsets were calibrated on the A320; the B747 and
+  // DC-10 gear hangs much lower, so those models used to spawn underground.
+  alignGLBToRunway(scene) {
+    if (!scene || typeof THREE === 'undefined') return;
+    const runwaySurfaceY = 2.12;
+    const groundY = Number.isFinite(this.groundY) ? this.groundY : 6.84;
+    // Prefer the parent-free bound captured during normalization. A live Box3
+    // can mix floating-origin and simulation frames when a GLB finishes loading
+    // after the aircraft has already been repositioned for a new phase.
+    const storedMinY = scene.userData?.normalizedMinY;
+    const groupWorldY = this.planeGroup && typeof this.planeGroup.getWorldPosition === 'function'
+      ? this.planeGroup.getWorldPosition(new THREE.Vector3()).y
+      : 0;
+    const bounds = Number.isFinite(storedMinY) ? null : new THREE.Box3().setFromObject(scene);
+    let localMinY = Number.isFinite(storedMinY) ? storedMinY : bounds.min.y - groupWorldY;
+    // Include procedural/attached landing gear (e.g. A350) whose tires extend lower than
+    // the bare GLB fuselage/engines captured during normalizeAircraftScene().
+    if (Array.isArray(this.landingGears) && this.landingGears.length > 0) {
+      for (const gear of this.landingGears) {
+        if (!gear) continue;
+        if (Number.isFinite(gear.userData?.localBottomY)) {
+          localMinY = Math.min(localMinY, gear.userData.localBottomY);
+        } else if (typeof THREE.Box3 === 'function') {
+          const gb = new THREE.Box3().setFromObject(gear);
+          if (Number.isFinite(gb.min?.y)) {
+            localMinY = Math.min(localMinY, gb.min.y - groupWorldY);
+          }
+        }
+      }
+    }
+    const correction = (runwaySurfaceY - groundY) - localMinY;
+    if (!Number.isFinite(correction) || Math.abs(correction) < 1e-3) return;
+    // Attached fans, gear and nav lights are calibrated against the unaligned
+    // model, so move them together with the GLB scene.
+    for (const child of (this.planeGroup?.children || [scene])) {
+      child.position.y += correction;
+    }
+    if (typeof scene.updateMatrixWorld === 'function') scene.updateMatrixWorld(true);
+  },
+
   applyGLBScene(scene, fileName, animations) {
     if (!scene) return;
     if (!this.planeGroup) {
@@ -295,54 +1396,20 @@
       this.scene.add(this.planeGroup);
     }
 
-    if (this.glbMixer) {
-      this.glbMixer.stopAllAction();
-      this.glbMixer = null;
+    // 기존 비행기 자식 오브젝트 및 이전 컨트롤러 정리
+    if (this.glbMovingPartsController) {
+      this.glbMovingPartsController.dispose();
+      this.glbMovingPartsController = null;
     }
-    this.glbGearAction = null;
-    this.glbGearDuration = 0;
-    this.glbMovingParts = { fans: [], rudder: null, flaps: [] };
-
-    // 기존 비행기 자식 오브젝트 정리
     while (this.planeGroup.children.length > 0) {
       this.planeGroup.remove(this.planeGroup.children[0]);
     }
 
-    // 바운딩 박스 정밀 계산 및 실제 여객기 규격으로 자동 정규화 스케일링
-    const box = new THREE.Box3().setFromObject(scene);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const targetLength = (this.currentPlaneType === 'ancestor') ? 14.0 : 38.0;
-    const scale = targetLength / (maxDim || 1.0);
-    scene.scale.set(scale, scale, scale);
+    // ★ 실물 스케일 정규화 및 기우뚱 방지 중심점 정렬 (GLBMovingPartsController 공유 메서드)
+    GLBMovingPartsController.normalizeAircraftScene(scene, this.currentPlaneType, { isViewer: false });
 
-    // ★ 중심점 X=0 완벽 정렬 & 회전 영점화 (기우뚱 및 쏠림 100% 원천 차단)
-    scene.position.x = 0;
-    scene.position.y = (this.currentPlaneType === 'amphibian')
-      ? (-box.min.y * scale - 4.05)
-      : (-center.y * scale + (this.currentPlaneType === 'ancestor' ? 0.35 : 1.2));
-    scene.position.z = -center.z * scale;
-    scene.rotation.set(0, 0, 0);
-
+    // PBR 머티리얼 최적화 및 창문/데칼 z-fighting 방지
     scene.traverse((node) => {
-      if (node.name) {
-        if (/^Fan[_ ]?Blades/i.test(node.name)) {
-          this.glbMovingParts.fans.push(node);
-        } else if (/^Rudder/i.test(node.name)) {
-          node.userData.baseRotY = node.rotation.y;
-          this.glbMovingParts.rudder = node;
-        } else if (/^Flaps[_ ]?(Inner|Outer)/i.test(node.name)) {
-          node.userData.baseRotX = node.rotation.x;
-          this.glbMovingParts.flaps.push(node);
-        } else if (/^Landing[_ ]?Gear/i.test(node.name)) {
-          node.userData.basePosY = node.position.y;
-          this.glbMovingParts.landingGear = node;
-          if (this.gearExtended === false) {
-            node.visible = false;
-          }
-        }
-      }
       if (node.isMesh) {
         node.castShadow = true;
         node.receiveShadow = true;
@@ -367,30 +1434,58 @@
         }
       }
     });
-
-    if (animations && animations.length > 0 && typeof THREE.AnimationMixer !== 'undefined') {
-      this.glbMixer = new THREE.AnimationMixer(scene);
-      this.glbGearAction = this.glbMixer.clipAction(animations[0]);
-      this.glbGearDuration = animations[0].duration || 1.0;
-      this.glbGearAction.play();
-      this.glbGearAction.paused = true;
-      // dc10.glb 애니메이션: t=0 수납(UP), t=duration 전개(DOWN)
-      this.glbGearAction.time = (this.gearExtended === false) ? 0 : this.glbGearDuration;
-      this.glbMixer.update(0);
+    // 선택한 항공사 스킨을 GLB 외피/ACCENT 머티리얼에 적용
+    if (typeof this.applyAirlineSkin === 'function') {
+      this.applyAirlineSkin(scene);
     }
 
     this.customGLBModel = scene;
     this.planeGroup.add(scene);
+    this.planeGroup.updateMatrixWorld(true);
+
+    // ★ 통합 무빙 파츠 컨트롤러 장착 (제어평면 셰이더, 기어 수납/전개, 터보팬 팬 회전)
+    this.glbMovingPartsController = new GLBMovingPartsController({
+      scene: scene,
+      planeType: this.currentPlaneType,
+      planeGroup: this.planeGroup,
+      demoLoop: false,
+      animations: animations
+    });
+
+    // 하위 호환성 프로퍼티 매핑
+    this.glbMovingParts = this.glbMovingPartsController.parts;
+    this.glbShaderUniforms = this.glbMovingPartsController.shaderUniforms;
+    this.glbGearNodes = this.glbMovingPartsController.gearNodes;
+    this.glbGearMaterials = this.glbMovingPartsController.gearMaterials;
+    this.landingGears = this.glbMovingPartsController.landingGears;
+    this.turbofans = this.glbMovingPartsController.fans;
+    this.glbMixer = this.glbMovingPartsController.mixer;
+    this.glbGearAction = this.glbMovingPartsController.gearAction;
+    this.glbGearDuration = this.glbMovingPartsController.gearDuration;
+
+    // 초기 기어 상태 동기화
+    this.glbMovingPartsController.setGearProgress(
+      (this.gearExtended === false) ? 0.0 : 1.0,
+      this.gearPhase || (this.gearExtended === false ? 'UP' : 'DOWN')
+    );
 
     if (typeof this.attachAircraftNavLights === 'function') {
       this.attachAircraftNavLights(this.currentPlaneType || 'dc10');
     }
 
+    if (typeof this.attachGLBMovingParts === 'function') {
+      this.attachGLBMovingParts(this.currentPlaneType || 'a320');
+    }
+
+    this.setupGLBControlSurfaceShaders(scene, this.currentPlaneType);
+    this.alignGLBToRunway(scene);
+
     this.planeGroup.updateMatrixWorld(true);
     const fanExhaustPoints = [];
-    if (this.glbMovingParts && Array.isArray(this.glbMovingParts.fans) && this.glbMovingParts.fans.length > 0) {
+    const allFans = (this.glbMovingPartsController.fans || []).concat(this.glbMovingPartsController.parts.fans || []);
+    if (allFans.length > 0) {
       const nozzleOffset = new THREE.Vector3(0, 0, 3.2);
-      for (const fan of this.glbMovingParts.fans) {
+      for (const fan of allFans) {
         if (typeof fan.getWorldPosition !== 'function') continue;
         const worldPos = fan.getWorldPosition(new THREE.Vector3());
         const localPos = this.planeGroup.worldToLocal(worldPos).add(nozzleOffset);
@@ -403,12 +1498,13 @@
       this.engineExhaustPoints = fanExhaustPoints;
     } else {
       const fallbackByType = {
-        a320: [[-5.06, -1.5, 1.8], [5.06, -1.5, 1.8]],
-        b747: [[-11.5, -1.4, -0.5], [-6.2, -1.8, 2.2], [6.2, -1.8, 2.2], [11.5, -1.4, -0.5]],
-        dc10: [[-6.8, -1.8, 2.2], [0, 3.6, 13.5], [6.8, -1.8, 2.2]],
-        md80: [[-2.6, 0.5, 13.0], [2.6, 0.5, 13.0]],
-        concorde: [[-3.8, -1.4, 12.5], [3.8, -1.4, 12.5]],
-        amphibian: [[-4.8, 1.5, 0.8], [4.8, 1.5, 0.8]],
+        a320: [[-5.72, -2.27, 2.98], [5.72, -2.27, 2.98]],
+        a350: [[-10.57, 1.22, 2.53], [10.57, 1.22, 2.53]],
+        b747: [[-20.03, -6.04, 6.50], [-11.52, -6.04, 2.50], [11.52, -6.04, 2.50], [20.03, -6.04, 6.50]],
+        dc10: [[-8.21, -3.30, 3.50], [0, 4.25, 24.50], [8.21, -3.30, 3.50]],
+        md80: [[-2.40, -1.74, 14.80], [2.40, -1.74, 14.80]],
+        concorde: [[-4.30, -3.40, 14.90], [4.30, -3.40, 14.90]],
+        amphibian: [[-2.58, -1.41, 0.50], [2.58, -1.41, 0.50]],
         ancestor: [[0.8, 1.2, 0.6]]
       };
       const coords = fallbackByType[this.currentPlaneType] || fallbackByType.a320;
@@ -422,6 +1518,12 @@
     }
 
     this.showPopup(`🎉 GLB 3D 기체 [${cleanName}] 장착 완료!`);
+  },
+
+  setupGLBControlSurfaceShaders(scene, planeType) {
+    if (this.glbMovingPartsController && this.glbMovingPartsController.shaderUniforms) {
+      this.glbShaderUniforms = this.glbMovingPartsController.shaderUniforms;
+    }
   },
 
   applyGLBBackground(scene, fileName) {
@@ -452,6 +1554,7 @@
       a320: 'A320 제트기',
       a320_detailed: 'A320-200 실물 고정밀',
       a320_simplified: 'A320-200 경량 최적화',
+      a350: 'A350-900 XWB',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
       amphibian: 'CL-215 수륙양용기',

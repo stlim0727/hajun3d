@@ -16,6 +16,7 @@ class AirplaneGame {
     this.score = 0;
     this.startTime = 0;
     this.isPlaying = false;
+    this.screenPaused = false;
     this.cameraMode = '3rd';
     this.cameraState = {
       chaseYaw: 0,
@@ -65,6 +66,10 @@ class AirplaneGame {
     };
     this.isWaterLanding = false; // 바다 비상착수 수면 활주/부유 상태
     this.waterBobPhase = 0.0;
+    this.hasTakeoffTailstrike = false; // 이륙 중 테일스트라이크 발생 여부
+    this.tailFinDetached = false;      // 고고도 압력 격벽 파열로 수직꼬리날개 이탈 여부
+    this.tailBulkheadTriggerAltM = 1600;
+    this._detachedTailNodes = [];
 
     // 비행 물리 및 항공역학 변수 (True 3D Vector Newtonian & Aerodynamic Mechanics)
     this.speed = 0.0;            // 전진 속도 단위 (1.0 = ~280 km/h)
@@ -193,9 +198,6 @@ class AirplaneGame {
     this.gpwsSirenGain = null;
 
     // 속도감 및 동적 시각/오디오 효과 (Sense of Speed & Dynamic Camera Effects)
-    this.speedLinesGroup = null;
-    this.speedLineData = [];
-    this.speedLineMaterial = null;
     this.speedEffectIntensity = this.loadSpeedEffectIntensity ? this.loadSpeedEffectIntensity() : 0.35;
     this.oceanTexture = null;
     this.speedVignetteEl = null;
@@ -240,6 +242,7 @@ class AirplaneGame {
 
     // 인천공항 스타일 메가 허브 공항, 터미널 버스 및 주기 항공기 시스템
     this.incheonAirportGroup = null;
+    this.jejuAirportGroup = null;
     this.aiAircraft = [];
     this.airportBuses = [];
     this.cruiseMultiplier = 1;
@@ -265,12 +268,19 @@ class AirplaneGame {
     this.passengerReactionTimer = null;
     this.captainPAIndex = 0;
 
+    this.restoreUserSettings();
     try {
       this.initThree();
       this.initLights();
       this.initStars();
       this.initGLBSystem();
       this.initEnvironments();
+      if (typeof this.applyGeodeticPlacement === 'function') this.applyGeodeticPlacement();
+      if (this.geoLayer) {
+        ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+          if (this[name]) this[name].visible = false;
+        });
+      }
     } catch (e) {
       console.error('Scene init error:', e);
     }
@@ -287,6 +297,13 @@ class AirplaneGame {
     } catch (e) {
       console.error('Aircraft build error:', e);
     }
+    try {
+      if (this.timeOfDay === 'night' && typeof this.setTimeOfDay === 'function') {
+        this.setTimeOfDay('night', { announce: false });
+      }
+    } catch (e) {
+      console.error('Restore night mode error:', e);
+    }
 
     try {
       this.initSpeedEffects();
@@ -299,6 +316,34 @@ class AirplaneGame {
     this.lastTime = performance.now();
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
+  }
+
+  restoreUserSettings() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const savedSound = localStorage.getItem('hajun3d_sound_enabled');
+      if (savedSound !== null) this.soundEnabled = savedSound === 'true';
+      const savedTime = localStorage.getItem('hajun3d_time_of_day');
+      if (savedTime === 'day' || savedTime === 'night') this.timeOfDay = savedTime;
+    } catch (_) {
+      // Storage may be unavailable in restricted WebView contexts.
+    }
+  }
+
+  persistSoundEnabled() {
+    this.saveUserSetting('hajun3d_sound_enabled', this.soundEnabled);
+  }
+
+  persistTimeOfDay() {
+    this.saveUserSetting('hajun3d_time_of_day', this.timeOfDay);
+  }
+
+  saveUserSetting(key, value) {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(key, String(value));
+    } catch (_) {
+      // Storage may be unavailable in restricted WebView contexts.
+    }
   }
 
   // ----------------------------------------------------------------
@@ -318,10 +363,32 @@ class AirplaneGame {
     );
     this.camera.position.set(0, 15, 65);
 
-    // logarithmicDepthBuffer: false로 GPU 조기 Z 컬링(Early-Z) 하드웨어 가속을 100% 활성화하여 프레임 드랍/끊김 원천 차단!
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true, 
-      powerPreference: 'high-performance' 
+    // Opt-in streamed terrain layer (?geoTiles=1&ionToken=...).
+    // Disabled by default: the offline file:// WebView path is unchanged.
+    const geoParams = new URLSearchParams(window.location.search);
+    const hosted = location.protocol === 'https:' && /stlim0727\.github\.io/.test(location.hostname);
+    const geoEnabled = (hosted || geoParams.get('geoTiles') === '1')
+      && Boolean(window.GEO_ION_TOKEN || geoParams.get('ionToken'))
+      && Boolean(window.HajunGeoTiles);
+    const baseAnchor = window.GEO_ANCHOR || { lat: 35.165199279785156, lon: 128.93899536132812, headingDeg: 353.9, height: 33.25 };
+    this.geoAnchor = {
+      lat: Number(geoParams.get('geoLat') ?? baseAnchor.lat),
+      lon: Number(geoParams.get('geoLon') ?? baseAnchor.lon),
+      headingDeg: Number(geoParams.get('geoHeading') ?? baseAnchor.headingDeg),
+      height: Number(geoParams.get('geoHeight') ?? baseAnchor.height ?? 0)
+    };
+    this.defaultGeoAnchor = { ...this.geoAnchor };
+    this.geoAzimuth = Number(geoParams.get('geoAzimuth') ?? ((this.geoAnchor.headingDeg + 180) % 360));
+    this.floatingOrigin = window.FloatingOrigin ? window.FloatingOrigin.create() : null;
+    this.renderOrigin = new THREE.Vector3();
+    this.renderOriginApplied = new THREE.Vector3();
+    this.geoSimAnchorBase = { x: 160, y: 0, z: 0 };
+    this.geoRenderSimAnchor = null;
+    this.geoFocusBases = null;
+    this.geoRenderFocusAnchors = null;
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // 고해상도 디스플레이 필레이트 병목 제거
@@ -340,6 +407,8 @@ class AirplaneGame {
 
     this.container.appendChild(this.renderer.domElement);
 
+    if (geoEnabled) this.enableGeoTiles(geoParams.get('ionToken') || window.GEO_ION_TOKEN || '');
+
     // PMREM sky environment map for realistic water/sky reflections
     const skyScene = new THREE.Scene();
     const skyGeo = new THREE.SphereGeometry(500, 32, 15);
@@ -353,6 +422,366 @@ class AirplaneGame {
     // 비행기 최상위 3D 그룹 초기화 & 씬 추가
     this.planeGroup = new THREE.Group();
     this.scene.add(this.planeGroup);
+
+    if (window.LandmarkPins && typeof window.LandmarkPins.init === 'function') {
+      window.LandmarkPins.init(this);
+    }
+  }
+
+  applyAirfieldMinimalism() {
+    const hideMatching = (group, patterns) => {
+      if (!group) return;
+      group.traverse(object => {
+        if (patterns.some(pattern => pattern.test(object.name || ''))) object.visible = false;
+      });
+    };
+    hideMatching(this.airportGroup, [/^DepartureAirfieldGLB$/, /^RunwayShoulder$/]);
+    const pavement = this.airportGroup?.getObjectByName('RunwayPavement');
+    if (pavement) pavement.scale.x = 60 / pavement.geometry.parameters.width;
+
+    if (this.obstacles) {
+      this.obstacles = this.obstacles.filter(o =>
+        !['제1여객터미널', '항공정비 격납고', '관제탑'].includes(o.name)
+      );
+    }
+  }
+
+  applyGeodeticPlacement() {
+    if (!window.geoLocalDelta || !window.GEO_POINTS) return;
+    const haeundae = window.geoLocalDelta(window.GEO_POINTS.haeundae);
+    if (this.cityGroup) this.cityGroup.position.set(haeundae.x, haeundae.y, haeundae.z);
+  }
+
+  // Physics ground height from Terrarium elevation tiles (visual layer is 3D Tiles only).
+  // Falls back to the legacy flat model while tiles load or if they fail.
+  enableTerrainProvider(options = {}) {
+    const TP = window.TerrainProvider;
+    if (!TP || (this.terrainProvider && !options.force)) return false;
+    const simOffset = options.simOffset || { x: 160, z: 1600 };
+    const contractPoints = [[simOffset.x, simOffset.z], [simOffset.x, simOffset.z - 8000]];
+    if (options.provider !== undefined) {
+      TP.assertTerrainProviderContract(options.provider, contractPoints);
+      this.terrainProvider = options.provider;
+      return true;
+    }
+    const geo = window.Geodesy;
+    if (!geo || typeof geo.gameToWgs84 !== 'function') {
+      throw new Error('enableTerrainProvider requires geodesy.js');
+    }
+    const anchor = this.geoAnchor;
+    const flatZones = options.flatZones ?? [
+      { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+      { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+    ];
+    const provider = TP.createTerrariumProvider({
+      anchor,
+      simOffset,
+      loadTile: TP.createBrowserTileLoader(),
+      flatZones,
+      toWgs84: (x, z) => geo.gameToWgs84(x - simOffset.x, z - simOffset.z, anchor),
+    });
+    TP.assertTerrainProviderContract(provider, contractPoints);
+    this.terrainProvider = provider;
+    return true;
+  }
+
+  getGeoTilesErrorTarget() {
+    if (typeof window !== 'undefined') {
+      const geoParams = new URLSearchParams(window.location?.search || '');
+      const param = geoParams.get('geoErrorTarget');
+      if (param && Number.isFinite(Number(param))) return Number(param);
+      if (Number.isFinite(window.GEO_TILES_ERROR_TARGET)) return window.GEO_TILES_ERROR_TARGET;
+    }
+    const quality = (typeof localStorage !== 'undefined' && localStorage.getItem('flight3d.renderQuality')) || 'high';
+    if (quality === 'ultra') return 12;
+    if (quality === 'high') return 16;
+    if (quality === 'medium') return 24;
+    if (quality === 'low') return 36;
+    return 16;
+  }
+
+  enableGeoTiles(ionToken) {
+    if (this.geoLayer || !ionToken || !window.HajunGeoTiles || !this.scene) return false;
+    this.geoIonToken = ionToken;
+    const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+    const worldSimAnchor = { x: 160, y: 0, z: 1600 };
+    const renderSimAnchor = { ...worldSimAnchor };
+    // Keep Korea-wide tiles clamped to nearAnchorMaxDepth (17) at all flight altitudes
+    // so 3d-tiles-renderer does not unload valid depth-17 parent tiles beneath the aircraft
+    // when climbing above 600 m (Google 3D Tiles lacks depth 18+ over Korea).
+    const focusBase = [
+      { x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000, maxDepth: 19 }
+    ];
+    if (jejuFocus) {
+      focusBase.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000, maxDepth: 19 });
+    }
+    this.geoSimAnchorBase = { ...worldSimAnchor };
+    this.geoRenderSimAnchor = renderSimAnchor;
+    if (typeof window !== 'undefined') {
+      window.GEO_SIM_ANCHOR = { x: worldSimAnchor.x, z: worldSimAnchor.z };
+    }
+    this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
+    const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
+    this.geoRenderFocusAnchors = renderFocusAnchors;
+    const prevSceneChildren = Array.isArray(this.scene.children) ? this.scene.children.length : 0;
+    this.geoLayer = window.HajunGeoTiles.create({
+      ionToken,
+      lat: this.geoAnchor.lat,
+      lon: this.geoAnchor.lon,
+      height: this.geoAnchor.height,
+      azimuth: this.geoAzimuth,
+      simAnchor: worldSimAnchor,
+      worldAnchor: worldSimAnchor,
+      simAnchorBase: this.geoSimAnchorBase,
+      simAnchorRender: renderSimAnchor,
+      // Deeper tiles around Gimhae leave holes and intersect the runway.
+      nearAnchorMaxDepth: 17,
+      errorTarget: this.getGeoTilesErrorTarget(),
+      focusAnchors: focusBase,
+      focusAnchorsRender: renderFocusAnchors,
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      container: this.container
+    });
+    if (this.geoLayer) {
+      this._captureGeoTilesGroup(prevSceneChildren);
+      this.enableTerrainProvider();
+      ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+        if (this[name]) this[name].visible = false;
+      });
+      this.applyAirfieldMinimalism();
+    }
+    return Boolean(this.geoLayer);
+  }
+
+  _captureGeoTilesGroup(prevChildCount) {
+    this._geoTilesGroup = null;
+    if (!this.scene || !Array.isArray(this.scene.children)) return null;
+    for (let i = prevChildCount; i < this.scene.children.length; i++) {
+      const child = this.scene.children[i];
+      if (!child) continue;
+      if (child.name === 'GeoFallbackGround' || child.name === 'GeoFallbackWater') {
+        this._curveGeoFallbackPlane(child);
+        continue;
+      }
+      if (!this._geoTilesGroup) this._geoTilesGroup = child;
+    }
+    return this._geoTilesGroup;
+  }
+
+  // Curve the GeoFallbackGround / GeoFallbackWater backing planes downward with Earth's
+  // WGS84 radius so they never float above and bury curved 3D Tiles at 20-300+ km from anchor.
+  _curveGeoFallbackPlane(mesh) {
+    if (!mesh || !mesh.geometry || typeof THREE === 'undefined' || typeof THREE.PlaneGeometry !== 'function') return;
+    const width = (mesh.geometry.parameters && mesh.geometry.parameters.width) || 1200000;
+    const height = (mesh.geometry.parameters && mesh.geometry.parameters.height) || 1200000;
+    const curvedGeo = new THREE.PlaneGeometry(width, height, 64, 64);
+    const pos = curvedGeo.attributes && curvedGeo.attributes.position;
+    if (pos) {
+      const twoR = 2 * 6371000;
+      const baseDrop = mesh.name === 'GeoFallbackWater' ? 45 : 35;
+      for (let i = 0; i < pos.count; i++) {
+        const vx = pos.getX(i);
+        const vy = pos.getY(i);
+        const drop = (vx * vx + vy * vy) / twoR + baseDrop;
+        // Plane is rotated -PI/2 around X, so local +Z maps to world +Y.
+        pos.setZ(i, -drop);
+      }
+      pos.needsUpdate = true;
+      if (typeof curvedGeo.computeVertexNormals === 'function') curvedGeo.computeVertexNormals();
+    }
+    if (typeof mesh.geometry.dispose === 'function') mesh.geometry.dispose();
+    mesh.geometry = curvedGeo;
+  }
+
+  // GPU vertex-shader flatten for streamed 3D Tiles over Gimhae & Incheon Airport + approach corridor
+  // so real-world mountain tiles never poke through the airport aprons, runways, or final approach.
+  applyGeoTilesFlattenZones() {
+    if (!this._geoTilesGroup || typeof THREE === 'undefined') return;
+    if (!this._geoFlattenUniforms) {
+      this._geoFlattenUniforms = {
+        uSceneOffset: { value: new THREE.Vector3() }
+      };
+    }
+    if (this.scene && this.scene.position) {
+      this._geoFlattenUniforms.uSceneOffset.value.copy(this.scene.position);
+    }
+
+    this._geoFlattenFrame = (this._geoFlattenFrame || 0) + 1;
+    if (this._geoFlattenFrame % 10 !== 1) return;
+
+    const uniformsRef = this._geoFlattenUniforms;
+    const patchMaterial = (mat) => {
+      if (!mat || !mat.userData || mat.userData._geoFlattenPatched) return;
+      const prevCompile = mat.onBeforeCompile;
+      mat.onBeforeCompile = (shader, renderer) => {
+        if (typeof prevCompile === 'function') prevCompile(shader, renderer);
+        shader.uniforms.uGeoFlattenSceneOffset = uniformsRef.uSceneOffset;
+        shader.vertexShader =
+          'uniform vec3 uGeoFlattenSceneOffset;\n' +
+          shader.vertexShader.replace(
+            '#include <project_vertex>',
+            `vec4 wpGeoFlat = modelMatrix * vec4( transformed, 1.0 );
+            vec3 simPosGeoFlat = wpGeoFlat.xyz - uGeoFlattenSceneOffset;
+            // Incheon Airport + 2.5km approach corridor (x: -2400..2200, z: -49500..-40500)
+            float icnDx = max(max(-2400.0 - simPosGeoFlat.x, simPosGeoFlat.x - 2200.0), 0.0);
+            float icnDz = max(max(-49500.0 - simPosGeoFlat.z, simPosGeoFlat.z - (-40500.0)), 0.0);
+            float icnFactor = 1.0 - smoothstep(0.0, 1400.0, length(vec2(icnDx, icnDz)));
+            if (icnFactor > 0.0) {
+              float targetWorldY = -1.5 + uGeoFlattenSceneOffset.y;
+              wpGeoFlat.y = mix(wpGeoFlat.y, min(wpGeoFlat.y, targetWorldY), icnFactor);
+            }
+            // Gimhae Airport runway corridor (x: -900..900, z: -2600..2600)
+            float pusDx = max(max(-900.0 - simPosGeoFlat.x, simPosGeoFlat.x - 900.0), 0.0);
+            float pusDz = max(max(-2600.0 - simPosGeoFlat.z, simPosGeoFlat.z - 2600.0), 0.0);
+            float pusFactor = 1.0 - smoothstep(0.0, 500.0, length(vec2(pusDx, pusDz)));
+            if (pusFactor > 0.0) {
+              float targetWorldY = -1.2 + uGeoFlattenSceneOffset.y;
+              wpGeoFlat.y = mix(wpGeoFlat.y, min(wpGeoFlat.y, targetWorldY), pusFactor);
+            }
+            vec4 mvPosition = viewMatrix * wpGeoFlat;
+            gl_Position = projectionMatrix * mvPosition;`
+          );
+      };
+      mat.userData._geoFlattenPatched = true;
+      mat.needsUpdate = true;
+    };
+
+    if (typeof this._geoTilesGroup.traverse === 'function') {
+      this._geoTilesGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.material) return;
+        if (Array.isArray(obj.material)) obj.material.forEach(patchMaterial);
+        else patchMaterial(obj.material);
+      });
+    }
+  }
+
+  // Re-anchor streamed tiles and terrain physics to an arbitrary place spawn.
+  // Legacy GLB scenery keeps its original coordinates; at 70 km far clipping
+  // it stays outside the new local view.
+  retargetGeo(anchor, options = {}) {
+    const token = options.ionToken || this.geoIonToken || window.GEO_ION_TOKEN || '';
+    if (!token || !window.HajunGeoTiles || !this.scene) return false;
+    const next = {
+      lat: Number(anchor && anchor.lat),
+      lon: Number(anchor && anchor.lon),
+      headingDeg: Number.isFinite(anchor && anchor.headingDeg)
+        ? anchor.headingDeg : this.geoAnchor.headingDeg,
+      height: Number.isFinite(anchor && anchor.height)
+        ? anchor.height : (Number(anchor && anchor.elevationM) || 0)
+    };
+    if (![next.lat, next.lon, next.headingDeg, next.height].every(Number.isFinite)) return false;
+
+    const pos = this.planeGroup && this.planeGroup.position;
+    const worldSimAnchor = options.simAnchor || { x: pos ? pos.x : 0, y: 0, z: pos ? pos.z : 0 };
+    const renderSimAnchor = { ...worldSimAnchor };
+    this.geoSimAnchorBase = { ...worldSimAnchor };
+    this.geoRenderSimAnchor = renderSimAnchor;
+    if (typeof window !== 'undefined') {
+      window.GEO_SIM_ANCHOR = { x: worldSimAnchor.x, z: worldSimAnchor.z };
+    }
+
+    if (this.geoLayer && typeof this.geoLayer.dispose === 'function') this.geoLayer.dispose();
+    this.geoLayer = null;
+    if (this.terrainProvider && typeof this.terrainProvider.dispose === 'function') {
+      this.terrainProvider.dispose();
+    }
+    this.terrainProvider = null;
+
+    Object.assign(this.geoAnchor, next);
+    if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, next);
+    else window.GEO_ANCHOR = { ...next };
+    this.geoAzimuth = (next.headingDeg + 180) % 360;
+    this.geoIonToken = token;
+
+    const jejuFocus = typeof this.getJejuLocalPosition === 'function' ? this.getJejuLocalPosition() : null;
+    const isKoreaRegion = next.lat >= 32 && next.lat <= 39 && next.lon >= 124 && next.lon <= 132;
+    const defaultFocus = [];
+    if (isKoreaRegion) {
+      defaultFocus.push({ x: worldSimAnchor.x, y: 0, z: worldSimAnchor.z, radius: 500000, maxAltitude: 25000, maxDepth: 19 });
+    }
+    if (jejuFocus) {
+      defaultFocus.push({ x: jejuFocus.x, y: 0, z: jejuFocus.z, radius: 12000, maxAltitude: 2000, maxDepth: 19 });
+    }
+    const focusSource = Array.isArray(options.focusAnchors) && options.focusAnchors.length
+      ? options.focusAnchors
+      : defaultFocus;
+    const focusBase = focusSource.map(anchor => ({ ...anchor }));
+    this.geoFocusBases = focusBase.map(anchor => ({ ...anchor }));
+    const renderFocusAnchors = focusBase.map(anchor => ({ ...anchor }));
+    this.geoRenderFocusAnchors = renderFocusAnchors;
+    const prevSceneChildren = Array.isArray(this.scene.children) ? this.scene.children.length : 0;
+    this.geoLayer = window.HajunGeoTiles.create({
+      ionToken: token,
+      lat: next.lat,
+      lon: next.lon,
+      height: next.height,
+      azimuth: this.geoAzimuth,
+      simAnchor: worldSimAnchor,
+      worldAnchor: worldSimAnchor,
+      simAnchorBase: this.geoSimAnchorBase,
+      simAnchorRender: renderSimAnchor,
+      nearAnchorMaxDepth: 17,
+      errorTarget: options.errorTarget !== undefined ? options.errorTarget : this.getGeoTilesErrorTarget(),
+      focusAnchors: focusBase,
+      focusAnchorsRender: renderFocusAnchors,
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      container: this.container
+    });
+    if (!this.geoLayer) return false;
+    this._captureGeoTilesGroup(prevSceneChildren);
+
+    const flatZones = options.flatZones !== undefined
+      ? options.flatZones
+      : ((this.defaultGeoAnchor && Math.abs(next.lat - this.defaultGeoAnchor.lat) < 1e-4 && Math.abs(next.lon - this.defaultGeoAnchor.lon) < 1e-4)
+          ? undefined
+          : []);
+    this.enableTerrainProvider({ simOffset: worldSimAnchor, flatZones });
+    ['terrainGroup', 'islandsGroup', 'mountainsGroup', 'treesGroup'].forEach(name => {
+      if (this[name]) this[name].visible = false;
+    });
+    this.applyAirfieldMinimalism();
+    return true;
+  }
+
+  // Translate the scene/camera into a camera-relative render frame while all
+  // simulation, provider and HUD math keeps using world metres.
+  applyFloatingOrigin() {
+    if (!this.renderOrigin || !this.planeGroup) return;
+    if (this.camera && this.renderOriginApplied) this.camera.position.add(this.renderOriginApplied);
+    this.renderOrigin.copy(this.planeGroup.position);
+    if (this.scene) this.scene.position.set(-this.renderOrigin.x, -this.renderOrigin.y, -this.renderOrigin.z);
+    if (this.camera && this.renderOriginApplied) {
+      this.camera.position.sub(this.renderOrigin);
+      this.renderOriginApplied.copy(this.renderOrigin);
+    }
+    if (this.geoSimAnchorBase && this.geoRenderSimAnchor) {
+      this.geoRenderSimAnchor.x = this.geoSimAnchorBase.x - this.renderOrigin.x;
+      this.geoRenderSimAnchor.y = this.geoSimAnchorBase.y - this.renderOrigin.y;
+      this.geoRenderSimAnchor.z = this.geoSimAnchorBase.z - this.renderOrigin.z;
+    }
+    if (this.geoFocusBases && this.geoRenderFocusAnchors) {
+      for (let i = 0; i < this.geoFocusBases.length; i++) {
+        const base = this.geoFocusBases[i];
+        const render = this.geoRenderFocusAnchors[i];
+        render.x = base.x - this.renderOrigin.x;
+        render.z = base.z - this.renderOrigin.z;
+      }
+    }
+    // Sync scene & camera world matrices immediately after floating-origin shift.
+    // updateCameraFromPhysics() calls camera.lookAt() in world space, which bakes
+    // world-space coordinates into camera.matrixWorld / matrixWorldInverse; without
+    // refreshing here, TilesRenderer.prepareForTraversal() sees a 2x-shifted frustum
+    // and culls foreground 3D tiles prematurely.
+    if (this.scene && typeof this.scene.updateMatrixWorld === 'function') {
+      this.scene.updateMatrixWorld();
+    }
+    if (this.camera && typeof this.camera.updateMatrixWorld === 'function') {
+      this.camera.updateMatrixWorld();
+    }
   }
 
   // ----------------------------------------------------------------
@@ -384,7 +813,7 @@ class AirplaneGame {
       this.updateLandingGearAnimation(dt);
       this.updateHUD();
       this.updateCameraFromPhysics(0, dt);
-    } else if (this.isPlaying && !this.isDestroyed) {
+    } else if (this.isPlaying && !this.isDestroyed && !this.screenPaused) {
       if (this.currentEmergency) this.updateEmergency(dt);
       this.updateFlightPhysics(dt);
       this.updateControlSurfaces(dt);
@@ -460,6 +889,23 @@ class AirplaneGame {
       this.screenShake *= 0.92;
     }
 
+    if (this.floatingOrigin && this.planeGroup && typeof window.geoLocalToLatLon === 'function') {
+      const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+      const camLatLon = window.geoLocalToLatLon(
+        this.planeGroup.position.x - anchorBase.x,
+        this.planeGroup.position.z - (anchorBase.z || 0)
+      );
+      this.floatingOrigin.rebase(camLatLon.lat, camLatLon.lon);
+    }
+    this.applyFloatingOrigin();
+    if (this.geoLayer) {
+      this.geoLayer.update();
+      this.applyGeoTilesFlattenZones();
+    }
+    if (this.terrainProvider && this.planeGroup) this.terrainProvider.update(this.planeGroup.position);
+    if (window.LandmarkPins && typeof window.LandmarkPins.update === 'function') {
+      window.LandmarkPins.update();
+    }
     this.renderer.render(this.scene, this.camera);
   }
 }

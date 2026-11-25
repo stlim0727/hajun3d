@@ -68,6 +68,7 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 
 /* HUD Overlay */
 #hud {
+  --hud-controls-width: clamp(340px, 38vw, 760px);
   position: absolute;
   top: 0;
   left: 0;
@@ -81,8 +82,8 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 .hud-top {
   position: absolute;
   top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 20px;
+  max-width: calc(100vw - var(--hud-controls-width) - 60px);
   display: flex;
   gap: 16px;
   pointer-events: auto;
@@ -136,7 +137,11 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   top: 20px;
   right: 20px;
   display: flex;
-  gap: 10px;
+  width: var(--hud-controls-width);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 6px 10px;
   pointer-events: auto;
 }
 
@@ -170,6 +175,12 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
 
 .icon-btn:active {
   transform: scale(0.96);
+}
+
+#fullscreen-btn.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
 }
 
 /* Flight Flight Instruments (Bottom Left) */
@@ -288,6 +299,42 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   box-shadow: 0 0 4px #000;
 }
 
+.pfd-heading-readout {
+  margin-top: 4px;
+  width: 98px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.65);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.pfd-heading-readout .hdg-label {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+}
+
+.pfd-heading-readout .hdg-value {
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.pfd-heading-readout .hdg-cardinal {
+  font-size: 9px;
+  font-weight: 800;
+  color: #facc15;
+  min-width: 16px;
+  text-align: right;
+}
+
 .gauge-header {
   display: flex;
   justify-content: space-between;
@@ -380,6 +427,21 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   transition: transform 0.1s linear;
 }
 
+.target-indicator .hud-top-heading {
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+  font-family: monospace;
+  padding: 2px 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  border-radius: 6px;
+  letter-spacing: 0.8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .target-indicator .dist-text {
   font-size: 12px;
   font-weight: 800;
@@ -388,6 +450,280 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   padding: 3px 8px;
   border-radius: 10px;
   letter-spacing: 0.5px;
+}
+
+/* Real-world airport distance / true bearing indicator list */
+.airport-indicators {
+  position: absolute;
+  top: 92px;
+  left: 20px;
+  min-width: 248px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: auto;
+  z-index: 15;
+}
+
+.airport-indicators-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.dest-select {
+  background: rgba(15, 23, 42, 0.85);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+}
+
+.dest-select:focus {
+  border-color: #38bdf8;
+}
+
+/* Nearby landmark info panel (Wikipedia geosearch, bundled fallback offline) */
+.landmark-panel {
+  position: absolute;
+  top: 92px;
+  left: 290px;
+  width: 286px;
+  max-height: min(62vh, 470px);
+  overflow-y: auto;
+  padding: 9px 11px;
+  font-size: 11px;
+  line-height: 1.45;
+  pointer-events: auto;
+  z-index: 16;
+  border-color: rgba(56, 189, 248, 0.42);
+}
+.landmark-panel.hidden {
+  display: none !important;
+}
+.landmark-btn.active {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+}
+.landmark-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding-bottom: 5px;
+}
+.landmark-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #e2e8f0;
+}
+.landmark-status {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.landmark-status.online { color: #38bdf8; }
+.landmark-status.local { color: #fbbf24; }
+.landmark-icon-btn {
+  background: transparent;
+  border: 0;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}
+.landmark-icon-btn:hover { color: #f8fafc; }
+.landmark-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 6px;
+}
+.landmark-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+.landmark-row:last-child { border-bottom: none; }
+.landmark-thumb,
+.landmark-thumb-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(15, 23, 42, 0.75);
+}
+.landmark-thumb-placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  color: #64748b;
+}
+.landmark-info { min-width: 0; }
+.landmark-name {
+  display: block;
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+a.landmark-name:hover {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+.landmark-extract {
+  color: #94a3b8;
+  font-size: 9.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.landmark-metrics {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.landmark-metrics .dist { color: #fbbf24; }
+.landmark-metrics .brg { color: #38bdf8; }
+.landmark-empty {
+  color: #94a3b8;
+  font-size: 10px;
+  padding: 8px 0;
+}
+.landmark-credit {
+  position: sticky;
+  bottom: 0;
+  margin-top: 7px;
+  padding: 5px 0 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.96);
+  color: #64748b;
+  font-size: 9px;
+}
+
+.landmark-row.selected {
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 3px 0 0 #fbbf24;
+}
+.landmark-detail {
+  position: absolute;
+  top: 250px;
+  right: 20px;
+  width: 300px;
+  max-width: calc(100vw - 40px);
+  padding: 12px 14px;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: auto;
+  z-index: 18;
+  border-color: rgba(251, 191, 36, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 18px rgba(251, 191, 36, 0.18);
+}
+.landmark-detail.hidden {
+  display: none !important;
+}
+.landmark-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding-bottom: 6px;
+}
+.landmark-detail-title {
+  flex: 1;
+  min-width: 0;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.landmark-detail-extract {
+  margin-top: 8px;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.55;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.landmark-detail-coords {
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+.landmark-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.landmark-detail-meta .dist { color: #fbbf24; }
+.landmark-detail-meta .brg { color: #38bdf8; }
+.landmark-detail-link {
+  margin-left: auto;
+  color: #38bdf8;
+  text-decoration: none;
+}
+.landmark-detail-link:hover { text-decoration: underline; }
+
+.airport-indicator-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 58px 42px;
+  gap: 6px;
+  align-items: center;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.airport-indicator-row:hover {
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.airport-indicator-row.active {
+  color: #facc15;
+  font-weight: 800;
+  background: rgba(250, 204, 21, 0.12);
+}
+
+.airport-indicator-row .apt-code {
+  color: #38bdf8;
+}
+
+.airport-indicator-row .apt-dist,
+.airport-indicator-row .apt-brg {
+  text-align: right;
 }
 
 /* Crosshair in Center */
@@ -998,6 +1334,164 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   -webkit-overflow-scrolling: touch !important;
 }
 
+/* Lobby: one primary action, compact setup, optional extras */
+.lobby-setup {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.setup-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #38bdf8;
+}
+
+.lobby-setup select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+.lobby-hint {
+  margin: 0 0 16px !important;
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+}
+
+.lobby-hint .key {
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #38bdf8;
+  font-size: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.lobby-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.lobby-phase-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 76px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  text-align: center;
+  line-height: 1.2;
+}
+.lobby-phase-btn .phase-icon { font-size: 22px; line-height: 1; }
+.lobby-phase-btn .phase-label { font-size: 14px; font-weight: 800; }
+.lobby-phase-btn .phase-desc { font-size: 10px; opacity: 0.75; }
+.lobby-phase-takeoff { background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); }
+.lobby-phase-cruise { background: linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%); box-shadow: 0 4px 20px rgba(14, 165, 233, 0.3); }
+.lobby-phase-approach { background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
+.lobby-phase-note {
+  margin: 0 0 14px !important;
+  font-size: 10.5px !important;
+  line-height: 1.4 !important;
+  color: #94a3b8 !important;
+}
+.lobby-secondary { min-height: 44px; }
+
+.lobby-more {
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  text-align: left;
+}
+
+.lobby-more > summary {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7dd3fc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lobby-more-body { padding: 0 12px 12px; }
+.lobby-more-body .plane-selector-box { margin-bottom: 10px; }
+
+.lobby-extra-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.help-card { max-width: min(680px, calc(100vw - 28px)); }
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.help-header h1 { font-size: 24px !important; margin-bottom: 0 !important; }
+.help-lead { margin: 8px 0 16px !important; }
+.help-card .controls-guide { margin-bottom: 16px; }
+.settings-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.settings-quick .icon-btn { justify-content: center; min-height: 40px; white-space: nowrap; }
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  font-size: 13px;
+}
+.settings-slider-row input { flex: 1; min-width: 0; }
+
+.help-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+
 /* 기종 선택 버튼 및 이륙/주행 시작 버튼 최우선 클릭 레이어 보장 */
 .plane-choice-btn,
 .btn-primary,
@@ -1166,6 +1660,58 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   font-size: 10px;
   color: #94a3b8;
   line-height: 1.3;
+}
+
+.skin-selector-box {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.skin-selector-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.skin-choice-btn {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e2e8f0;
+  cursor: pointer;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.skin-choice-btn:hover {
+  background: rgba(51, 65, 85, 0.9);
+  border-color: #38bdf8;
+}
+
+.skin-choice-btn.active {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.4) 0%, rgba(37, 99, 235, 0.4) 100%);
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.skin-choice-btn strong {
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.skin-swatch {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(135deg, var(--swatch-base) 0%, var(--swatch-base) 52%, var(--swatch-accent) 52%, var(--swatch-accent) 78%, var(--swatch-secondary) 78%);
 }
 
 .controls-guide {
@@ -2407,15 +2953,6 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   100% { transform: scale(1.15); }
 }
 
-.plane-choice-btn.glb-choice-btn {
-  border-color: rgba(56, 189, 248, 0.5) !important;
-  background: rgba(14, 165, 233, 0.15) !important;
-}
-
-.plane-choice-btn.glb-choice-btn:hover {
-  background: rgba(14, 165, 233, 0.35) !important;
-  border-color: #38bdf8 !important;
-}
 
 /* ================================================================
    HOTAS 1 & Airbus Sidestick Flight Control System Styles
@@ -2820,40 +3357,6 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   box-shadow: 0 0 10px rgba(6, 182, 212, 0.6) !important;
 }
 
-/* 4. Collapsible Controls Guide in Modal */
-.controls-guide-collapsible {
-  background: rgba(15, 23, 42, 0.65) !important;
-  border: 1px solid rgba(56, 189, 248, 0.3) !important;
-  border-radius: 10px !important;
-  margin-bottom: 12px !important;
-  overflow: hidden !important;
-  text-align: left !important;
-}
-
-.guide-summary {
-  padding: 10px 14px !important;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  color: #38bdf8 !important;
-  cursor: pointer !important;
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  background: rgba(30, 41, 59, 0.75) !important;
-  user-select: none !important;
-}
-
-.guide-summary:hover {
-  background: rgba(56, 189, 248, 0.15) !important;
-}
-
-.controls-guide-collapsible .controls-guide {
-  padding: 12px !important;
-  margin-bottom: 0 !important;
-  background: transparent !important;
-  max-height: 240px !important;
-  overflow-y: auto !important;
-}
 
 /* ==========================================================================
    📱 Media Queries: max-width: 900px (All Mobile & Compact Devices)
@@ -2870,6 +3373,12 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     top: 10px !important;
     right: 10px !important;
     gap: 6px !important;
+    width: auto !important;
+    max-width: calc(100vw - 170px) !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+    align-items: flex-start !important;
+    row-gap: 4px !important;
     z-index: 60 !important;
   }
   .hud-top-right .icon-btn {
@@ -2913,6 +3422,22 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     top: 54px !important;
     font-size: 11px !important;
     padding: 4px 10px !important;
+  }
+
+  .airport-indicators {
+    top: 86px !important;
+    left: 10px !important;
+    min-width: 0 !important;
+    padding: 4px 6px !important;
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+  }
+  .airport-indicators-title {
+    font-size: 8px !important;
+  }
+  .airport-indicator-row {
+    grid-template-columns: 34px 1fr 44px 32px !important;
+    gap: 3px !important;
   }
 
   /* Master Warning / GPWS Warning Banner Mobile Optimization: Compact, unobtrusive & semi-transparent */
@@ -3001,11 +3526,6 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     touch-action: pan-y !important;
     -webkit-overflow-scrolling: touch !important;
   }
-  .controls-guide-collapsible .controls-guide {
-    max-height: none !important;
-    overflow: visible !important;
-    overflow-y: visible !important;
-  }
   .modal-card h1 {
     font-size: 22px !important;
     margin-bottom: 6px !important;
@@ -3030,18 +3550,16 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   }
   .plane-choice-btn strong {
     font-size: 11px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
   }
   .plane-choice-btn span {
-    font-size: 8.5px !important;
-    line-height: 1.2 !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
-    overflow: hidden !important;
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
   }
+  .lobby-setup {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .lobby-more-body { padding: 0 8px 10px; }
   .btn-primary {
     padding: 12px 16px !important;
     font-size: 14px !important;
@@ -3063,6 +3581,30 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     overflow-y: auto !important;
     right: auto !important;
     z-index: 1150 !important;
+  }
+  .landmark-panel {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%) !important;
+    width: 92vw !important;
+    max-width: 420px !important;
+    max-height: 70vh !important;
+    z-index: 1150 !important;
+    padding: 10px 12px !important;
+  }
+  .landmark-detail {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%) !important;
+    width: 92vw !important;
+    max-width: 420px !important;
+    max-height: 70vh !important;
+    z-index: 1160 !important;
+    padding: 12px 14px !important;
   }
   .glb-modal {
     width: 92vw !important;
@@ -3211,11 +3753,30 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     transform: translateX(-50%) !important;
     font-size: 10px !important;
     padding: 3px 8px !important;
-    max-width: 200px !important;
+    max-width: 220px !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     z-index: 52 !important;
+  }
+
+  .target-indicator .hud-top-heading {
+    font-size: 9.5px !important;
+    padding: 1px 6px !important;
+  }
+
+  .airport-indicators {
+    top: 112px !important;
+    right: 8px !important;
+    left: auto !important;
+    min-width: 0 !important;
+    padding: 3px 5px !important;
+    font-size: 8.5px !important;
+    line-height: 1.3 !important;
+  }
+  .airport-indicator-row {
+    grid-template-columns: 32px 1fr 42px 30px !important;
+    gap: 2px !important;
   }
 
   /* Passenger Reaction Box Toast: Centered notification toast in upper third — clear of controls & center view */
@@ -3424,11 +3985,13 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   }
 
   .touch-rudder-card {
-    width: 116px !important;
-    max-width: calc(100vw - 210px) !important;
+    width: 108px !important;
+    max-width: calc(100vw - 220px) !important;
+    min-width: 68px !important;
     padding: 3px 6px !important;
     border-radius: 8px !important;
     gap: 2px !important;
+    flex-shrink: 1 !important;
   }
 
   .rudder-label-strip {
@@ -3453,15 +4016,18 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   }
 
   .touch-quick-actions {
-    display: flex !important;
-    flex-direction: row !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 3px !important;
-    margin-bottom: 0 !important;
+    width: 114px !important;
+    max-width: 100% !important;
+    margin-bottom: 2px !important;
   }
 
   .touch-quick-actions .mini-action-btn {
-    width: 27px !important;
-    height: 27px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 24px !important;
     border-radius: 6px !important;
     font-size: 11px !important;
     padding: 0 !important;
@@ -3655,7 +4221,7 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   #reverser-btn,
   #gear-btn,
   #plane-toggle-btn,
-  #help-btn {
+  #settings-btn {
     display: none !important;
   }
 
@@ -3703,11 +4269,26 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
     touch-action: manipulation !important;
   }
 
-  /* Mobile Controls Right Safe Area */
+  /* Lobby phase actions: stay in one tappable row on phones */
+  .lobby-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+  .lobby-phase-btn {
+    min-height: 68px !important;
+    padding: 8px 3px !important;
+    touch-action: manipulation !important;
+  }
+  .lobby-phase-btn .phase-icon { font-size: 18px !important; }
+  .lobby-phase-btn .phase-label { font-size: 12px !important; }
+  .lobby-phase-btn .phase-desc { font-size: 9px !important; }
+
+  /* Mobile Controls Safe Area & Zero-Clipping Padding */
   #mobile-controls {
     right: 0 !important;
     left: 0 !important;
-    padding: 12px 14px !important;
+    width: 100% !important;
+    padding: 4px max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left)) !important;
     box-sizing: border-box !important;
   }
 
@@ -3931,4 +4512,107 @@ button, .icon-btn, .touch-btn, .btn-primary, .btn-secondary, .plane-choice-btn, 
   font-size: 13px;
   font-weight: 600;
   color: #e2e8f0;
+}
+
+/* Phones: icon-only top controls keep a single row clear of the heading indicator */
+@media (max-width: 480px) {
+  .hud-top-right .icon-btn span {
+    display: none !important;
+  }
+}
+
+@media (max-width: 340px) and (orientation: portrait) {
+  .target-indicator {
+    left: 56% !important;
+  }
+}
+
+/* Short desktop windows: keep the airport list above the taller PFD */
+@media (min-width: 901px) and (max-height: 740px) {
+  .airport-indicators {
+    padding: 4px 8px !important;
+    font-size: 9px !important;
+    line-height: 1.25 !important;
+  }
+  .airport-indicators-title {
+    font-size: 9px !important;
+    padding-bottom: 2px !important;
+    margin-bottom: 2px !important;
+  }
+  .airport-indicator-row {
+    gap: 4px !important;
+  }
+}
+
+/* Selectable spawn-place picker (interim Gimhae-frame presets) */
+.place-picker-panel {
+  z-index: 1250 !important;
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2);
+}
+
+.place-picker-panel .emergency-title {
+  color: #7dd3fc;
+}
+
+.place-picker-select {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e0f2fe;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  pointer-events: auto !important;
+}
+
+.place-picker-select:focus {
+  border-color: #38bdf8;
+}
+
+.place-picker-coords {
+  font-size: 12px;
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+
+.place-picker-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+/* Persistent problem report access (above every overlay) */
+.problem-report-float {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1300 !important;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.problem-report-float:hover { border-color: #38bdf8; }
+
+@media (max-width: 900px) {
+  .problem-report-float {
+    top: max(6px, env(safe-area-inset-top)) !important;
+    bottom: auto !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+  .problem-report-float span { display: none; }
 }

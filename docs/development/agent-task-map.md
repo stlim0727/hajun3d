@@ -13,7 +13,7 @@ system context, while the modular subsystem files define actual runtime behavior
 | **5. Lighting, Sky, PAPI & Environment** | `web/js/environment.js` | `npm run check`; day/night toggle check (`N` key) |
 | **6. Airports, 36L Runway & GSE Vehicles** | `web/js/airports.js` | `npm run check`; gate docking & taxi check |
 | **7. Procedural Aircraft Builder & Liveries** | `web/js/aircraft_builder.js` | `npm run check`; model switch in browser |
-| **8. Binary GLB Loader & Pipeline** | `web/js/glb_pipeline.js`; `web/glb_bundle.js` | `npm run check`; zero-CORS local load verification |
+| **8. Binary GLB Loader & Pipeline** | `web/js/glb_pipeline.js`; `web/glb_bundle.js` | `npm run check`; browser model load verification |
 | **9. Contrails, Smoke & Crash Effects** | `web/js/effects.js` | `npm run check`; emergency crash / smoke visual check |
 | **10. Controls: Keyboard, Mobile Joystick & HOTAS** | `web/js/input.js` | `npm run check`; mobile touch & stick calibration |
 | **11. In-flight Emergencies & Heroic Landing** | `web/js/emergency.js` | `npm run check`; trigger emergency scenarios |

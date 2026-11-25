@@ -254,6 +254,34 @@ test('audio subsystem: jet engine synthesizes pink noise roar + N1/N2 twin spool
   assert.equal(game.buzzsawGain.gain.value, 0.0, 'Buzzsaw must silence when engine off');
 });
 
+test('audio subsystem: engine bus lowers volume and attenuates by camera POV', () => {
+  const { AirplaneGame } = loadAudioSubsystem();
+  const game = new AirplaneGame();
+  game.initAudio();
+  game.audioCtx.state = 'running';
+  game.cameraMode = '1st';
+  game.n1 = 100;
+  game.startJetSound();
+
+  assert.ok(game.engineBus, 'Dedicated engine gain bus must exist');
+  assert.ok(game.engineBus.connectedTo.includes(game.masterGain), 'Engine bus feeds master gain');
+  assert.ok(game.jetNoiseGain.connectedTo.includes(game.engineBus), 'Jet noise must route through engine bus');
+  assert.ok(game.pistonGain.connectedTo.includes(game.engineBus), 'Piston engine must route through engine bus');
+
+  const cockpitVolume = game.engineBus.gain.value;
+  assert.ok(Math.abs(cockpitVolume - 0.325) < 1e-6, `engine bus must be 50% below the original 0.65 level, got ${cockpitVolume}`);
+
+  game.cameraMode = '3rd';
+  game.updateAudio(0.016);
+  const chaseVolume = game.engineBus.gain.value;
+  game.cameraMode = 'tower';
+  game.updateAudio(0.016);
+  const towerVolume = game.engineBus.gain.value;
+
+  assert.ok(chaseVolume < cockpitVolume, 'Chase camera must attenuate engine noise vs cockpit');
+  assert.ok(towerVolume < chaseVolume, 'Remote camera must attenuate engine noise further');
+});
+
 test('audio subsystem: aerodynamic wind slipstream modulates with airspeed and spoilers', () => {
   const { AirplaneGame } = loadAudioSubsystem();
   const game = new AirplaneGame();

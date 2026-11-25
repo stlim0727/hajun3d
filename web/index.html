@@ -4,11 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sky Explorer 3D - 3D 비행기 게임</title>
-  <link rel="stylesheet" href="style.css">
-  <!-- Three.js & GLTF/GLB 3D Pipeline CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+  <link rel="stylesheet" href="style.css?v=20261123a">
+  <!-- Unified Three.js + GLTF/GLB pipeline + optional 3D Tiles (offline-safe local bundle) -->
+  <script src="js/three_core_bundle.js?v=20261123f"></script>
+  <!-- Headless 120 Hz 6-DOF Physics Core (@stlim0727/flightsim-core); precedes geo/tile adapters -->
+  <script src="js/flightsim_core_bundle.js?v=20261121b"></script>
+  <script src="js/geodesy.js?v=20261123a"></script>
+  <script src="js/floating_origin.js?v=20261123a"></script>
+  <script src="js/geo_config.js?v=20261123b"></script>
+  <script src="js/airport_indicators.js?v=20261122a"></script>
+  <script src="js/route_model.js?v=20261123a"></script>
+  <script src="js/landmarks.js?v=20261124a"></script>
+  <script src="js/landmark_pins.js?v=20261124b"></script>
+  <script src="js/tile_engine.js?v=20261123a"></script>
 </head>
 <body>
   <!-- 3D WebGL Canvas Container -->
@@ -48,8 +56,53 @@
 
     <!-- Target Ring / Runway Direction Indicator -->
     <div id="target-indicator" class="target-indicator">
+      <div id="hud-top-heading" class="hud-top-heading" title="현재 비행기 진방위 (True Heading)">HDG 354° N</div>
       <div class="arrow"></div>
       <span id="target-dist" class="dist-text">활주로 36L (150m)</span>
+    </div>
+
+    <!-- Real-world airport distance / true bearing indicators & destination selector -->
+    <div id="airport-indicators" class="airport-indicators glass" aria-label="공항 거리 및 방위 지시기">
+      <div class="airport-indicators-title">
+        <span>목적지 / AIRPORTS</span>
+        <select id="destination-select" class="dest-select" aria-label="목적지 공항 선택" onchange="window.setDestinationAirport(this.value)">
+          <option value="RKSI" selected>ICN 인천</option>
+          <option value="RKPK">PUS 김해</option>
+          <option value="RKSS">GMP 김포</option>
+          <option value="RKPC">CJU 제주</option>
+          <option value="RKTN">TAE 대구</option>
+          <option value="RKJK">KUV 군산</option>
+          <option value="RJFF">FUK 후쿠오카</option>
+        </select>
+      </div>
+      <div id="airport-indicator-rows"></div>
+    </div>
+
+    <!-- Nearby landmark info from Wikipedia geosearch (bundled fallback offline) -->
+    <div id="landmark-panel" class="landmark-panel glass hidden" aria-label="주변 랜드마크 정보">
+      <div class="landmark-panel-header">
+        <span class="landmark-title">🗺️ 주변 랜드마크</span>
+        <span id="landmark-status" class="landmark-status">대기</span>
+        <button id="landmark-refresh-btn" class="landmark-icon-btn" type="button" title="새로고침" onclick="window.refreshLandmarkPanel()">↻</button>
+        <button id="landmark-close-btn" class="landmark-icon-btn" type="button" title="닫기" onclick="window.toggleLandmarkPanel(true)">✕</button>
+      </div>
+      <div id="landmark-list" class="landmark-list"></div>
+      <div class="landmark-credit"><span id="landmark-source">Wikipedia · CC BY-SA</span></div>
+    </div>
+
+    <!-- Detail card opened by clicking a terrain pin or a landmark row -->
+    <div id="landmark-detail" class="landmark-detail glass hidden" aria-live="polite">
+      <div class="landmark-detail-header">
+        <span id="landmark-detail-title" class="landmark-detail-title">장소 정보</span>
+        <button id="landmark-detail-close-btn" class="landmark-icon-btn" type="button" title="닫기" onclick="window.closeLandmarkDetail()">✕</button>
+      </div>
+      <div id="landmark-detail-extract" class="landmark-detail-extract"></div>
+      <div id="landmark-detail-coords" class="landmark-detail-coords"></div>
+      <div class="landmark-detail-meta">
+        <span id="landmark-detail-distance" class="dist">--</span>
+        <span id="landmark-detail-bearing" class="brg">---°</span>
+        <a id="landmark-detail-link" class="landmark-detail-link" href="#" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a>
+      </div>
     </div>
 
     <!-- Master Warning / GPWS Warning Banner -->
@@ -81,6 +134,11 @@
             <div class="symbol-dot"></div>
             <div class="symbol-wing right"></div>
           </div>
+        </div>
+        <div class="pfd-heading-readout" title="현재 항공기 진방위 (True Heading)">
+          <span class="hdg-label">🧭 HDG</span>
+          <span id="heading-val" class="hdg-value">354°</span>
+          <span id="heading-cardinal" class="hdg-cardinal">N</span>
         </div>
       </div>
 
@@ -127,7 +185,7 @@
       <button id="mic-toggle-btn" class="icon-btn glass mic-btn pc-only-hud" title="기장 안내 방송 마이크 (단축키 M)" onclick="window.toggleMicrophone()">🎙️ <span id="mic-status-text">마이크 ON</span></button>
       <button id="engine-shutdown-btn" class="icon-btn glass engine-shutdown-btn pc-only-hud" title="엔진 정지 / 시동 (단축키 E)" onclick="window.toggleEngineShutdown()">🔴 <span id="engine-status-text">엔진 ON</span></button>
       <button id="deplane-quick-btn" class="icon-btn glass deplane-quick-btn hidden" title="승객 하선 시작 (단축키 Enter)" onclick="window.startDeplaning()">🚪 <span id="deplane-quick-text">하선 시작</span></button>
-      <button id="cruise-speed-btn" class="icon-btn glass cruise-btn pc-only-hud" title="200km 장거리 배속 순항 (단축키 X)" onclick="window.toggleCruiseSpeed()">🚀 <span id="cruise-speed-text">순항 1x</span></button>
+      <button id="cruise-speed-btn" class="icon-btn glass cruise-btn pc-only-hud" title="340km 장거리 배속 순항 (단축키 X)" onclick="window.toggleCruiseSpeed()">🚀 <span id="cruise-speed-text">순항 1x</span></button>
       <button id="time-toggle-btn" class="icon-btn glass time-toggle-btn pc-only-hud" title="낮/밤 모드 전환 (단축키 N)" onclick="window.toggleTimeOfDay()">☀️ <span id="time-mode-text">낮</span></button>
       <button id="emergency-btn" class="icon-btn glass emergency-top-btn pc-only-hud" title="비상 상황 시나리오" onclick="window.toggleEmergencyPanel()">🚨 <span id="emergency-text">비상 상황</span></button>
       <button id="glb-btn" class="icon-btn glass glb-btn pc-only-hud" title="GLB 3D 파일 불러오기 / 내보내기" onclick="window.toggleGLBMenu()">📦 <span id="glb-status-text">GLB 3D</span></button>
@@ -156,10 +214,10 @@
         </div>
       </div>
       <div class="effect-control-wrap pc-only-hud">
-        <button id="effect-menu-btn" class="icon-btn glass" title="기류/속도선 이펙트 강도 조절" onclick="window.toggleEffectMenu()">💨 <span id="effect-intensity-text">기류 35%</span></button>
+        <button id="effect-menu-btn" class="icon-btn glass" title="속도감 이펙트 강도 조절" onclick="window.toggleEffectMenu()">💨 <span id="effect-intensity-text">속도감 35%</span></button>
         <div id="effect-settings-menu" class="cam-mode-menu effect-settings-menu glass hidden">
           <div class="cam-mode-menu-header effect-menu-header">
-            <span>💨 기류/속도선 이펙트 강도</span>
+            <span>💨 속도감 이펙트 강도</span>
             <strong id="effect-slider-val-pc" class="effect-pct-badge">35%</strong>
           </div>
           <div class="effect-slider-row">
@@ -174,7 +232,10 @@
         </div>
       </div>
       <button id="sound-btn" class="icon-btn glass" title="사운드 온/오프" onclick="window.toggleSound()">🔊</button>
-      <button id="help-btn" class="icon-btn glass pc-only-hud" title="조작 방법" onclick="window.openHelp()">❓</button>
+      <button id="fullscreen-btn" class="icon-btn glass" title="전체 화면 전환 / 종료" onclick="window.toggleFullscreen()">⛶ <span id="fullscreen-text">전체 화면</span></button>
+      <button id="lobby-btn" class="icon-btn glass" title="로비로 돌아가기 (현재 비행 종료)" onclick="window.openLobby()">🏠 <span id="lobby-btn-text">로비</span></button>
+      <button id="settings-btn" class="icon-btn glass" title="설정 · 조작 가이드" onclick="window.openSettings()">⚙️ <span id="settings-btn-text">설정</span></button>
+      <button id="landmark-btn" class="icon-btn glass pc-only-hud landmark-btn" title="주변 랜드마크 온라인 정보" onclick="window.toggleLandmarkPanel()">🗺️ <span id="landmark-btn-text">주변 명소</span></button>
       <button id="mobile-menu-btn" class="icon-btn glass mobile-menu-btn mobile-only" title="전체 메뉴 및 기능 설정" onclick="window.toggleMobileMenu()">⚙️ <span class="mobile-menu-label">메뉴</span></button>
     </div>
 
@@ -224,7 +285,7 @@
         <div class="mobile-menu-section-title">✨ 화면 및 시각 효과</div>
         <div class="mobile-effect-card">
           <div class="mobile-effect-header">
-            <span>💨 기류 / 속도선 이펙트 강도</span>
+            <span>💨 속도감 이펙트 강도</span>
             <strong id="effect-slider-val-mobile" class="effect-pct-badge">35%</strong>
           </div>
           <input id="effect-intensity-slider-mobile" class="effect-range-slider" type="range" min="0" max="100" step="5" value="35" oninput="window.setSpeedEffectIntensityPercent(this.value)">
@@ -242,13 +303,22 @@
             <span class="item-icon">🚨</span>
             <div><strong>비상 상황 시나리오</strong><small>엔진 화재/윈드시어 등</small></div>
           </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.startHaeundaeFlight(); window.toggleMobileMenu();">
+            <span class="item-icon">🌊</span>
+            <div><strong>해운대 상공 비행</strong><small>Flying over Haeundae</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.startJejuFlyover(); window.toggleMobileMenu();">
+            <span class="item-icon">🏝️</span>
+            <div><strong>제주공항 상공 비행</strong><small>Flying over Jeju Airport</small></div>
+          </button>
+
           <button class="mobile-menu-item-btn mic-btn" type="button" onclick="window.toggleMicrophone(); window.toggleMobileMenu();">
             <span class="item-icon">🎙️</span>
             <div><strong>기장 안내 방송</strong><small id="mobile-mic-status">마이크 ON/OFF</small></div>
           </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.toggleCruiseSpeed(); window.toggleMobileMenu();">
             <span class="item-icon">🚀</span>
-            <div><strong>200km 배속 순항</strong><small id="mobile-cruise-status">1x</small></div>
+            <div><strong>340km 배속 순항</strong><small id="mobile-cruise-status">1x</small></div>
           </button>
           <button class="mobile-menu-item-btn" type="button" onclick="window.toggleTimeOfDay(); window.toggleMobileMenu();">
             <span class="item-icon">☀️/🌙</span>
@@ -270,7 +340,7 @@
             <span class="item-icon">🎮</span>
             <div><strong>HOTAS 1 조이스틱</strong><small>스틱/러더 캘리브레이션</small></div>
           </button>
-          <button class="mobile-menu-item-btn" type="button" onclick="window.openHelp(); window.toggleMobileMenu();">
+          <button class="mobile-menu-item-btn" type="button" onclick="window.openSettings()">
             <span class="item-icon">❓</span>
             <div><strong>운항 매뉴얼</strong><small>조작키 및 비행 팁</small></div>
           </button>
@@ -311,6 +381,18 @@
             <div><strong>순수 HUD</strong><small>Boresight 전방 시점</small></div>
           </button>
         </div>
+
+        <div class="mobile-menu-section-title">🛠️ 시스템 및 문제 신고</div>
+        <div class="mobile-menu-grid">
+          <button class="mobile-menu-item-btn" type="button" onclick="window.downloadProblemReport(); window.toggleMobileMenu();">
+            <span class="item-icon">🧾</span>
+            <div><strong>문제 보고서 다운로드</strong><small>스크린샷 · 위치 · 로그 ZIP</small></div>
+          </button>
+          <button class="mobile-menu-item-btn" type="button" onclick="window.toggleLandmarkPanel(); window.toggleMobileMenu();">
+            <span class="item-icon">🗺️</span>
+            <div><strong>주변 랜드마크</strong><small>Wikipedia 온라인 정보</small></div>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -347,6 +429,20 @@
           <div class="em-info">
             <strong>랜딩 기어 전개 고장</strong>
             <span>유압 손실로 기어가 펴지지 않아 동체 착륙 필요</span>
+          </div>
+        </button>
+        <button class="emergency-choice-btn" type="button" onclick="window.triggerEmergency('tail_loss')">
+          <div class="em-icon">💥</div>
+          <div class="em-info">
+            <strong>꼬리날개 이탈 & 전 유압 상실 (JAL 123)</strong>
+            <span>수직꼬리날개 파손! 좌우는 요크, 상하는 엔진 출력으로 비상 조종</span>
+          </div>
+        </button>
+        <button class="emergency-choice-btn" type="button" onclick="window.triggerEmergency('in_flight_breakup')">
+          <div class="em-icon">☄️</div>
+          <div class="em-info">
+            <strong>꼬리 부위 피로 파단 & 공중 분해 (CAL 611)</strong>
+            <span>부실 수리된 꼬리 균열로 기체가 공중에서 분해되어 추락 (생존 불가)</span>
           </div>
         </button>
         <button class="emergency-choice-btn em-random" type="button" onclick="window.triggerEmergency('random')">
@@ -544,7 +640,7 @@
         <div class="hotas-mapping-grid">
           <div class="map-chip"><span class="kbd-badge">Trigger (검지)</span> 역추진 제동 / 브레이크</div>
           <div class="map-chip"><span class="kbd-badge">Button B (2)</span> 랜딩 기어 토글 (G)</div>
-          <div class="map-chip"><span class="kbd-badge">Button A (3)</span> 200km 배속 순항 토글 (X)</div>
+          <div class="map-chip"><span class="kbd-badge">Button A (3)</span> 340km 배속 순항 토글 (X)</div>
           <div class="map-chip"><span class="kbd-badge">Button Y (4)</span> 카메라 1인칭/3인칭 전환 (C)</div>
           <div class="map-chip"><span class="kbd-badge">LB / RB (5,6)</span> 스로틀 출력 미세 감속 / 가속</div>
           <div class="map-chip"><span class="kbd-badge">LT / RT (7,8)</span> 방향타(Rudder) 좌우 미세 편향</div>
@@ -742,7 +838,10 @@
       </div>
     </div>
   </div>
+  <!-- Persistent problem report access: visible on every screen -->
+  <button id="problem-report-float-btn" class="problem-report-float glass" type="button" title="문제 보고서 다운로드 (스크린샷 · 위치 · 로그 ZIP)" onclick="window.downloadProblemReport()">🧾 <span>문제 보고</span></button>
 
+  <!-- Selectable spawn-place picker (interim presets in the Gimhae-anchored frame) -->
   <!-- Start / Game Over Modal -->
   <div id="overlay-screen" class="overlay">
     <div class="modal-card glass">
@@ -756,160 +855,254 @@
         <span data-build-age>unknown</span>
       </p>
       <p id="modal-desc">
-        게이트에서 승객을 태우고, 유도로(Taxiway)를 따라 활주로로 이동해 이륙하세요!<br>
-        200km 대륙 횡단 항로를 비행하여 <strong>인천국제공항(메가 허브 공항)</strong>에 착륙 후 게이트까지 주행을 완료하세요.
+        김해국제공항 출발 → 인천국제공항 도착, 340km 대륙 횡단 비행. 기종 선택 후 바로 비행을 시작하세요.
       </p>
 
-      <!-- Airplane Model Selector -->
-      <div class="plane-selector-box">
-        <label class="plane-select-label">조종할 제트 여객기 선택</label>
-        <div class="plane-selector-buttons">
-          <button id="select-a320" class="plane-choice-btn active" type="button" onclick="window.switchPlane('a320')">
-            <strong>에어버스 A320 (Airbus)</strong>
-            <span>샤클렛 + 트윈 터보팬 최신 에어버스 제트기 (HOTAS 1 지원)</span>
-          </button>
-          <button id="select-a350" class="plane-choice-btn" type="button" onclick="window.switchPlane('a350')">
-            <strong>에어버스 A350-900 XWB</strong>
-            <span>롤스로이스 트렌트 XWB + 최첨단 탄소복합재 광동체 장거리 여객기</span>
-          </button>
-          <button id="select-b747" class="plane-choice-btn" type="button" onclick="window.switchPlane('b747')">
-            <strong>B747-400 점보</strong>
-            <span>2층 덱 + 4발 엔진 + 18륜 기어</span>
-          </button>
-          <button id="select-dc10" class="plane-choice-btn" type="button" onclick="window.switchPlane('dc10')">
-            <strong>DC-10 삼발기</strong>
-            <span>주익 2기 + 꼬리 1기</span>
-          </button>
-          <button id="select-md80" class="plane-choice-btn" type="button" onclick="window.switchPlane('md80')">
-            <strong>MD-80 쌍발기</strong>
-            <span>후방 2기 + T-Tail</span>
-          </button>
-          <button id="select-concorde" class="plane-choice-btn" type="button" onclick="window.switchPlane('concorde')">
-            <strong>콩코드 초음속기</strong>
-            <span>마하 2.0 델타익 + 드룹노즈</span>
-          </button>
-          <button id="select-amphibian" class="plane-choice-btn" type="button" onclick="window.switchPlane('amphibian')">
-            <strong>CL-215 수륙양용기</strong>
-            <span>듀얼 플로트 + 바다/활주로 이착륙</span>
-          </button>
-          <button id="select-ancestor" class="plane-choice-btn ancestor-choice-btn" type="button" onclick="window.switchPlane('ancestor')">
-            <strong>🛩️ 1903 조상 비행기</strong>
-            <span>인류 최초 복엽기 + 트윈 목재 프로펠러</span>
-          </button>
-          <button id="select-glb" class="plane-choice-btn glb-choice-btn" type="button" onclick="window.triggerGLBFileSelect()">
-            <strong>📦 커스텀 GLB 모델</strong>
-            <span>.glb 3D 파일 직접 불러와서 비행</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
-        <button id="takeoff-direct-btn" class="btn-primary" type="button" onclick="window.startDirectTakeoff()" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); pointer-events: auto !important; cursor: pointer !important;">🛫 활주로에서 즉시 이륙하기 (추천)</button>
-        <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()" style="pointer-events: auto !important; cursor: pointer !important;">🏢 게이트 탑승 & 유도로 주행하기 ✈️</button>
-        <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()" style="background: rgba(14, 165, 233, 0.18); border-color: rgba(56, 189, 248, 0.55); color: #e0f2fe; pointer-events: auto !important; cursor: pointer !important;">🔍 3D GLB 모델 갤러리 둘러보기 (회전 · 줌)</button>
-      </div>
-
-      <details class="controls-guide-collapsible">
-        <summary class="guide-summary">
-          <span>🎮 조작키 및 상세 매뉴얼 (키보드 / HOTAS / 모바일 터치)</span>
-          <span class="summary-toggle-icon">▼</span>
-        </summary>
-        <div class="controls-guide">
-          <div class="guide-grid">
-            <div class="guide-item" style="grid-column: 1 / -1; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.5);">
-              <span class="key" style="background:#0284c7; color:#fff;">🎮 HOTAS 1</span>
-              <span><strong>Thrustmaster T.Flight HOTAS One 비행 스틱 & 스로틀 레버</strong> 100% 지원! 에어버스 사이드스틱으로 피치/롤/요/스로틀 정밀 비행</span>
-            </div>
-            <div class="guide-item mobile-item" style="grid-column: 1 / -1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); padding: 8px;">
-              <span class="key" style="background:#059669; color:#fff;">📱 기기 기울기 & 터치 (737 감도)</span>
-              <span><strong>기기 틸트(자이로)</strong>: 기기를 앞뒤(±25° 피치), 좌우(±30° 롤)로 기울여 보잉 737 조종간처럼 비행 (기본 ON) • <strong>오른쪽 FLIGHT YOKE</strong>: 터치 가상 스틱 동시 조작 • <strong>왼쪽 스로틀</strong>: 출력 쿼드런트 & 러더</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">0 ~ 9 키</span>
-              <span>엔진 출력 조절 (0: 정지/아이들 ~ 9: 90%, Shift: 100% 전출력)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">A / D 키</span>
-              <span>방향 조절 (공중: 좌우 롤 및 선회 / 지상: 앞바퀴 조향)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">↓ 아래 화살표</span>
-              <span>기수 상승 (Pitch Up) / 220km/h 이륙 시 당겨서 띄우기</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">↑ 위 화살표</span>
-              <span>기수 하강 (Pitch Down)</span>
-            </div>
+      <!-- Compact setup: one aircraft + one livery decision -->
+      <div class="lobby-setup">
+        <label class="setup-field">
+          <span class="setup-label">기종</span>
+          <select id="plane-select" aria-label="기종 선택" onchange="window.switchPlane(this.value)">
+            <option value="a320" selected>에어버스 A320</option>
+            <option value="a350">A350-900 XWB</option>
+            <option value="b747">B747-400 점보</option>
+            <option value="dc10">DC-10 삼발기</option>
+            <option value="md80">MD-80 쌍발기</option>
+            <option value="concorde">콩코드 초음속기</option>
+            <option value="amphibian">CL-215 수륙양용기</option>
+            <option value="ancestor">1903 조상 비행기</option>
+          </select>
+        </label>
         <label class="setup-field">
           <span class="setup-label">출발 장소</span>
           <select id="place-select" aria-label="비행 시작 장소 선택"></select>
         </label>
-            <div class="guide-item">
-              <span class="key">W / S 키</span>
-              <span>W: 고속 가속 / S: 지상 제동 및 착륙 역추진</span>
+      </div>
+
+      <p class="lobby-hint">
+        <span class="key">0-9</span> 출력 · <span class="key">↑↓</span> 피치 · <span class="key">G</span> 기어 ·
+        <button type="button" class="link-btn" onclick="window.openSettings()">⚙️ 설정 · 전체 조작키 보기 →</button>
+      </p>
+
+      <div class="modal-actions lobby-actions" role="group" aria-label="비행 단계 선택">
+        <button id="takeoff-direct-btn" class="btn-primary lobby-phase-btn lobby-phase-takeoff" type="button" onclick="window.startTakeoffPhase()">
+          <span class="phase-icon" aria-hidden="true">🛫</span>
+          <span class="phase-label">이륙</span>
+          <span class="phase-desc">활주로 정렬 · 이륙 활주</span>
+        </button>
+        <button id="cruise-phase-btn" class="btn-secondary lobby-phase-btn lobby-phase-cruise" type="button" onclick="window.startCruisePhase()">
+          <span class="phase-icon" aria-hidden="true">✈️</span>
+          <span class="phase-label">순항</span>
+          <span class="phase-desc">상공 순항 · 항로 비행</span>
+        </button>
+        <button id="approach-phase-btn" class="btn-secondary lobby-phase-btn lobby-phase-approach" type="button" onclick="window.startApproachPhase()">
+          <span class="phase-icon" aria-hidden="true">🛬</span>
+          <span class="phase-label">착륙 접근</span>
+          <span class="phase-desc">파이널 · 착륙 연습</span>
+        </button>
+      </div>
+      <p class="lobby-phase-note">기종과 출발 장소를 고른 뒤 원하는 비행 단계부터 시작하세요. 게이트 탑승은 아래 추가 메뉴에 있습니다.</p>
+
+      <details class="lobby-more">
+        <summary>기종 · 스킨 전체 보기 · 다른 비행 모드 · 설정</summary>
+        <div class="lobby-more-body">
+          <div class="plane-selector-box">
+            <label class="plane-select-label">조종할 제트 여객기 선택</label>
+            <div class="plane-selector-buttons">
+              <button id="select-a320" class="plane-choice-btn active" type="button" onclick="window.switchPlane('a320')">
+                <strong>에어버스 A320 (Airbus)</strong>
+                <span>샤클렛 + 트윈 터보팬 최신 에어버스 제트기 (HOTAS 1 지원)</span>
+              </button>
+              <button id="select-a350" class="plane-choice-btn" type="button" onclick="window.switchPlane('a350')">
+                <strong>에어버스 A350-900 XWB</strong>
+                <span>롤스로이스 트렌트 XWB + 최첨단 탄소복합재 광동체 장거리 여객기</span>
+              </button>
+              <button id="select-b747" class="plane-choice-btn" type="button" onclick="window.switchPlane('b747')">
+                <strong>B747-400 점보</strong>
+                <span>2층 덱 + 4발 엔진 + 18륜 기어</span>
+              </button>
+              <button id="select-dc10" class="plane-choice-btn" type="button" onclick="window.switchPlane('dc10')">
+                <strong>DC-10 삼발기</strong>
+                <span>주익 2기 + 꼬리 1기</span>
+              </button>
+              <button id="select-md80" class="plane-choice-btn" type="button" onclick="window.switchPlane('md80')">
+                <strong>MD-80 쌍발기</strong>
+                <span>후방 2기 + T-Tail</span>
+              </button>
+              <button id="select-concorde" class="plane-choice-btn" type="button" onclick="window.switchPlane('concorde')">
+                <strong>콩코드 초음속기</strong>
+                <span>마하 2.0 델타익 + 드룹노즈</span>
+              </button>
+              <button id="select-amphibian" class="plane-choice-btn" type="button" onclick="window.switchPlane('amphibian')">
+                <strong>CL-215 수륙양용기</strong>
+                <span>듀얼 플로트 + 바다/활주로 이착륙</span>
+              </button>
+              <button id="select-ancestor" class="plane-choice-btn ancestor-choice-btn" type="button" onclick="window.switchPlane('ancestor')">
+                <strong>🛩️ 1903 조상 비행기</strong>
+                <span>인류 최초 복엽기 + 트윈 목재 프로펠러</span>
+              </button>
             </div>
-            <div class="guide-item">
-              <span class="key">🪽 F 키</span>
-              <span>플랩 설정 순환 (UP ➔ 1 ➔ 2 ➔ FULL: 저속 양력 증대 및 실속속도 저하)</span>
+          </div>
+
+          <div class="plane-selector-box skin-selector-box">
+            <label class="plane-select-label">항공사 스킨 선택 (Korean Airlines)</label>
+            <div class="skin-selector-buttons">
+              <button class="skin-choice-btn" type="button" data-skin="default" onclick="window.setAirlineSkin('default')">
+                <span class="skin-swatch" style="--swatch-base:#f8fafc; --swatch-accent:#0284c7; --swatch-secondary:#dc2626;"></span>
+                <strong>기본 스카이젯</strong>
+              </button>
+              <button class="skin-choice-btn active" type="button" data-skin="jeju" onclick="window.setAirlineSkin('jeju')">
+                <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#f47920; --swatch-secondary:#162a4a;"></span>
+                <strong>제주항공</strong>
+              </button>
+              <button class="skin-choice-btn" type="button" data-skin="jin" onclick="window.setAirlineSkin('jin')">
+                <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#7c3aed; --swatch-secondary:#db2777;"></span>
+                <strong>진에어</strong>
+              </button>
+              <button class="skin-choice-btn" type="button" data-skin="eastar" onclick="window.setAirlineSkin('eastar')">
+                <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#dc2626; --swatch-secondary:#0f172a;"></span>
+                <strong>이스타항공</strong>
+              </button>
+              <button class="skin-choice-btn" type="button" data-skin="korean" onclick="window.setAirlineSkin('korean')">
+                <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#0b3b8c; --swatch-secondary:#c8102e;"></span>
+                <strong>대한항공</strong>
+              </button>
+              <button class="skin-choice-btn" type="button" data-skin="asiana" onclick="window.setAirlineSkin('asiana')">
+                <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#1e3a8a; --swatch-secondary:#64748b;"></span>
+                <strong>아시아나항공</strong>
+              </button>
+              <button class="skin-choice-btn" type="button" data-skin="tway" onclick="window.setAirlineSkin('tway')">
+                <span class="skin-swatch" style="--swatch-base:#ffffff; --swatch-accent:#e11d68; --swatch-secondary:#6d28d9;"></span>
+                <strong>티웨이항공</strong>
+              </button>
             </div>
-            <div class="guide-item">
-              <span class="key">🛑 B 키</span>
-              <span>비행 스포일러 / 스피드브레이크 (급강하 감속 & 터치다운 시 접지력 확보)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">⚡ R 키</span>
-              <span>제트 엔진 역추진 (Reverse Thrust: 착륙 후 활주로 급제동)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">🎙️ M 키</span>
-              <span>조종석 마이크 상시 청취 토글 (말할 때마다 승객 285명이 AI로 실시간 맞춤 화답!)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">🛞 G 키</span>
-              <span>랜딩 기어 시퀀스 개폐 (덮개 열림 ➔ 기어 전개/수납 ➔ 덮개 닫힘)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">🚀 X 키</span>
-              <span>200km 대륙 횡단 배속 순항 토글 (1x ➔ 2x ➔ 4x 고속 비행)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">🚨 E 키</span>
-              <span>비상 상황 시나리오 (엔진 화재, 버드 스트라이크, 윈드시어 발생)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">☀️/🌙 N 키</span>
-              <span>낮 / 밤 모드 전환 (밤하늘 별빛, 활주로 유도등, 기체 항법등)</span>
-            </div>
-            <div class="guide-item">
-              <span class="key">💥 충돌/파손</span>
-              <span>살짝 부딪히면 앞쪽 찌그러짐 / 거친 착륙시 기어 파손 / 고속 추락시 대폭발</span>
-            </div>
+          </div>
+
+          <div class="modal-actions lobby-extra-actions">
+            <button id="start-btn" class="btn-secondary" type="button" onclick="window.startGateDeparture()">🏢 게이트 탑승 & 유도로 주행</button>
+            <button id="haeundae-flight-btn" class="btn-secondary" type="button" onclick="window.startHaeundaeFlight()">🌊 해운대 상공 비행</button>
+            <button id="jeju-flyover-btn" class="btn-secondary" type="button" onclick="window.startJejuFlyover()">🏝️ 제주공항 상공 비행</button>
+            <button id="glb-viewer-start-btn" class="btn-secondary" type="button" onclick="window.openGLBViewer()">🔍 3D GLB 모델 갤러리</button>
+            <button id="glb-import-btn" class="btn-secondary" type="button" onclick="window.triggerGLBFileSelect()">📦 커스텀 GLB 불러오기</button>
           </div>
         </div>
       </details>
+
+    </div>
+  </div>
+  <!-- Settings / Controls Modal -->
+  <div id="settings-screen" class="overlay hidden">
+    <div class="modal-card glass help-card">
+      <div class="help-header">
+        <h1>⚙️ 설정 · 조작 가이드</h1>
+        <button id="settings-close-btn" class="close-btn" type="button" onclick="window.closeSettings()">✕</button>
+      </div>
+      <p class="help-lead">비행 설정과 조작키를 한곳에서 확인하세요. 비행 중 열면 시뮬레이션이 일시정지됩니다.</p>
+      <div class="settings-quick" role="group" aria-label="비행 설정">
+        <button id="settings-sound-btn" class="icon-btn glass" type="button" onclick="window.toggleSound(); window.syncSettingsUI()">🔊 사운드 ON</button>
+        <button id="settings-time-btn" class="icon-btn glass" type="button" onclick="window.toggleTimeOfDay(); window.syncSettingsUI()">☀️ 주간 모드</button>
+        <button class="icon-btn glass" type="button" onclick="window.resetCameraLook()">🎯 시선 초기화</button>
+        <button class="icon-btn glass" type="button" onclick="window.toggleGyroTilt(); window.syncSettingsUI()">📱 자이로 전환</button>
+      </div>
+      <label class="settings-slider-row">
+        <span>💨 속도감 <strong id="settings-effect-value">35%</strong></span>
+        <input id="settings-effect-slider" class="effect-range-slider" type="range" min="0" max="100" step="5" value="35" oninput="window.setSpeedEffectIntensityPercent(this.value)">
+      </label>
+      <div class="controls-guide">
+        <div class="guide-grid">
+          <div class="guide-item" style="grid-column: 1 / -1; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.5);">
+            <span class="key" style="background:#0284c7; color:#fff;">🎮 HOTAS 1</span>
+            <span><strong>Thrustmaster T.Flight HOTAS One 비행 스틱 & 스로틀 레버</strong> 100% 지원! 에어버스 사이드스틱으로 피치/롤/요/스로틀 정밀 비행</span>
+          </div>
+          <div class="guide-item mobile-item" style="grid-column: 1 / -1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); padding: 8px;">
+            <span class="key" style="background:#059669; color:#fff;">📱 기기 기울기 & 터치 (737 감도)</span>
+            <span><strong>기기 틸트(자이로)</strong>: 기기를 앞뒤(±25° 피치), 좌우(±30° 롤)로 기울여 보잉 737 조종간처럼 비행 (기본 ON) • <strong>오른쪽 FLIGHT YOKE</strong>: 터치 가상 스틱 동시 조작 • <strong>왼쪽 스로틀</strong>: 출력 쿼드런트 & 러더</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">0 ~ 9 키</span>
+            <span>엔진 출력 조절 (0: 정지/아이들 ~ 9: 90%, Shift: 100% 전출력)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">A / D 키</span>
+            <span>방향 조절 (공중: 좌우 롤 및 선회 / 지상: 앞바퀴 조향)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">↓ 아래 화살표</span>
+            <span>기수 상승 (Pitch Up) / 220km/h 이륙 시 당겨서 띄우기</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">↑ 위 화살표</span>
+            <span>기수 하강 (Pitch Down)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">W / S 키</span>
+            <span>W: 고속 가속 / S: 지상 제동 및 착륙 역추진</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">🪽 F 키</span>
+            <span>플랩 설정 순환 (UP ➔ 1 ➔ 2 ➔ FULL: 저속 양력 증대 및 실속속도 저하)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">🛑 B 키</span>
+            <span>비행 스포일러 / 스피드브레이크 (급강하 감속 & 터치다운 시 접지력 확보)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">⚡ R 키</span>
+            <span>제트 엔진 역추진 (Reverse Thrust: 착륙 후 활주로 급제동)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">🎙️ M 키</span>
+            <span>조종석 마이크 상시 청취 토글 (말할 때마다 승객 285명이 AI로 실시간 맞춤 화답!)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">🛞 G 키</span>
+            <span>랜딩 기어 시퀀스 개폐 (덮개 열림 ➔ 기어 전개/수납 ➔ 덮개 닫힘)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">🚀 X 키</span>
+            <span>340km 대륙 횡단 배속 순항 토글 (1x ➔ 2x ➔ 4x 고속 비행)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">🚨 E 키</span>
+            <span>비상 상황 시나리오 (엔진 화재, 버드 스트라이크, 윈드시어 발생)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">☀️/🌙 N 키</span>
+            <span>낮 / 밤 모드 전환 (밤하늘 별빛, 활주로 유도등, 기체 항법등)</span>
+          </div>
+          <div class="guide-item">
+            <span class="key">💥 충돌/파손</span>
+            <span>살짝 부딪히면 앞쪽 찌그러짐 / 거친 착륙시 기어 파손 / 고속 추락시 대폭발</span>
+          </div>
+        </div>
+      </div>
+      <div class="help-actions">
+        <button id="settings-new-flight-btn" class="btn-secondary" type="button" onclick="window.openLobby()">🔄 새 비행 시작</button>
+        <button id="settings-done-btn" class="btn-primary" type="button" onclick="window.closeSettings()">비행으로 돌아가기</button>
+      </div>
     </div>
   </div>
 
   <script src="glb_bundle.js?v=20261117i"></script>
   <!-- Modular Architecture for Clean Maintenance & Token Efficiency -->
-  <script src="js/core.js"></script>
+  <script src="js/core.js?v=20261123f"></script>
+  <script src="js/problem_report.js?v=20261123f"></script>
   <script src="js/config.js?v=20261117i"></script>
   <script src="js/audio.js"></script>
-  <script src="js/environment.js?v=20261119h"></script>
-  <script src="js/airports.js?v=20261119h"></script>
+  <script src="js/environment.js?v=20261122f"></script>
+  <script src="js/airports.js?v=20261122b"></script>
   <script src="js/aircraft_builder.js"></script>
-  <script src="js/glb_pipeline.js?v=20261119h"></script>
-  <script src="js/effects.js"></script>
-  <!-- Headless 120 Hz 6-DOF Physics Core (@stlim0727/flightsim-core) -->
-  <script src="js/flightsim_core_bundle.js?v=20261117i"></script>
-  <script src="js/physics.js?v=20261117i"></script>
+  <script src="js/glb_pipeline.js?v=20261120c"></script>
+  <script src="js/effects.js?v=20261122a"></script>
+  <script src="js/terrain_provider.js?v=20261121a"></script>
+  <script src="js/physics.js?v=20261123f"></script>
   <script src="js/input.js"></script>
   <script src="js/emergency.js"></script>
   <script src="js/speech.js"></script>
-  <script src="js/ui.js"></script>
+  <script src="js/ui.js?v=20261123f"></script>
   <script src="js/build_info.js"></script>
   <script src="js/build_info_ui.js"></script>
-  <script src="game.js"></script>
+  <script src="game.js?v=20261123f"></script>
   <script>
     window.addEventListener('load', () => {
       const p = new URLSearchParams(window.location.search);

@@ -212,20 +212,35 @@
       }
     });
 
-    if (this.glbMixer && this.glbGearAction) {
-      const dur = this.glbGearDuration || 1.0;
-      // dc10.glb 애니메이션: t=0 수납(UP), t=dur 전개(DOWN)
-      this.glbGearAction.time = isExtending ? progress * dur : (1.0 - progress) * dur;
-      this.glbMixer.update(0);
-    }
+    const actualProgress = isExtending ? progress : (1.0 - progress);
+    if (this.glbMovingPartsController) {
+      this.glbMovingPartsController.updateGear(actualProgress, isExtending, this.gearPhase);
+    } else {
+      if (this.glbMixer && this.glbGearAction) {
+        const dur = this.glbGearDuration || 1.0;
+        // dc10.glb 애니메이션: t=0 수납(UP), t=dur 전개(DOWN)
+        this.glbGearAction.time = isExtending ? progress * dur : (1.0 - progress) * dur;
+        this.glbMixer.update(0);
+      }
 
-    if (this.glbMovingParts && this.glbMovingParts.landingGear) {
-      const gearNode = this.glbMovingParts.landingGear;
-      const gearFactor = isExtending ? progress : (1.0 - progress);
-      const basePosY = gearNode.userData.basePosY || 0;
-      gearNode.visible = gearFactor > 0.15;
-      gearNode.scale.y = 1.0;
-      gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
+      if (this.glbMovingParts && this.glbMovingParts.landingGear) {
+        const gearNode = this.glbMovingParts.landingGear;
+        const gearFactor = isExtending ? progress : (1.0 - progress);
+        const basePosY = gearNode.userData.basePosY || 0;
+        gearNode.visible = gearFactor > 0.15;
+        gearNode.scale.y = 1.0;
+        gearNode.position.y = basePosY + (1.0 - gearFactor) * 1.8;
+      }
+
+      if (this.glbGearNodes && this.glbGearNodes.length > 0) {
+        const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
+        this.glbGearNodes.forEach(n => { n.visible = isVis; });
+      }
+
+      if (this.glbGearMaterials && this.glbGearMaterials.length > 0) {
+        const isVis = isExtending ? (progress > 0.25) : (progress < 0.75);
+        this.glbGearMaterials.forEach(m => { m.visible = isVis; });
+      }
     }
 
     // 시퀀스 완료 처리
@@ -233,6 +248,15 @@
       if (isExtending) {
         this.gearPhase = 'DOWN';
         this.gearExtended = true;
+        if (this.glbMovingPartsController) {
+          this.glbMovingPartsController.setGearProgress(1.0, 'DOWN');
+        }
+        if (this.glbGearNodes) {
+          this.glbGearNodes.forEach(n => { n.visible = true; });
+        }
+        if (this.glbGearMaterials) {
+          this.glbGearMaterials.forEach(m => { m.visible = true; });
+        }
         if (this.glbMixer && this.glbGearAction) {
           this.glbGearAction.time = this.glbGearDuration || 1.0;
           this.glbMixer.update(0);
@@ -261,6 +285,15 @@
       } else {
         this.gearPhase = 'UP';
         this.gearExtended = false;
+        if (this.glbMovingPartsController) {
+          this.glbMovingPartsController.setGearProgress(0.0, 'UP');
+        }
+        if (this.glbGearNodes) {
+          this.glbGearNodes.forEach(n => { n.visible = false; });
+        }
+        if (this.glbGearMaterials) {
+          this.glbGearMaterials.forEach(m => { m.visible = false; });
+        }
         if (this.glbMixer && this.glbGearAction) {
           this.glbGearAction.time = 0;
           this.glbMixer.update(0);
@@ -329,7 +362,7 @@
       );
     }
 
-    // 2. 엘리베이터: 기수 상승 시 후연이 위로 꺾임 (-X 회전)
+    // 2. 엘리베이터: 기수 상승 시 후연이 위로 꺾임 (음의 각도 = 후연 상승)
     const targetElevator = -pitchInput * 0.45;
     if (this.controlSurfaces.leftElevator) {
       this.controlSurfaces.leftElevator.rotation.x = THREE.MathUtils.lerp(
@@ -357,9 +390,9 @@
 
     let targetRudder = 0;
     if (Math.abs(rudderInput) > 0.01) {
-      targetRudder = -rudderInput * 0.55;
+      targetRudder = rudderInput * 0.55;
     } else if (Math.abs(rollInput) > 0.06) {
-      targetRudder = -rollInput * 0.35;
+      targetRudder = rollInput * 0.35;
     }
 
     if (this.controlSurfaces.rudder) {
@@ -386,30 +419,73 @@
       );
     }
 
-    // 4. GLB 가동 파츠 (러더, 플랩, 3발 터보팬 블레이드 회전)
-    if (this.glbMovingParts) {
-      if (this.glbMovingParts.rudder) {
-        const baseY = this.glbMovingParts.rudder.userData.baseRotY || 0;
-        this.glbMovingParts.rudder.rotation.y = THREE.MathUtils.lerp(
-          this.glbMovingParts.rudder.rotation.y,
-          baseY + targetRudder,
+    // 4. GLB 통합 무빙 파츠 컨트롤러 (셰이더 디포메이션, 러더/플랩, 터보팬 블레이드)
+    if (this.glbMovingPartsController) {
+      const flapAngles = [0, 0.16, 0.34, 0.56];
+      const targetFlap = flapAngles[this.flapIndex || 0] || 0;
+      const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
+      this.glbMovingPartsController.updateFlightControls(dt, {
+        targetAileron,
+        targetElevator,
+        targetRudder,
+        targetFlap,
+        rpmRatio
+      });
+    } else {
+      if (this.glbShaderUniforms) {
+        this.glbShaderUniforms.uAileronL.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uAileronL.value,
+          -targetAileron,
+          0.20
+        );
+        this.glbShaderUniforms.uAileronR.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uAileronR.value,
+          targetAileron,
+          0.20
+        );
+        this.glbShaderUniforms.uElevator.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uElevator.value,
+          targetElevator,
+          0.20
+        );
+        this.glbShaderUniforms.uRudder.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uRudder.value,
+          targetRudder,
           0.22
         );
-      }
-      if (this.glbMovingParts.flaps && this.glbMovingParts.flaps.length > 0) {
         const flapAngles = [0, 0.16, 0.34, 0.56];
         const targetFlap = flapAngles[this.flapIndex || 0] || 0;
-        for (let i = 0; i < this.glbMovingParts.flaps.length; i++) {
-          const flap = this.glbMovingParts.flaps[i];
-          const baseX = flap.userData.baseRotX || 0;
-          flap.rotation.x = THREE.MathUtils.lerp(flap.rotation.x, baseX + targetFlap, 0.12);
-        }
+        this.glbShaderUniforms.uFlap.value = THREE.MathUtils.lerp(
+          this.glbShaderUniforms.uFlap.value,
+          targetFlap,
+          0.15
+        );
       }
-      if (this.glbMovingParts.fans && this.glbMovingParts.fans.length > 0) {
-        const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
-        const fanDelta = rpmRatio * 30.0 * (dt || 0.016);
-        for (let i = 0; i < this.glbMovingParts.fans.length; i++) {
-          this.glbMovingParts.fans[i].rotation.z += fanDelta;
+
+      if (this.glbMovingParts) {
+        if (this.glbMovingParts.rudder) {
+          const baseY = this.glbMovingParts.rudder.userData.baseRotY || 0;
+          this.glbMovingParts.rudder.rotation.y = THREE.MathUtils.lerp(
+            this.glbMovingParts.rudder.rotation.y,
+            baseY + targetRudder,
+            0.22
+          );
+        }
+        if (this.glbMovingParts.flaps && this.glbMovingParts.flaps.length > 0) {
+          const flapAngles = [0, 0.16, 0.34, 0.56];
+          const targetFlap = flapAngles[this.flapIndex || 0] || 0;
+          for (let i = 0; i < this.glbMovingParts.flaps.length; i++) {
+            const flap = this.glbMovingParts.flaps[i];
+            const baseX = flap.userData.baseRotX || 0;
+            flap.rotation.x = THREE.MathUtils.lerp(flap.rotation.x, baseX + targetFlap, 0.12);
+          }
+        }
+        if (this.glbMovingParts.fans && this.glbMovingParts.fans.length > 0) {
+          const rpmRatio = this.engineRunning !== false ? (0.18 + (this.throttle || 0) * 0.82) : (this.speedKmh > 25 ? 0.12 : 0);
+          const fanDelta = rpmRatio * 30.0 * (dt || 0.016);
+          for (let i = 0; i < this.glbMovingParts.fans.length; i++) {
+            this.glbMovingParts.fans[i].rotation.z += fanDelta;
+          }
         }
       }
     }
@@ -514,6 +590,7 @@
     core.aero.flapsIndex = Math.max(0, Math.min(core.aero.flapAngles.length - 1, this.flapIndex || 0));
     core.aero.currentFlapAngle = core.aero.flapAngles[core.aero.flapsIndex] || 0;
     core.aero.spoilers = this.spoilerExtended ? 1.0 : 0.0;
+    core.aero.pitchTrim = this.pitchTrim || 0;
     core.gear.gearState = this.gearExtended ? 1.0 : 0.0;
     core.gear.targetGearState = this.gearExtended ? 1.0 : 0.0;
     core.engines.setThrottle(this.throttle || 0);
@@ -539,6 +616,9 @@
 
   resetFlight3dPhysics() {
     this._flight3dCore = null;
+    this._terrainSurfaceQueries = null;
+    this._terrainSurfaceSeaSimY = null;
+    this._terrainEnvironment = null;
     this._flightWarningsCore?.reset();
     return this.initFlight3dPhysics();
   },
@@ -598,18 +678,30 @@
       rudder = this.hotasState.yaw;
     }
     if (this.isOnGround) {
-      if (this.keys.left) rudder = Math.max(-1, rudder - 0.7);
-      if (this.keys.right) rudder = Math.min(1, rudder + 0.7);
+      if (this.keys.left) rudder = Math.max(-1, rudder - 0.85);
+      if (this.keys.right) rudder = Math.min(1, rudder + 0.85);
+      // HOTAS 스틱 / 모바일 터치 조이스틱 좌우 입력도 지상 노즈휠 조향(Tiller)에 연동
+      if (Math.abs(rudder) < 0.05 && Math.abs(aileron) > 0.05) {
+        rudder = THREE.MathUtils.clamp(aileron * 0.9, -1, 1);
+      }
     }
 
     const brakes = (this.keys.brake || this.isBellySliding) ? 1.0 : 0.0;
     const gearHandleDown = !this.isGearCollapsed && Boolean(this.gearExtended);
+    const activeThrottle = THREE.MathUtils.clamp(this.isEngineOff ? 0 : (this.throttle || 0), 0, 1);
+
+    if (this.tailFinDetached) {
+      // JAL 123 전 유압 상실: 요크 상하(승강타) 불능 → 엔진 출력(스로틀)으로 피치/고도 조종, 좌우 롤은 요크 유지
+      if (!this.isOnGround) rudder = 0;
+      elevator = THREE.MathUtils.clamp((activeThrottle - 0.55) * 1.45, -0.75, 0.75);
+      aileron *= 0.78;
+    }
 
     return {
       elevator: THREE.MathUtils.clamp(elevator, -1, 1),
       aileron: THREE.MathUtils.clamp(aileron, -1, 1),
       rudder: THREE.MathUtils.clamp(rudder, -1, 1),
-      throttle: THREE.MathUtils.clamp(this.isEngineOff ? 0 : (this.throttle || 0), 0, 1),
+      throttle: activeThrottle,
       brakes,
       pitchTrim: this.pitchTrim || 0,
       flapsIndex: this.flapIndex || 0,
@@ -619,20 +711,57 @@
     };
   },
 
+  ensureTerrainSurfaceQueries(seaSimY) {
+    const TP = globalThis.TerrainProvider;
+    const hasTP = Boolean(TP?.createGroundSurfaceQueries);
+    if (this._terrainSurfaceQueries && this._terrainSurfaceSeaSimY === seaSimY && this._terrainSurfaceHasTP === hasTP) {
+      return this._terrainSurfaceQueries;
+    }
+    this._terrainSurfaceSeaSimY = seaSimY;
+    this._terrainSurfaceHasTP = hasTP;
+    this._terrainEnvironment = null;
+    const fallbackHeight = (sx, sz) => {
+      const overAirport = typeof this.isOverAirport === 'function' ? this.isOverAirport(sx, sz) : true;
+      return overAirport ? 0.0 : this._terrainSurfaceSeaSimY - 45.0;
+    };
+    if (hasTP) {
+      this._terrainSurfaceQueries = TP.createGroundSurfaceQueries({
+        getProvider: () => this.terrainProvider,
+        getFallbackHeight: fallbackHeight,
+        getFallbackNormal: () => null,
+        minHeight: seaSimY - 45.0,
+        waterFloorHeight: seaSimY - 45.0,
+        Vector3: globalThis.THREE?.Vector3 || (typeof THREE !== 'undefined' ? THREE.Vector3 : null),
+      });
+    } else {
+      this._terrainSurfaceQueries = {
+        getGroundHeight: fallbackHeight,
+        getGroundNormal: () => null,
+        isWater: () => null,
+      };
+    }
+    return this._terrainSurfaceQueries;
+  },
+
   buildFlight3dEnvironment() {
     const seaWorldY = -1.5;
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
     const seaSimY = seaWorldY - (this.groundY || 6.84) + groundOffset;
-    const isOverAirportFn = typeof this.isOverAirport === 'function'
-      ? (sx, sz) => this.isOverAirport(sx, sz)
-      : () => true;
+    const surface = this.ensureTerrainSurfaceQueries(seaSimY);
+    if (this._terrainEnvironment) return this._terrainEnvironment;
 
-    return {
-      getGroundHeight: (sx, sz) => (isOverAirportFn(sx, sz) ? 0.0 : seaSimY - 45.0),
-      getGroundNormal: () => null,
+    const isOverAirportFn = (sx, sz) => (typeof this.isOverAirport === 'function' ? this.isOverAirport(sx, sz) : true);
+    this._terrainEnvironment = {
+      getGroundHeight: surface.getGroundHeight,
+      getGroundNormal: surface.getGroundNormal,
       isOnRunway: (sx, sz) => isOverAirportFn(sx, sz),
       isRunwaySafetyArea: (sx, sz) => isOverAirportFn(sx, sz),
-      getWaterLevel: (sx, sz) => (isOverAirportFn(sx, sz) ? -100.0 : seaSimY),
+      getWaterLevel: (sx, sz) => {
+        const overWater = surface.isWater(sx, sz);
+        if (overWater === true) return this._terrainSurfaceSeaSimY;
+        if (overWater === false) return -100.0;
+        return isOverAirportFn(sx, sz) ? -100.0 : this._terrainSurfaceSeaSimY;
+      },
       getWindWorld: (pos, timeSeconds, out) => {
         if (this.currentEmergency === 'windshear') {
           const t = (Number.isFinite(timeSeconds) ? timeSeconds : 0) * 1.5;
@@ -648,12 +777,14 @@
         return out;
       },
     };
+    return this._terrainEnvironment;
   },
 
   handleFlight3dEvents(events, result) {
     if (!events || !events.length) return;
     for (const ev of events) {
       if (ev.type === 'liftoff') {
+        if (this.isJejuFlyover) continue; // 공중에서 시작하는 상공 비행은 이륙 콜아웃 없음
         this.isOnGround = false;
         this.flightPhase = 'CLIMB_CRUISE';
         if (this.phaseDisplay) this.phaseDisplay.textContent = '상승 및 순항 비행';
@@ -690,13 +821,24 @@
           this.showPopup('🚨 하드 랜딩 경고 (HARD LANDING)! 기체 및 랜딩 기어 점검이 필요합니다.');
           this.score += 200;
         } else if (landingRating.rating === 'crash') {
+          const isCatastrophic = (ev.sinkRate || 0) > 4.5 || contactG >= 3.2
+            || (this.gearPhase === 'UP' && this.currentEmergency !== 'gear_failure' && (ev.sinkRate || 0) > 2.8)
+            || this.pitch < -0.15 || Math.abs(this.roll) > 0.55;
+          if (isCatastrophic && typeof this.triggerExplosion === 'function') {
+            this.triggerExplosion((ev.sinkRate || 0) > 4.5 ? '과도한 강하율 지면 격돌 추락' : '지면 과충격 파쇄 추락');
+            return;
+          }
           this.showPopup('💥 과도한 충격 접지 (CRASH LANDING)!');
         }
 
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('runway_landing');
         }
-        if (this.planeGroup && this.planeGroup.position.z < -30000) {
+        const destIcao = this.selectedDestinationIcao || 'RKSI';
+        const atDestination = (typeof window !== 'undefined' && window.RouteModel && this.planeGroup)
+          ? window.RouteModel.isDestinationLanding(destIcao, this.planeGroup.position.x, this.planeGroup.position.z, !this.geoLayer)
+          : Boolean(this.planeGroup && this.planeGroup.position.z < -30000);
+        if (atDestination) {
           this.flightPhase = 'TAXI_IN';
           if (this.phaseDisplay) this.phaseDisplay.textContent = '대륙 육지 공항 착륙 성공 (게이트 1번으로 주행)';
           this.score += 1500;
@@ -708,14 +850,46 @@
           this.collapseLandingGears();
         }
       } else if (ev.type === 'bodyDamage') {
-        if (typeof this.applyBodyDamageEvent === 'function') {
+        if (ev.id === 'tail' && (this.flightPhase === 'TAKEOFF_RUN' || this.isOnGround) && typeof this.recordTakeoffTailstrike === 'function') {
+          this.recordTakeoffTailstrike();
+        } else if (typeof this.applyBodyDamageEvent === 'function') {
           this.applyBodyDamageEvent(ev.id, ev.state);
+        }
+        if (ev.id === 'nose') {
+          const currentKmh = (this.speed || 0) * 280;
+          if (currentKmh > 55 || Math.abs(this.verticalSpeed || 0) > 3.0 || this.pitch < -0.15) {
+            if (typeof this.triggerExplosion === 'function') {
+              this.triggerExplosion('기수 지면 급강하 격돌 추락');
+              return;
+            }
+          }
+        }
+        if (ev.id === 'wingL' || ev.id === 'wingR') {
+          const currentKmh = (this.speed || 0) * 280;
+          if (currentKmh > 100 && Math.abs(this.roll) > 0.45) {
+            if (typeof this.triggerExplosion === 'function') {
+              this.triggerExplosion('주익 지면 접촉 전복 추락');
+              return;
+            }
+          }
         }
         if (ev.id === 'belly') this.isBellySliding = true;
         if (typeof this.checkEmergencyLandingSuccess === 'function') {
           this.checkEmergencyLandingSuccess('belly_landing');
         }
       } else if (ev.type === 'bodyContact') {
+        if (ev.id === 'nose') {
+          const currentKmh = (this.speed || 0) * 280;
+          if (currentKmh > 70 || Math.abs(this.verticalSpeed || 0) > 4.0 || this.pitch < -0.20) {
+            if (typeof this.triggerExplosion === 'function') {
+              this.triggerExplosion('기수 지면 급강하 격돌 추락');
+              return;
+            }
+          }
+        }
+        if (ev.id === 'tail' && (this.flightPhase === 'TAKEOFF_RUN' || this.isOnGround) && typeof this.recordTakeoffTailstrike === 'function') {
+          this.recordTakeoffTailstrike();
+        }
         if (typeof this.applyBodyContactSparks === 'function') {
           this.applyBodyContactSparks(ev.id, ev.speed);
         }
@@ -742,6 +916,8 @@
         }
       } else if (ev.type === 'amphibianWaterTouchdown') {
         if (typeof this.clearGPWS === 'function') this.clearGPWS();
+        if (typeof this.triggerWaterTouchdownSplash === 'function') this.triggerWaterTouchdownSplash(ev.sinkRate || 2.0);
+        if (typeof this.playWaterSplashSound === 'function') this.playWaterSplashSound(this.groundSpeed || 35, ev.sinkRate || 2.0);
         this.flightPhase = 'TOUCHDOWN';
         if (this.phaseDisplay) this.phaseDisplay.textContent = '수상 착수 완료 (수상 활주 / 이수 가능)';
         this.showPopup('🌊 [수륙양용기 착수] 안정적인 수상 착수! 스로틀을 올리면 수면에서 다시 이륙할 수 있습니다.');
@@ -750,6 +926,8 @@
           this.checkEmergencyLandingSuccess('amphibian_water');
         }
       } else if (ev.type === 'waterDitching') {
+        if (typeof this.triggerWaterTouchdownSplash === 'function') this.triggerWaterTouchdownSplash(ev.sinkRate || 2.0);
+        if (typeof this.playWaterSplashSound === 'function') this.playWaterSplashSound(this.groundSpeed || 35, ev.sinkRate || 2.0);
         this.isWaterLanding = true;
         this.flightPhase = 'TOUCHDOWN';
         if (this.phaseDisplay) this.phaseDisplay.textContent = '해상 비상착수 안전 부유 중';
@@ -761,19 +939,16 @@
       } else if (ev.type === 'landingStopped' && this.isWaterLanding && !this.waterSuccessShown) {
         this.waterSuccessShown = true;
         setTimeout(() => {
-          const titleEl = document.getElementById('modal-title');
-          const descEl = document.getElementById('modal-desc');
-          if (titleEl) titleEl.textContent = '🌊 MIRACLE DITCHING SUCCESS!';
-          if (descEl) {
-            descEl.innerHTML = `
+          this.showLobbyResult({
+            title: '🌊 MIRACLE DITCHING SUCCESS!',
+            html: `
               <span style="color:#0284c7; font-weight:800; font-size:16px;">🌊 성공적인 해상 비상착수 (Water Ditching)</span><br>
               완벽한 강하율과 기수 각도로 수면에 부드럽게 안착했습니다.<br>
               285명의 승객 전원이 구명정으로 안전하게 구조되었습니다!
-            `;
-          }
-          if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-          if (this.takeoffDirectBtn) this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
-          if (this.overlay) this.overlay.classList.remove('hidden');
+            `,
+            primaryLabel: '게이트에서 다시 시작 🔄',
+            phaseLabel: '다시 이륙'
+          });
         }, 1800);
       }
     }
@@ -808,11 +983,40 @@
     const environment = this.buildFlight3dEnvironment();
     const result = core.step(effectiveDt, inputs, environment);
 
+    if (this.tailFinDetached && !this.isOnGround && !this.isDestroyed && core.angularVelocity) {
+      // JAL 123 방식: 수직꼬리날개 완전 이탈 시 더치롤(좌우 요·롤 진동) + 푸고이드(상하 피치 흔들림)
+      const t = this.emergencyTimer || 0;
+      const speedFactor = Math.min(1.0, Math.hypot(result.linearVelocity.x, result.linearVelocity.z) / 140);
+      core.angularVelocity.x += Math.sin(t * 0.65) * 0.055 * speedFactor * effectiveDt;
+      core.angularVelocity.y += Math.sin(t * 1.45) * 0.22 * speedFactor * effectiveDt;
+      core.angularVelocity.z += Math.cos(t * 1.45 + 0.6) * 0.14 * speedFactor * effectiveDt;
+    }
+
+    // 착륙 후 활주로 지상 방향 전환(노즈휠 틸러 조향) 보조 — 착륙 직후 감속/택싱 중에도 안정적 선회 보장
+    const curGroundSpd = Math.hypot(result.linearVelocity.x, result.linearVelocity.z);
+    if (this.isOnGround && !this.isDestroyed && !this.isBellySliding && curGroundSpd > 0.35 && Math.abs(inputs.rudder) > 0.04 && core.angularVelocity) {
+      const lowSpdRamp = Math.min(1.0, curGroundSpd / 8.0);
+      const highSpdDamp = Math.max(0.25, 1.0 - curGroundSpd / 80.0);
+      const targetYawRate = -inputs.rudder * 0.52 * lowSpdRamp * highSpdDamp;
+      core.angularVelocity.y += (targetYawRate - core.angularVelocity.y) * Math.min(1.0, effectiveDt * 4.5);
+    }
+
     const groundOffset = this._flight3dGroundOffset ?? 3.5;
     if (this.planeGroup) {
+      const rawDeltaY = result.position.y - groundOffset;
+      const onSolidRunwayWithGear = Boolean(
+        (result.telemetry?.wow || core.gear?.onGround) &&
+        !result.telemetry?.onWater &&
+        !this._isOverWaterSurface &&
+        this.gearExtended !== false &&
+        !this.isGearCollapsed &&
+        !this.isBellySliding
+      );
+      // Allow up to 8 cm realistic tire flex on touchdown without letting tires sink into runway asphalt.
+      const clampedDeltaY = onSolidRunwayWithGear ? Math.max(-0.08, rawDeltaY) : rawDeltaY;
       this.planeGroup.position.set(
         result.position.x,
-        (this.groundY || 6.84) + (result.position.y - groundOffset),
+        (this.groundY || 6.84) + clampedDeltaY,
         result.position.z
       );
       this.planeGroup.quaternion.copy(result.quaternion);
@@ -898,9 +1102,34 @@
 
     this.handleFlight3dEvents(result.events, result);
 
+    // 이륙 활주 과도 기수 들림 테일스트라이크 감지 & 고고도 격벽 파열 체크
+    if (!this.isDestroyed) {
+      if (this.isOnGround && this.groundSpeed > 35 && this.pitch > 0.20 && typeof this.recordTakeoffTailstrike === 'function') {
+        this.recordTakeoffTailstrike();
+      }
+      if (this.hasTakeoffTailstrike && !this.tailFinDetached && typeof this.checkTailstrikeAltitudeFailure === 'function') {
+        this.checkTailstrikeAltitudeFailure();
+      }
+      if (this.isOnGround && this.isPlaying) {
+        const currentKmh = (this.speed || 0) * 280;
+        const isExtremeAttitude = (this.pitch < -0.45 || Math.abs(this.roll) > 1.35);
+        if (isExtremeAttitude && (currentKmh > 35 || Math.abs(this.verticalSpeed || 0) > 2.0)) {
+          if (typeof this.triggerExplosion === 'function') {
+            this.triggerExplosion('기체 전복 지면 격돌 추락');
+            return;
+          }
+        }
+      }
+    }
+
     if (this.isOnGround && this.planeGroup) {
-      const distDestGate = Math.hypot(this.planeGroup.position.x - (-235), this.planeGroup.position.z - (-45450));
-      const distDestGate2 = Math.hypot(this.planeGroup.position.x - (-155), this.planeGroup.position.z - (-45000));
+      const destIcao = this.selectedDestinationIcao || 'RKSI';
+      const route = typeof window !== 'undefined' ? window.RouteModel : null;
+      const compressed = !this.geoLayer;
+      const destGate = route ? route.gateSim(destIcao, compressed) : { x: -235, z: -45450 };
+      const destRunway = route ? route.destinationSim(destIcao, compressed) : { x: -155, z: -45000 };
+      const distDestGate = Math.hypot(this.planeGroup.position.x - destGate.x, this.planeGroup.position.z - destGate.z);
+      const distDestGate2 = Math.hypot(this.planeGroup.position.x - destRunway.x, this.planeGroup.position.z - destRunway.z);
       const distStartGate = Math.hypot(this.planeGroup.position.x - (-155), this.planeGroup.position.z - 0);
       const nearGate = (distDestGate <= 85.0) || (distDestGate2 <= 85.0) || (distStartGate <= 85.0);
       if (nearGate && this.speed < 0.35 && this.flightPhase !== 'DEPLANING' && this.flightPhase !== 'MISSION_COMPLETE' && this.flightPhase !== 'TAKEOFF_RUN') {
@@ -955,13 +1184,38 @@
     return this.cameraState;
   },
 
+  getCockpitCameraOffset(planeType, mode = '1st') {
+    const type = (planeType || this.currentPlaneType || 'a320').toLowerCase();
+    const offsets = {
+      a320:            [0, 2.15, -16.0],
+      a320_detailed:   [0, 2.15, -16.0],
+      a320_simplified: [0, 2.15, -16.0],
+      a350:            [0, 3.85, -29.4],
+      b747:            [0, 4.80, -30.3],
+      dc10:            [0, 3.60, -24.2],
+      md80:            [0, 2.00, -19.7],
+      concorde:        [0, 2.20, -22.3],
+      amphibian:       [0, 1.45, -7.4],
+      ancestor:        [0, 0.90, -2.8]
+    };
+    const base = offsets[type] || offsets.a320;
+    const zShift = mode === 'hud' ? -1.5 : 0;
+    return new THREE.Vector3(base[0], base[1], base[2] + zShift);
+  },
+
   updateCameraFromPhysics(currentKmh, dt) {
     if (!this.camera || !this.planeGroup) return;
+    const hideAirframeForInteriorView = (this.cameraMode === '1st' || this.cameraMode === 'hud');
+    this.planeGroup.visible = !this.isDestroyed && !hideAirframeForInteriorView;
+    if (this.renderOriginApplied) this.renderOriginApplied.set(0, 0, 0);
     const cs = this.ensureCameraState();
     const safeDt = Math.max(0, Math.min(0.1, dt || 0.016));
     const planePos = this.planeGroup.position;
     const planeQuat = this.planeGroup.quaternion;
     this.planeGroup.updateMatrixWorld();
+    // Camera offsets use the simulation's world position; planeGroup.matrixWorld
+    // carries the render-frame origin translation and is not used here.
+    const localToWorld = (local) => local.clone().applyQuaternion(planeQuat).add(planePos);
 
     // Carry translation immediately so damped exterior cameras don't lag behind
     if (cs.chaseTargetInitialized) {
@@ -1025,13 +1279,11 @@
           buffetY = (Math.cos(t * 2.3) + Math.sin(t * 4.2)) * 0.015 * severity;
         }
 
-        const eyeLocal = isAncestor
-          ? new THREE.Vector3(0, 0.9, -2.8)
-          : new THREE.Vector3(0, 2.05, -14.2);
+        const eyeLocal = this.getCockpitCameraOffset(this.currentPlaneType, '1st');
         eyeLocal.y += cs.headGForceOffset + buffetY + cs.touchJoltOffset;
         eyeLocal.x += buffetX;
 
-        const eyeWorld = eyeLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const eyeWorld = localToWorld(eyeLocal);
         this.camera.position.copy(eyeWorld);
 
         const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
@@ -1050,7 +1302,7 @@
         const winLocal = isAncestor
           ? new THREE.Vector3(-1.2, 0.7, 1.0)
           : new THREE.Vector3(-2.1, 1.35, 3.5);
-        const eyeWorld = winLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const eyeWorld = localToWorld(winLocal);
         this.camera.position.copy(eyeWorld);
 
         const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
@@ -1174,7 +1426,7 @@
         const eyeLocal = isAncestor
           ? new THREE.Vector3(1.2, -0.9, 2.5)
           : new THREE.Vector3(2.6, -2.5, 7.5);
-        const eyeWorld = eyeLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const eyeWorld = localToWorld(eyeLocal);
         const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(planeQuat);
         if (Math.abs(cs.touchJoltOffset) > 0.0005) {
           eyeWorld.addScaledVector(upWorld, cs.touchJoltOffset * 1.6);
@@ -1188,17 +1440,15 @@
           : new THREE.Vector3(-0.4, -2.0, -3.0);
         targetLocal.x += cs.gearLookYaw * 3.0;
         targetLocal.y += cs.gearLookPitch * 3.0;
-        const targetWorld = targetLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const targetWorld = localToWorld(targetLocal);
         this.camera.lookAt(targetWorld);
         break;
       }
 
       case 'hud': {
         // 순수 HUD 전방 시점 (Fixed Boresight)
-        const hudLocal = isAncestor
-          ? new THREE.Vector3(0, 0.9, -3.5)
-          : new THREE.Vector3(0, 2.15, -16.5);
-        this.camera.position.copy(hudLocal.applyMatrix4(this.planeGroup.matrixWorld));
+        const hudLocal = this.getCockpitCameraOffset(this.currentPlaneType, 'hud');
+        this.camera.position.copy(localToWorld(hudLocal));
         this.camera.quaternion.copy(planeQuat);
         this.camera.up.set(0, 1, 0).applyQuaternion(planeQuat);
         break;
@@ -1220,7 +1470,7 @@
         behindLocal.applyAxisAngle(new THREE.Vector3(1, 0, 0), clampedPitch);
         behindLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), cs.chaseYaw);
 
-        const targetCamPos = behindLocal.applyMatrix4(this.planeGroup.matrixWorld);
+        const targetCamPos = localToWorld(behindLocal);
         targetCamPos.y = Math.max(groundFloor, targetCamPos.y);
 
         if (cs.chasePos.lengthSq() < 0.001) {
@@ -1283,28 +1533,70 @@
       return;
     }
 
-    const radioAltM = Math.max(0, this.planeGroup.position.y - this.groundY); // 미터 단위 대지 고도
+    const pos = this.planeGroup.position;
+    let isOverWater = typeof this.isOverAirport === 'function'
+      ? !this.isOverAirport(pos.x, pos.z)
+      : Boolean(this._isOverWaterSurface);
+    const isAmphibian = this.currentPlaneType === 'amphibian';
+    const baseGroundY = this.groundY ?? 6.84;
+    let surfaceRefY = isOverWater ? Math.min(baseGroundY, -0.3) : baseGroundY;
+    const providerReady = Boolean(this.terrainProvider?.isReady?.(pos.x, pos.z));
+    if (providerReady) {
+      const simH = this.terrainProvider.getHeight(pos.x, pos.z);
+      const overSea = Boolean(this.terrainProvider.isWater?.(pos.x, pos.z));
+      isOverWater = overSea;
+      surfaceRefY = overSea ? Math.min(baseGroundY, -0.3) : (baseGroundY + (Number.isFinite(simH) ? simH : 0));
+    }
+    const radioAltM = Math.max(0, pos.y - surfaceRefY); // 미터 단위 대지/대수면 고도
     const sinkRateMs = -(this.verticalSpeed || 0); // m/s 수직 하강 속도
+
+    const isNormalRunwayTouchdown = Boolean(this.gearExtended) && radioAltM < 45 && sinkRateMs < 4.2;
+    const isNormalWaterTouchdown = isAmphibian && isOverWater && radioAltM < 75 && sinkRateMs < 5.2;
+    const isNormalTouchdown = isNormalRunwayTouchdown || isNormalWaterTouchdown;
 
     // 1순위: FlightSimCore.FlightWarningsCore 연속 항공역학 경보 평가
     if (this._flightWarningsCore) {
+      let terrainAheadSeconds = Infinity;
+      if (providerReady) {
+        const f3d = globalThis.FlightSimCore || globalThis.Flight3dPhysics;
+        if (f3d?.terrainConflictSeconds && this.velocity) {
+          const gpwsTerrain = this._gpwsTerrainProxy ??= {
+            getHeight: (x, z) => {
+              const h = this.terrainProvider?.isReady?.(x, z) ? this.terrainProvider.getHeight(x, z) : null;
+              return 2.12 + (Number.isFinite(h) ? h : 0);
+            }
+          };
+          terrainAheadSeconds = f3d.terrainConflictSeconds(pos, this.velocity, gpwsTerrain, isNormalRunwayTouchdown);
+        }
+      }
       const telemetry = {
         onGround: Boolean(this.isOnGround),
         radioAltFt: radioAltM * 3.28084,
         vsiFpm: (this.verticalSpeed || 0) * 196.85,
-        altitudeFt: this.planeGroup.position.y * 3.28084,
+        altitudeFt: pos.y * 3.28084,
         gearState: this.gearExtended ? 1.0 : 0.0,
         flapDegree: this._flight3dCore?.aero?.currentFlapAngle ?? 0,
         isStallWarning: Boolean(this.isStalling || this._flight3dCore?.aero?.isStallWarning),
         isStalled: Boolean(this.isStalling || this._flight3dCore?.aero?.isStalled),
-        rollDeg: (this.planeGroup.rotation.z * 180) / Math.PI,
+        rollDeg: ((this.planeGroup.rotation?.z || this.roll || 0) * 180) / Math.PI,
         throttle: this.throttle || 0,
         iasKnots: ((this.speed || 0) * 280) / 1.852,
         configurationOverspeed: this._flight3dCore?.telemetry?.configurationOverspeed,
         configurationDamage: this._flight3dCore?.telemetry?.configurationDamage,
       };
-      const result = this._flightWarningsCore.update(dt, telemetry);
-      const topWarning = result?.activeWarnings?.[0];
+      const result = providerReady
+        ? this._flightWarningsCore.update(dt, telemetry, terrainAheadSeconds)
+        : this._flightWarningsCore.update(dt, telemetry);
+      const activeWarnings = (result?.activeWarnings || []).filter((w) => {
+        if (isAmphibian && isOverWater && (w.id === 'gear' || w.id === 'flaps')) {
+          return false;
+        }
+        if (isNormalTouchdown && (w.id === 'pull-up' || w.id === 'terrain' || w.id === 'sink-rate')) {
+          return false;
+        }
+        return true;
+      });
+      const topWarning = activeWarnings[0];
 
       if (topWarning) {
         if (topWarning.id === 'stall') {
@@ -1331,6 +1623,21 @@
           this.playCautionChime();
           return;
         }
+      }
+
+      if (sinkRateMs > 0.8) {
+        const timeToImpact = radioAltM / sinkRateMs;
+        const unsafeSinkThreshold = (isAmphibian && isOverWater) ? 5.2 : 4.2;
+        if (timeToImpact <= 10.0 && !isNormalTouchdown && sinkRateMs >= unsafeSinkThreshold) {
+          const sec = Math.max(0.1, timeToImpact).toFixed(1);
+          this.triggerGPWS('PULL_UP', 'PULL UP! PULL UP!', `지면 충돌 ${sec}초 전 - 즉시 기수 상승! (TERRAIN PULL UP)`, 'danger');
+          this.playGPWSWhoopSiren();
+          this.speakGPWS('PULL UP');
+          return;
+        }
+      }
+
+      if (topWarning) {
         if (topWarning.id === 'gear') {
           this.triggerGPWS('GEAR', 'TOO LOW, GEAR!', 'LOWER LANDING GEAR [단축키 G]', 'gear-warn');
           this.speakGPWS('TOO LOW, GEAR');
@@ -1360,7 +1667,6 @@
     // 2. 지면 충돌 예상 시간 (Time to Impact) 계산 (10초 전 정밀 PULL UP 경보)
     if (sinkRateMs > 0.8) {
       const timeToImpact = radioAltM / sinkRateMs; // 초(s) 단위 충돌까지 남은 시간
-      const isNormalTouchdown = this.gearExtended && radioAltM < 22 && sinkRateMs < 3.8;
 
       // ★ 충돌 10초 전 긴급 기수 인양 경보 (PULL UP!)
       if (timeToImpact <= 10.0 && !isNormalTouchdown) {
@@ -1372,8 +1678,8 @@
       }
     }
 
-    // 3. 바퀴 미전개 착륙 경보 (TOO LOW, GEAR!): 고도 140m 이하에서 하강 중인데 랜딩 기어가 접혀있음
-    if (radioAltM < 140 && sinkRateMs > 0.5 && !this.gearExtended) {
+    // 3. 바퀴 미전개 착륙 경보 (TOO LOW, GEAR!): 고도 140m 이하에서 하강 중인데 랜딩 기어가 접혀있음 (수상 착수 중인 수륙양용기 제외)
+    if (radioAltM < 140 && sinkRateMs > 0.5 && !this.gearExtended && !(isAmphibian && isOverWater)) {
       this.triggerGPWS('GEAR', 'TOO LOW, GEAR!', 'LOWER LANDING GEAR [단축키 G]', 'gear-warn');
       this.speakGPWS('TOO LOW, GEAR');
       this.playCautionChime();
@@ -1383,7 +1689,6 @@
     // 4. 주의 단계 강하율 경보 (SINK RATE!): 충돌 18초 전 또는 급격한 강하율
     if (sinkRateMs > 5.5) {
       const timeToImpact = radioAltM / sinkRateMs;
-      const isNormalTouchdown = this.gearExtended && radioAltM < 22 && sinkRateMs < 3.8;
       if (timeToImpact <= 18.0 && !isNormalTouchdown) {
         const sec = Math.max(0.1, timeToImpact).toFixed(1);
         this.triggerGPWS('SINK_RATE', 'SINK RATE!', `강하율 과다 (지면 충돌 ${sec}초 전)`, 'caution');
@@ -1419,7 +1724,7 @@
       window.speechSynthesis.cancel();
     }
     this.lastSpokenPhrase = null;
-    this.stopGPWSSiren();
+    if (typeof this.stopGPWSSiren === 'function') this.stopGPWSSiren();
   },
 
   // ----------------------------------------------------------------
@@ -1453,6 +1758,8 @@
         motionType = 'BIRD_STRIKE';
       } else if (this.currentEmergency === 'gear_failure' && !this.isOnGround && radioAlt < 350) {
         motionType = 'GEAR_FAILURE';
+      } else if (this.currentEmergency === 'tail_loss' || this.currentEmergency === 'in_flight_breakup') {
+        motionType = 'ENGINE_FIRE';
       }
     }
 

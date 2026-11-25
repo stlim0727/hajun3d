@@ -14,22 +14,140 @@ function debounceAction(actionKey, delayMs = 180) {
   return true;
 }
 
-window.switchPlane = function(type) {
-  // 1. 모달 버튼 활성화 상태 즉시 업데이트 (UI 즉각 100% 반응)
-  document.querySelectorAll('.plane-choice-btn').forEach(btn => btn.classList.remove('active'));
-  const activeBtn = document.getElementById(`select-${type}`);
-  if (activeBtn) activeBtn.classList.add('active');
+// Top-level screen state. Every lobby / game / settings transition goes through here.
+const SCREEN_PANELS = {
+  lobby: 'overlay-screen',
+  settings: 'settings-screen'
+};
+const SCREEN_SUBPANELS = [
+  'mobile-menu-modal', 'cam-mode-menu', 'effect-settings-menu',
+  'emergency-panel', 'glb-modal', 'hotas-modal', 'place-picker-panel', 'landmark-panel', 'landmark-detail'
+];
 
-  // 2. 게임 기체 모델 전환
+function showScreenPanel(id, visible) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('hidden', !visible);
+  el.style.display = visible ? 'flex' : 'none';
+}
+
+window.ScreenFlow = {
+  current: 'lobby',
+  returnTo: 'lobby',
+  lobbyDefaults: null,
+
+  captureLobbyDefaults() {
+    if (this.lobbyDefaults) return;
+    const title = document.getElementById('modal-title');
+    const desc = document.getElementById('modal-desc');
+    const primary = document.getElementById('start-btn');
+    const takeoffBtn = document.getElementById('takeoff-direct-btn');
+    const phaseLabel = takeoffBtn && takeoffBtn.querySelector('.phase-label');
+    this.lobbyDefaults = {
+      title: title ? title.textContent : '',
+      desc: desc ? desc.innerHTML : '',
+      primary: primary ? primary.textContent : '',
+      phaseLabel: phaseLabel ? phaseLabel.textContent : ''
+    };
+  },
+
+  restoreLobby() {
+    this.captureLobbyDefaults();
+    const defaults = this.lobbyDefaults;
+    const title = document.getElementById('modal-title');
+    const desc = document.getElementById('modal-desc');
+    const primary = document.getElementById('start-btn');
+    if (title) title.textContent = defaults.title;
+    if (desc) desc.innerHTML = defaults.desc;
+    if (primary) primary.textContent = defaults.primary;
+    const takeoffBtn = document.getElementById('takeoff-direct-btn');
+    const phaseLabel = takeoffBtn && takeoffBtn.querySelector('.phase-label');
+    if (phaseLabel) phaseLabel.textContent = defaults.phaseLabel;
+  },
+
+  go(target, options) {
+    if (target !== 'lobby' && target !== 'game' && target !== 'settings') return;
+    const opts = options || {};
+    if (target === 'settings' && this.current !== 'settings') this.returnTo = this.current;
+
+    showScreenPanel(SCREEN_PANELS.lobby, target === 'lobby');
+    showScreenPanel(SCREEN_PANELS.settings, target === 'settings');
+    SCREEN_SUBPANELS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+
+    const game = window.airplaneGame;
+    if (target === 'lobby') {
+      if (!opts.result) this.restoreLobby();
+      if (game) {
+        game.isPlaying = false;
+        if (typeof game.stopJetSound === 'function') game.stopJetSound();
+      }
+      if (typeof window.speechSynthesis !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+      this.returnTo = 'lobby';
+    } else if (target === 'game') {
+      this.returnTo = 'game';
+    }
+
+    const paused = target === 'settings' && this.returnTo === 'game';
+    if (game) {
+      game.screenPaused = paused;
+      if (paused && typeof game.resetHeldControls === 'function') game.resetHeldControls();
+    }
+    const doneBtn = document.getElementById('settings-done-btn');
+    if (doneBtn) doneBtn.textContent = this.returnTo === 'game' ? '비행으로 돌아가기' : '로비로 돌아가기';
+    const newFlightBtn = document.getElementById('settings-new-flight-btn');
+    if (newFlightBtn) newFlightBtn.classList.toggle('hidden', this.returnTo !== 'game');
+    window.syncSettingsUI();
+    this.current = target;
+  },
+
+  beginGame() { this.go('game'); },
+  openSettings() { this.go('settings'); },
+  closeSettings() { this.go(this.returnTo); },
+  endFlight() { this.go('lobby'); }
+};
+
+window.syncSettingsUI = function() {
+  const game = window.airplaneGame;
+  if (game && typeof game.syncSettingsUI === 'function') game.syncSettingsUI();
+};
+
+window.ScreenFlow.captureLobbyDefaults();
+
+window.syncLobbySelectors = function(type) {
+  const planeSelect = document.getElementById('plane-select');
+  if (planeSelect && type && planeSelect.value !== type) planeSelect.value = type;
+  const skinSelect = document.getElementById('skin-select');
+  const skin = window.airplaneGame && typeof window.airplaneGame.getActiveAirlineSkin === 'function'
+    ? window.airplaneGame.getActiveAirlineSkin() : null;
+  if (skinSelect && skin && skinSelect.value !== skin.id) skinSelect.value = skin.id;
+};
+
+window.switchPlane = function(type) {
+  if (!type) return;
+  // 로비에서는 상태만 변경하고, GLB 로드는 비행 시작 시 buildAircraft에서 수행
   try {
     if (!window.airplaneGame) initGame();
     if (window.airplaneGame) {
-      window.airplaneGame.switchAircraft(type);
+      window.airplaneGame.switchAircraft(type, { deferLoad: true });
+      window.syncLobbySelectors(type);
     }
   } catch (err) {
     console.error('switchPlane error:', err);
   }
 };
+
+
+window.setAirlineSkin = function(id) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setAirlineSkin === 'function') {
+    window.airplaneGame.setAirlineSkin(id);
+  }
+  window.syncLobbySelectors();
+};
+
 
 window.nextPlane = function() {
   if (!debounceAction('nextPlane', 200)) return;
@@ -39,18 +157,12 @@ window.nextPlane = function() {
     const curIdx = aircraftTypes.indexOf(window.airplaneGame.currentPlaneType);
     const nextIdx = (curIdx + 1) % aircraftTypes.length;
     window.airplaneGame.switchAircraft(aircraftTypes[nextIdx]);
+    window.syncLobbySelectors(aircraftTypes[nextIdx]);
   }
 };
 
-window.startDirectTakeoff = function() {
-  // 모달 즉시 닫기
-  const overlay = document.getElementById('overlay-screen');
-  if (overlay) {
-    overlay.classList.add('hidden');
-    overlay.style.display = 'none';
-  }
-  const gateAction = document.getElementById('gate-action-container');
-  if (gateAction) gateAction.classList.add('hidden');
+function launchPhase(method) {
+  window.ScreenFlow.beginGame();
 
   try {
     if (!window.airplaneGame) initGame();
@@ -58,22 +170,20 @@ window.startDirectTakeoff = function() {
       if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
         window.airplaneGame.enableGyro(true);
       }
-      window.airplaneGame.startDirectTakeoff();
+      window.airplaneGame[method]();
     }
   } catch (err) {
-    console.error('startDirectTakeoff error:', err);
+    console.error(`${method} error:`, err);
   }
-};
+}
+
+window.startTakeoffPhase = function() { launchPhase('startTakeoffPhase'); };
+window.startCruisePhase = function() { launchPhase('startCruisePhase'); };
+window.startApproachPhase = function() { launchPhase('startApproachPhase'); };
+window.startDirectTakeoff = function() { launchPhase('startDirectTakeoff'); };
 
 window.startGateDeparture = function() {
-  // 모달 즉시 닫기
-  const overlay = document.getElementById('overlay-screen');
-  if (overlay) {
-    overlay.classList.add('hidden');
-    overlay.style.display = 'none';
-  }
-  const gateAction = document.getElementById('gate-action-container');
-  if (gateAction) gateAction.classList.add('hidden');
+  window.ScreenFlow.beginGame();
 
   try {
     if (!window.airplaneGame) initGame();
@@ -85,6 +195,81 @@ window.startGateDeparture = function() {
     }
   } catch (err) {
     console.error('startGateDeparture error:', err);
+  }
+};
+
+
+window.startHaeundaeFlight = function() {
+  window.ScreenFlow.beginGame();
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startHaeundaeFlight();
+    }
+  } catch (err) {
+    console.error('startHaeundaeFlight error:', err);
+  }
+};
+
+window.startJejuFlyover = function() {
+  window.ScreenFlow.beginGame();
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame) {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startJejuFlyover();
+    }
+  } catch (err) {
+    console.error('startJejuFlyover error:', err);
+  }
+};
+
+window.openPlacePicker = function() {
+  if (!window.airplaneGame) initGame();
+  const panel = document.getElementById('place-picker-panel');
+  if (panel) panel.classList.remove('hidden');
+};
+
+window.closePlacePicker = function() {
+  const panel = document.getElementById('place-picker-panel');
+  if (panel) panel.classList.add('hidden');
+};
+
+window.startAtSelectedPlace = function() {
+  const panel = document.getElementById('place-picker-panel');
+  if (panel) panel.classList.add('hidden');
+  window.ScreenFlow.beginGame();
+
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame && typeof window.airplaneGame.startAtPlace === 'function') {
+      if (window.airplaneGame.gyroEnabled && !window.airplaneGame.gyroActive && typeof window.airplaneGame.enableGyro === 'function') {
+        window.airplaneGame.enableGyro(true);
+      }
+      window.airplaneGame.startAtPlace(
+        typeof window.airplaneGame.getSelectedPlace === 'function' ? window.airplaneGame.getSelectedPlace() : null
+      );
+    }
+  } catch (err) {
+    console.error('startAtSelectedPlace error:', err);
+  }
+};
+
+window.downloadProblemReport = function() {
+  try {
+    if (!window.airplaneGame) initGame();
+    if (window.airplaneGame && typeof window.airplaneGame.downloadProblemReport === 'function') {
+      window.airplaneGame.downloadProblemReport();
+    }
+  } catch (err) {
+    console.error('Problem report error:', err);
   }
 };
 
@@ -187,6 +372,13 @@ window.setCameraMode = function(mode) {
   }
 };
 
+window.setDestinationAirport = function(icao) {
+  if (!window.airplaneGame) initGame();
+  if (window.airplaneGame && typeof window.airplaneGame.setDestinationAirport === 'function') {
+    window.airplaneGame.setDestinationAirport(icao);
+  }
+};
+
 window.toggleCameraMenu = function() {
   if (!debounceAction('toggleCameraMenu', 140)) return;
   if (!window.airplaneGame) initGame();
@@ -209,6 +401,7 @@ window.setSpeedEffectIntensityPercent = function(percent, announce = false) {
     const val = Math.min(100, Math.max(0, Number(percent) || 0)) / 100;
     window.airplaneGame.setSpeedEffectIntensity(val, { announce: Boolean(announce) });
   }
+  window.syncSettingsUI();
 };
 
 window.resetCameraLook = function() {
@@ -247,19 +440,69 @@ window.toggleSound = function() {
     if (soundBtn) {
       soundBtn.textContent = window.airplaneGame.soundEnabled ? '🔊' : '🔇';
     }
+    if (window.ScreenFlow.current === 'settings') window.syncSettingsUI();
     if (window.airplaneGame.showPopup) {
       window.airplaneGame.showPopup(window.airplaneGame.soundEnabled ? '🔊 사운드 ON' : '🔇 사운드 OFF');
     }
   }
 };
 
-window.openHelp = function() {
-  const overlay = document.getElementById('overlay-screen');
-  if (overlay) {
-    overlay.style.display = 'flex';
-    overlay.classList.remove('hidden');
+window.openSettings = function() {
+  window.ScreenFlow.openSettings();
+};
+
+window.closeSettings = function() {
+  window.ScreenFlow.closeSettings();
+};
+
+window.openLobby = function() {
+  window.ScreenFlow.endFlight();
+};
+
+document.addEventListener('keydown', function(event) {
+  if (event.key !== 'Escape') return;
+  if (window.ScreenFlow.current === 'settings') window.ScreenFlow.closeSettings();
+  else if (window.ScreenFlow.current === 'game') window.openSettings();
+});
+
+
+window.toggleFullscreen = function() {
+  if (!debounceAction('toggleFullscreen', 250)) return;
+  try {
+    const doc = document;
+    const activeEl = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+    if (activeEl) {
+      const exitFn = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+      if (typeof exitFn === 'function') {
+        const result = exitFn.call(doc);
+        if (result && typeof result.catch === 'function') result.catch(function() {});
+      }
+    } else {
+      const el = doc.documentElement;
+      const requestFn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (typeof requestFn === 'function') {
+        const result = requestFn.call(el);
+        if (result && typeof result.catch === 'function') result.catch(function() {});
+      }
+    }
+  } catch (err) {
+    console.warn('toggleFullscreen error:', err);
   }
 };
+
+function syncFullscreenButton() {
+  const btn = document.getElementById('fullscreen-btn');
+  if (!btn) return;
+  const doc = document;
+  const isFullscreen = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+  btn.classList.toggle('active', isFullscreen);
+  const label = document.getElementById('fullscreen-text');
+  if (label) label.textContent = isFullscreen ? '화면 종료' : '전체 화면';
+}
+
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(function(evt) {
+  document.addEventListener(evt, syncFullscreenButton);
+});
 
 window.speakCaptainPreset = function(phrase) {
   if (!debounceAction('speakCaptainPreset', 300)) return;
@@ -342,6 +585,7 @@ window.handleGLBFileSelect = function(event) {
 window.loadGLBPreset = function(type) {
   if (window.airplaneGame) {
     window.airplaneGame.loadGLBPreset(type);
+    window.syncLobbySelectors(type);
   }
   window.closeGLBMenu();
 };
@@ -484,6 +728,85 @@ window.toggleMobileMenu = function() {
   }
 };
 
+window.toggleLandmarkPanel = function (forceClose) {
+  if (window.airplaneGame && typeof window.airplaneGame.toggleLandmarkPanel === 'function') {
+    window.airplaneGame.toggleLandmarkPanel(Boolean(forceClose));
+  }
+};
+
+window.refreshLandmarkPanel = function () {
+  if (window.airplaneGame && typeof window.airplaneGame.refreshLandmarkPanel === 'function') {
+    window.airplaneGame.refreshLandmarkPanel();
+  }
+};
+
+window.closeLandmarkDetail = function () {
+  if (window.airplaneGame && typeof window.airplaneGame.closeLandmarkDetail === 'function') {
+    window.airplaneGame.closeLandmarkDetail();
+  }
+};
+
+// Deep link from terrainprovider.html: spawn at a WGS84 point and preset the look direction.
+const GEO_LOOK_PRESETS = {
+  forward: { yaw: 0, pitch: -0.06 },
+  right: { yaw: -Math.PI / 2, pitch: -0.06 },
+  back: { yaw: Math.PI, pitch: -0.06 },
+  left: { yaw: Math.PI / 2, pitch: -0.06 },
+  up: { yaw: 0, pitch: 0.85 },
+  down: { yaw: 0, pitch: -0.85 }
+};
+
+window.startGeoInspectFlight = function (options) {
+  const o = options || {};
+  const lat = Number(o.lat);
+  const lon = Number(o.lon);
+  const alt = Number(o.alt);
+  if (![lat, lon].every(Number.isFinite)) return false;
+
+  window.ScreenFlow.beginGame();
+
+  if (!window.airplaneGame) initGame();
+  const game = window.airplaneGame;
+  if (!game || typeof game.startAtPlace !== 'function') return false;
+
+  game.startAtPlace({ id: 'geo-inspect', name: 'Geo inspection', lat, lon, elevationM: 0 });
+  if (Number.isFinite(alt) && alt >= 0 && game.planeGroup) {
+    game.planeGroup.position.y = alt;
+    game.verticalSpeed = 0;
+    if (typeof game.resetFlight3dPhysics === 'function') game.resetFlight3dPhysics();
+  }
+  if (typeof game.retargetGeo === 'function' && game.planeGroup) {
+    const pos = game.planeGroup.position;
+    const inspectAlt = Number.isFinite(alt) ? alt : 1100;
+    game.retargetGeo(
+      { lat, lon, height: 0 },
+      {
+        ionToken: game.geoIonToken,
+        simAnchor: { x: pos.x, y: 0, z: pos.z },
+        focusAnchors: [{
+          x: pos.x, y: 0, z: pos.z,
+          radius: 12000,
+          maxAltitude: Math.max(6000, inspectAlt + 2000)
+        }]
+      }
+    );
+  }
+
+  const look = o.look || 'forward';
+  if (look === 'orbit') {
+    game.setCameraMode('drone');
+  } else {
+    game.setCameraMode('1st');
+    const preset = GEO_LOOK_PRESETS[look] || GEO_LOOK_PRESETS.forward;
+    const cs = typeof game.ensureCameraState === 'function' ? game.ensureCameraState() : game.cameraState;
+    if (cs) {
+      cs.lookYaw = preset.yaw;
+      cs.lookPitch = preset.pitch;
+    }
+  }
+  return true;
+};
+
 function initGame() {
   if (!window.airplaneGame) {
     try {
@@ -492,6 +815,7 @@ function initGame() {
       console.error('AirplaneGame init error:', err);
     }
   }
+  if (window.airplaneGame && typeof window.syncSettingsUI === 'function') window.syncSettingsUI();
 }
 
 if (document.readyState === 'loading') {
@@ -500,7 +824,6 @@ if (document.readyState === 'loading') {
   initGame();
 }
 window.addEventListener('load', initGame);
-
 window.applyFixedPose = function(pose) {
   if (!pose) return;
   if (!window.airplaneGame) initGame();
@@ -602,3 +925,15 @@ window.applyFixedPose = function(pose) {
     game.updateSunShadowTarget();
   }
 };
+
+(function autoStartGeoInspect() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('flyHere') !== '1' || !params.has('geoLat') || !params.has('geoLon')) return;
+  const flight = {
+    lat: Number(params.get('geoLat')),
+    lon: Number(params.get('geoLon')),
+    alt: Number(params.get('flyAlt')),
+    look: params.get('look') || 'forward'
+  };
+  requestAnimationFrame(() => window.startGeoInspectFlight(flight));
+})();

@@ -75,7 +75,7 @@ function loadEffectsHarness() {
   return { AirplaneGame, storage, elements, THREE };
 }
 
-test('speed effect intensity defaults to 0.35, clamps, and persists', () => {
+test('speed effect intensity defaults to 0.35, clamps, and persists without rain-like speed lines', () => {
   const { AirplaneGame, storage, elements, THREE } = loadEffectsHarness();
   const vignetteEl = { style: { opacity: '0' } };
   elements.set('speed-vignette', vignetteEl);
@@ -88,7 +88,8 @@ test('speed effect intensity defaults to 0.35, clamps, and persists', () => {
 
   game.initSpeedEffects();
   assert.equal(game.speedEffectIntensity, 0.35);
-  assert.equal(game.speedLinesGroup.visible, true);
+  assert.equal(game.speedLinesGroup, undefined, 'Rain-like 3D speed lines must not be created');
+  assert.equal(game.speedLineMaterial, undefined, 'Rain-like speed-line material must not be created');
 
   game.setSpeedEffectIntensity(1.5);
   assert.equal(game.speedEffectIntensity, 1.0);
@@ -96,12 +97,11 @@ test('speed effect intensity defaults to 0.35, clamps, and persists', () => {
 
   game.setSpeedEffectIntensity(-0.2);
   assert.equal(game.speedEffectIntensity, 0.0);
-  assert.equal(game.speedLinesGroup.visible, false);
-  assert.equal(game.speedLineMaterial.opacity, 0);
+  assert.equal(vignetteEl.style.opacity, '0');
   assert.equal(game.loadSpeedEffectIntensity(), 0.0);
 });
 
-test('updateSpeedEffects scales opacity by intensity and hides when OFF', () => {
+test('updateSpeedEffects scales only the vignette by intensity and hides when OFF', () => {
   const { AirplaneGame, elements, THREE } = loadEffectsHarness();
   const vignetteEl = { style: { opacity: '0' } };
   elements.set('speed-vignette', vignetteEl);
@@ -113,27 +113,22 @@ test('updateSpeedEffects scales opacity by intensity and hides when OFF', () => 
   game.isOnGround = true;
   game.initSpeedEffects();
 
-  // At 0% intensity, even 800 km/h produces no speed lines or vignette
+  // At 0% intensity, even 800 km/h produces no vignette
   game.setSpeedEffectIntensity(0);
   for (let i = 0; i < 10; i++) game.updateSpeedEffects(0.016, 800);
-  assert.equal(game.speedLinesGroup.visible, false);
-  assert.equal(game.speedLineMaterial.opacity, 0);
   assert.equal(vignetteEl.style.opacity, '0');
 
-  // At 35% vs 100%, 100% produces significantly stronger opacity
+  // At 35% vs 100%, 100% produces a significantly stronger vignette
   game.setSpeedEffectIntensity(0.35);
-  for (let i = 0; i < 30; i++) game.updateSpeedEffects(0.016, 800);
-  const lowOpacity = game.speedLineMaterial.opacity;
+  game.updateSpeedEffects(0.016, 800);
   const lowVignette = parseFloat(vignetteEl.style.opacity);
 
   game.setSpeedEffectIntensity(1.0);
-  for (let i = 0; i < 30; i++) game.updateSpeedEffects(0.016, 800);
-  const highOpacity = game.speedLineMaterial.opacity;
+  game.updateSpeedEffects(0.016, 800);
   const highVignette = parseFloat(vignetteEl.style.opacity);
 
-  assert.ok(lowOpacity > 0.05 && lowOpacity < 0.3, `expected gentle 35% opacity, got ${lowOpacity}`);
-  assert.ok(highOpacity > lowOpacity * 2, `expected 100% opacity (${highOpacity}) > 2x 35% (${lowOpacity})`);
-  assert.ok(highVignette > lowVignette, `expected 100% vignette (${highVignette}) > 35% (${lowVignette})`);
+  assert.ok(lowVignette > 0.1 && lowVignette < 0.4, `expected gentle 35% vignette, got ${lowVignette}`);
+  assert.ok(highVignette > lowVignette * 2, `expected 100% vignette (${highVignette}) > 2x 35% (${lowVignette})`);
 });
 
 test('web/index.html includes PC and mobile speed effect intensity controls', () => {

@@ -28,7 +28,7 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build:info
-      - name: Stage screens showcase into web
+      - name: Stage showcase pages and screenshots into web
         run: |
           cp -f screens*.html ./web/ 2>/dev/null || true
           cp -rf screenshots ./web/ 2>/dev/null || true

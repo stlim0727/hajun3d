@@ -379,6 +379,7 @@
   },
 
   syncTouchThrottleUI(clamped) {
+    if (typeof document === 'undefined') return;
     const pct = Math.round(clamped * 100);
     const throttleReadout = document.getElementById('touch-thr-val');
     if (throttleReadout) {
@@ -425,6 +426,7 @@
     });
 
     window.addEventListener('keydown', (e) => {
+      if (this.screenPaused) return;
       // N 키: 비행 중 또는 대기 중 언제든지 낮/밤 전환
       if (e.code === 'KeyN') {
         this.toggleTimeOfDay();
@@ -559,6 +561,7 @@
     // Shift + 휠로 엔진 출력 조절
     window.addEventListener('wheel', (e) => {
       if (!e.shiftKey || e.ctrlKey) return;
+      if (this.screenPaused) return;
       const hotasModal = document.getElementById('hotas-modal');
       const glbModal = document.getElementById('glb-modal');
       const overlay = document.getElementById('overlay-screen');
@@ -1417,8 +1420,11 @@
       const [first, second] = touches.values();
       return Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
     };
+    // Projection zoom only: the camera never moves, so obstacles cannot block it.
+    const MIN_CAMERA_ZOOM = 0.01;
+    const MAX_CAMERA_ZOOM = 3;
     const updateZoom = (factor) => {
-      const zoom = Math.min(3, Math.max(0.7, this.camera.zoom * factor));
+      const zoom = Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, this.camera.zoom * factor));
       if (zoom === this.camera.zoom) return;
       this.camera.zoom = zoom;
       this.camera.updateProjectionMatrix();
@@ -1429,14 +1435,14 @@
     };
 
     target.addEventListener('wheel', (e) => {
-      if (!this.isPlaying || this.isDestroyed || (e.shiftKey && !e.ctrlKey)) return;
+      if (!this.isPlaying || this.isDestroyed || this.screenPaused || (e.shiftKey && !e.ctrlKey)) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? target.clientHeight : 1;
       updateZoom(Math.exp(-e.deltaY * unit * 0.0015));
     }, { passive: false });
 
     target.addEventListener('pointerdown', (e) => {
-      if (!this.isPlaying || this.isDestroyed) return;
+      if (!this.isPlaying || this.isDestroyed || this.screenPaused) return;
       if (e.button !== 0 && e.button !== 2 && e.pointerType === 'mouse') return;
       if (target !== this.container && e.target !== target) return;
       const cs = getState();
@@ -1458,7 +1464,7 @@
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!this.isPlaying || this.isDestroyed) return;
+      if (!this.isPlaying || this.isDestroyed || this.screenPaused) return;
       if (touches.has(e.pointerId)) {
         const previousDistance = touches.size === 2 ? pinchDistance() : null;
         touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1481,20 +1487,20 @@
           cs.chasePitch = Math.max(-1.1, Math.min(1.0, cs.chasePitch + dy * sens));
           break;
         case '1st':
-          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw - dx * sens * 0.8));
-          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch - dy * sens * 0.8));
+          cs.lookYaw = Math.max(-2.1, Math.min(2.1, cs.lookYaw + dx * sens * 0.8));
+          cs.lookPitch = Math.max(-0.85, Math.min(0.95, cs.lookPitch + dy * sens * 0.8));
           break;
         case 'wing':
-          cs.wingLookYaw = Math.max(-1.2, Math.min(1.2, cs.wingLookYaw - dx * sens * 0.75));
-          cs.wingLookPitch = Math.max(-0.7, Math.min(0.7, cs.wingLookPitch - dy * sens * 0.75));
+          cs.wingLookYaw = Math.max(-1.2, Math.min(1.2, cs.wingLookYaw + dx * sens * 0.75));
+          cs.wingLookPitch = Math.max(-0.7, Math.min(0.7, cs.wingLookPitch + dy * sens * 0.75));
           break;
         case 'drone':
           cs.droneOrbitAngle -= dx * sens;
           cs.dronePitch = Math.max(-0.2, Math.min(0.9, cs.dronePitch + dy * sens * 0.5));
           break;
         case 'gear':
-          cs.gearLookYaw = Math.max(-1.2, Math.min(1.2, cs.gearLookYaw + dx * sens * 0.75));
-          cs.gearLookPitch = Math.max(-0.8, Math.min(0.8, cs.gearLookPitch - dy * sens * 0.75));
+          cs.gearLookYaw = Math.max(-1.2, Math.min(1.2, cs.gearLookYaw - dx * sens * 0.75));
+          cs.gearLookPitch = Math.max(-0.8, Math.min(0.8, cs.gearLookPitch + dy * sens * 0.75));
           break;
       }
     });
@@ -1523,10 +1529,15 @@
     });
 
     target.addEventListener('dblclick', () => {
-      if (this.isPlaying && !this.isDestroyed) {
+      if (this.isPlaying && !this.isDestroyed && !this.screenPaused) {
         this.resetCameraLook();
       }
     });
+  },
+
+  resetHeldControls() {
+    if (!this.keys) return;
+    Object.keys(this.keys).forEach((key) => { this.keys[key] = false; });
   },
 
   resetCameraLook() {

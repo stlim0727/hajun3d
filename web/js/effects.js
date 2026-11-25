@@ -95,12 +95,8 @@
       // ignore storage errors in restricted environments
     }
 
-    if (clamped <= 0.005) {
-      if (this.speedLineMaterial) this.speedLineMaterial.opacity = 0;
-      if (this.speedLinesGroup) this.speedLinesGroup.visible = false;
-      if (this.speedVignetteEl) this.speedVignetteEl.style.opacity = '0';
-    } else if (this.speedLinesGroup) {
-      this.speedLinesGroup.visible = true;
+    if (clamped <= 0.005 && this.speedVignetteEl) {
+      this.speedVignetteEl.style.opacity = '0';
     }
 
     if (typeof this.updateSpeedEffectUI === 'function') {
@@ -110,54 +106,13 @@
     if (options.announce && typeof this.showPopup === 'function') {
       const pct = Math.round(clamped * 100);
       this.showPopup(pct === 0
-        ? '💨 기류/속도선 이펙트: 끄기 (0%)'
-        : `💨 기류/속도선 이펙트 강도: ${pct}%`);
+        ? '💨 속도감 이펙트: 끄기 (0%)'
+        : `💨 속도감 이펙트 강도: ${pct}%`);
     }
   },
 
   initSpeedEffects() {
     this.speedEffectIntensity = this.loadSpeedEffectIntensity();
-
-    // 1. 고속 공기 기류 스트림 라인 (3D Speed Lines)
-    const lineCount = 180;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(lineCount * 6); // 2 vertices per line (x,y,z, x,y,z)
-
-    this.speedLineData = [];
-    for (let i = 0; i < lineCount; i++) {
-      const radius = 6.0 + Math.random() * 32.0;
-      const angle = Math.random() * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * 0.65 + 1.5;
-      const z = -45.0 + Math.random() * 90.0;
-      const length = 12.0 + Math.random() * 22.0;
-      const speedMult = 1.0 + Math.random() * 0.8;
-
-      this.speedLineData.push({ x, y, z, length, speedMult });
-
-      const idx = i * 6;
-      positions[idx] = x;
-      positions[idx + 1] = y;
-      positions[idx + 2] = z;
-      positions[idx + 3] = x;
-      positions[idx + 4] = y;
-      positions[idx + 5] = z - length;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    this.speedLineMaterial = new THREE.LineBasicMaterial({
-      color: 0xbae6fd,
-      transparent: true,
-      opacity: 0.0,
-      blending: THREE.AdditiveBlending,
-      linewidth: 1.5
-    });
-
-    this.speedLinesGroup = new THREE.LineSegments(geometry, this.speedLineMaterial);
-    this.speedLinesGroup.frustumCulled = false;
-    this.speedLinesGroup.visible = this.speedEffectIntensity > 0.005;
-    this.scene.add(this.speedLinesGroup);
 
     this.speedVignetteEl = document.getElementById('speed-vignette');
     if (typeof this.updateSpeedEffectUI === 'function') {
@@ -704,53 +659,11 @@
   },
 
   updateSpeedEffects(dt, currentKmh) {
-    if (!this.speedLinesGroup || !this.speedLineMaterial) return;
-
     const intensity = typeof this.speedEffectIntensity === 'number'
       ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
       : DEFAULT_SPEED_EFFECT_INTENSITY;
 
-    // 시속 135 km/h 이상부터 스트림 라인 점진 등장 (이륙 활주 체감 강화), 800 km/h에서 최고조
-    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 135) / 665)); // 0.0 ~ 1.0
-
-    const rawTargetOpacity = speedRatio > 0.04 ? (0.06 + speedRatio * 0.62) : 0.0;
-    const targetOpacity = rawTargetOpacity * intensity;
-    this.speedLineMaterial.opacity = THREE.MathUtils.lerp(this.speedLineMaterial.opacity, targetOpacity, 0.1);
-    this.speedLinesGroup.visible = this.speedLineMaterial.opacity > 0.005;
-
-    // 스피드 라인 위치 및 회전을 기체 중심으로 추종
-    this.speedLinesGroup.position.copy(this.planeGroup.position);
-    this.speedLinesGroup.quaternion.copy(this.planeGroup.quaternion);
-
-    if (this.speedLinesGroup.visible && this.speedLineMaterial.opacity > 0.01) {
-      const posAttr = this.speedLinesGroup.geometry.attributes.position;
-      const posArr = posAttr.array;
-      const moveSpeed = (42.0 + speedRatio * 145.0) * dt * 60;
-
-      for (let i = 0; i < this.speedLineData.length; i++) {
-        const item = this.speedLineData[i];
-        item.z += moveSpeed * item.speedMult;
-        if (item.z > 50) {
-          item.z = -50 - Math.random() * 20;
-          const radius = 6.0 + Math.random() * 32.0;
-          const angle = Math.random() * Math.PI * 2;
-          item.x = Math.cos(angle) * radius;
-          item.y = Math.sin(angle) * radius * 0.65 + 1.5;
-          item.length = 12.0 + Math.random() * 22.0;
-        }
-
-        const idx = i * 6;
-        posArr[idx] = item.x;
-        posArr[idx + 1] = item.y;
-        posArr[idx + 2] = item.z;
-        posArr[idx + 3] = item.x;
-        posArr[idx + 4] = item.y;
-        posArr[idx + 5] = item.z - item.length;
-      }
-      posAttr.needsUpdate = true;
-    }
-
-    // 2. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
+    // 1. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
     if (!this.isOnGround && (currentKmh > 520 || (currentKmh > 320 && Math.abs(this.roll) > 0.35))) {
       const wingSpan = this.currentPlaneType === 'dc10' ? 24.5 : 17.5;
       [-wingSpan, wingSpan].forEach(sideX => {
@@ -759,7 +672,7 @@
       });
     }
 
-    // 3. 화면 테두리 스피드 비네트 효과
+    // 2. 화면 테두리 스피드 비네트 효과
     if (this.speedVignetteEl) {
       if (intensity > 0.01 && currentKmh > 420) {
         const vigOpacity = Math.min(0.85, (currentKmh - 420) / 400) * intensity;
@@ -768,7 +681,7 @@
         this.speedVignetteEl.style.opacity = '0';
       }
     }
-    // 4. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
+    // 3. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
     if (this.oceanTexture) {
       this.oceanTexture.offset.y -= dt * 0.035;
     }
@@ -830,6 +743,7 @@
     };
     this._partSparkFrame = 0;
     this._partSmokeFrame = 0;
+    if (typeof this.clearAirframeDebris === 'function') this.clearAirframeDebris();
   },
 
   _collapseGearAssembly(gear, idx) {
@@ -967,10 +881,10 @@
     const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
 
     if (!this._dmgSparkMat) {
-      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
-      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfda4af });
+      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xf472b6 });
       this._dmgSmokeMat = new THREE.MeshBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.72 });
-      this._dmgGeo = new THREE.BoxGeometry(0.55, 0.55, 0.85);
+      this._dmgGeo = new THREE.BoxGeometry(0.45, 0.45, 1.05);
     }
 
     const pGeo = this.sharedExhaustGeo || this._dmgGeo;
@@ -1251,7 +1165,7 @@
   },
 
   // 3. 다단계 대폭발 & 기체 파쇄 분해 (Catastrophic Explosion Breakup)
-  triggerExplosion(cause = '추락 폭발') {
+  triggerExplosion(cause = '추락 폭발', options = {}) {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
     this.isPlaying = false;
@@ -1263,6 +1177,7 @@
     const impactKmh = Math.max(35, Math.round(this.speed * 280));
     const sinkRate = Math.abs(this.verticalSpeed);
     const report = this.analyzeCrashSeverity(cause, impactKmh, sinkRate);
+    if (options && options.finding) report.finding = options.finding;
 
     this.hullIntegrity = 0;
     this.speed = 0;
@@ -1283,14 +1198,12 @@
     this.displayPassengerDialogue(`💥 [객실 탑승객 285명] "쿵!! (충격 ${report.estimatedG}G로 기체 대폭발! 사망 ${report.fatalities}명, 부상 ${report.seriousInjuries + report.minorInjuries}명 발생!)"`);
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle) modalTitle.textContent = '🚨 CRASH INVESTIGATION REPORT';
-      if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
-
-      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
-      this.overlay.classList.remove('hidden');
+      this.showLobbyResult({
+        title: '🚨 CRASH INVESTIGATION REPORT',
+        html: this.renderCrashReportHTML(report),
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 2400);
   },
 
@@ -1300,6 +1213,9 @@
     if (x >= -700 && x <= 700 && z >= -2200 && z <= 2200) return true;
     // 2. 목적지 거대 대륙 육지 전체 (Z <= -28000): 드넓은 대륙 평야 및 육지 공항
     if (z <= -28000 && x >= -25000 && x <= 25000) return true;
+    // 3. 제주공항 섬 (Flying over Jeju Airport)
+    const jeju = this.getJejuLocalPosition ? this.getJejuLocalPosition() : null;
+    if (jeju && Math.hypot(x - jeju.x, z - jeju.z) <= this.JEJU_AIRPORT.islandRadius) return true;
     return false;
   },
 
@@ -1333,14 +1249,12 @@
     this.displayPassengerDialogue(`🌊 [객실 탑승객 285명] "바다로 격돌!! (충격 ${report.estimatedG}G! 사망 ${report.fatalities}명, 부상 ${report.seriousInjuries + report.minorInjuries}명 발생!)"`);
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle) modalTitle.textContent = '🌊 SEA IMPACT & CASUALTY REPORT';
-      if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
-
-      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
-      this.overlay.classList.remove('hidden');
+      this.showLobbyResult({
+        title: '🌊 SEA IMPACT & CASUALTY REPORT',
+        html: this.renderCrashReportHTML(report),
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 2400);
   },
 
@@ -1400,8 +1314,198 @@
     }
   },
 
+  clearAirframeDebris() {
+    if (!Array.isArray(this.debrisPieces)) {
+      this.debrisPieces = [];
+      return;
+    }
+    for (const piece of this.debrisPieces) {
+      if (this.scene && typeof this.scene.remove === 'function') {
+        this.scene.remove(piece);
+      }
+      if (piece && typeof piece.traverse === 'function') {
+        piece.traverse((obj) => {
+          if (obj && obj.userData && obj.userData._disposeGeometryOnClear && obj.geometry && typeof obj.geometry.dispose === 'function') {
+            obj.geometry.dispose();
+          }
+        });
+      }
+    }
+    this.debrisPieces = [];
+  },
+
+  // 현재 탑승 중인 비행기(GLB / 프로시저럴) 메쉬 자체를 1:1 실물 크기 6개 구조 파편으로 절단·생성
+  // (좌주익, 우주익, 기수/조종석, 중앙동체, 수직꼬리날개, 후방동체/수평꼬리날개)
+  buildAirframeMeshDebrisChunks(pos) {
+    if (!this.planeGroup || !this.scene || typeof THREE === 'undefined') return [];
+    if (!THREE.Box3 || !THREE.Matrix4 || !THREE.BufferGeometry || !THREE.Group || !THREE.Mesh) return [];
+
+    if (typeof this.planeGroup.updateMatrixWorld === 'function') {
+      this.planeGroup.updateMatrixWorld(true);
+    }
+    if (!this.planeGroup.matrixWorld) return [];
+
+    const planeInv = new THREE.Matrix4().copy(this.planeGroup.matrixWorld).invert();
+    const localBox = new THREE.Box3();
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const meshToPlane = new THREE.Matrix4();
+
+    const sourceMeshes = [];
+    if (typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.geometry) return;
+        const posAttr = obj.geometry.attributes && obj.geometry.attributes.position;
+        if (!posAttr || posAttr.count < 3) return;
+        sourceMeshes.push(obj);
+        meshToPlane.multiplyMatrices(planeInv, obj.matrixWorld);
+        for (let i = 0; i < posAttr.count; i++) {
+          vA.fromBufferAttribute(posAttr, i).applyMatrix4(meshToPlane);
+          localBox.expandByPoint(vA);
+        }
+      });
+    }
+
+    if (sourceMeshes.length === 0 || localBox.isEmpty()) return [];
+
+    const length = Math.max(1, localBox.max.z - localBox.min.z);
+    const span = Math.max(1, localBox.max.x - localBox.min.x);
+    const height = Math.max(1, localBox.max.y - localBox.min.y);
+    const fuselageHalfW = Math.max(1.8, span * 0.085);
+    const noseMaxZ = localBox.min.z + length * 0.28;
+    const tailMinZ = localBox.max.z - length * 0.28;
+    const finMinY = localBox.max.y - height * 0.52;
+
+    const sectionSpecs = {
+      leftWing:       { impulse: [-8.5, 4.8, -1.5], ang: [0.09, 0.13, 0.07] },
+      rightWing:      { impulse: [8.5, 4.8, -1.5],  ang: [-0.09, -0.13, 0.07] },
+      nose:           { impulse: [0.0, 4.0, -9.5],  ang: [0.11, 0.06, 0.09] },
+      centerFuselage: { impulse: [0.0, 2.8, -2.5],  ang: [0.05, 0.03, 0.07] },
+      tailFin:        { impulse: [1.5, 6.2, 7.5],   ang: [0.13, 0.11, 0.15] },
+      aftTail:        { impulse: [-1.5, 3.6, 6.5],  ang: [-0.08, 0.07, -0.10] }
+    };
+
+    const buckets = {};
+    for (const key of Object.keys(sectionSpecs)) {
+      buckets[key] = { pieces: [], box: new THREE.Box3(), triCount: 0 };
+    }
+
+    const classifyCentroid = (cx, cy, cz) => {
+      if (cx < -fuselageHalfW && cz > noseMaxZ * 0.9 && cz < tailMinZ) return 'leftWing';
+      if (cx > fuselageHalfW && cz > noseMaxZ * 0.9 && cz < tailMinZ) return 'rightWing';
+      if (cz < noseMaxZ) return 'nose';
+      if (cz > tailMinZ) return (cy > finMinY && Math.abs(cx) <= Math.max(1.8, span * 0.06)) ? 'tailFin' : 'aftTail';
+      return 'centerFuselage';
+    };
+
+    for (const mesh of sourceMeshes) {
+      const geom = mesh.geometry;
+      const posAttr = geom.attributes.position;
+      const origIndex = geom.index;
+      const indexCount = origIndex ? origIndex.count : posAttr.count;
+      if (Math.floor(indexCount / 3) <= 0) continue;
+
+      meshToPlane.multiplyMatrices(planeInv, mesh.matrixWorld);
+      const localIndices = {
+        leftWing: [], rightWing: [], nose: [], centerFuselage: [], tailFin: [], aftTail: []
+      };
+
+      for (let i = 0; i + 2 < indexCount; i += 3) {
+        const ia = origIndex ? origIndex.getX(i) : i;
+        const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+        const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+        vA.fromBufferAttribute(posAttr, ia).applyMatrix4(meshToPlane);
+        vB.fromBufferAttribute(posAttr, ib).applyMatrix4(meshToPlane);
+        vC.fromBufferAttribute(posAttr, ic).applyMatrix4(meshToPlane);
+        const cx = (vA.x + vB.x + vC.x) / 3;
+        const cy = (vA.y + vB.y + vC.y) / 3;
+        const cz = (vA.z + vB.z + vC.z) / 3;
+        const key = classifyCentroid(cx, cy, cz);
+        localIndices[key].push(ia, ib, ic);
+        buckets[key].box.expandByPoint(vA);
+        buckets[key].box.expandByPoint(vB);
+        buckets[key].box.expandByPoint(vC);
+        buckets[key].triCount += 1;
+      }
+
+      for (const key of Object.keys(localIndices)) {
+        const idxArr = localIndices[key];
+        if (idxArr.length === 0) continue;
+        const pieceGeom = new THREE.BufferGeometry();
+        for (const attrName of Object.keys(geom.attributes)) {
+          pieceGeom.setAttribute(attrName, geom.attributes[attrName]);
+        }
+        pieceGeom.setIndex(idxArr);
+        const pieceMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        buckets[key].pieces.push({ geom: pieceGeom, mat: pieceMat, matrix: meshToPlane.clone() });
+      }
+    }
+
+    const planeQuat = this.planeGroup.quaternion ? this.planeGroup.quaternion.clone() : new THREE.Quaternion();
+    const basePos = pos ? pos.clone() : this.planeGroup.position.clone();
+    const carryVel = this.velocity ? this.velocity.clone().multiplyScalar(0.03) : new THREE.Vector3();
+    const spawned = [];
+
+    for (const [key, bucket] of Object.entries(buckets)) {
+      if (bucket.pieces.length === 0 || bucket.box.isEmpty()) continue;
+      const chunkCenter = bucket.box.getCenter(new THREE.Vector3());
+      const chunkGroup = new THREE.Group();
+      chunkGroup.name = `Debris_${key}`;
+      chunkGroup.userData = { debrisSection: key, sourceAircraft: this.currentPlaneType || 'a320', triCount: bucket.triCount };
+
+      const innerOffset = new THREE.Group();
+      innerOffset.position.set(-chunkCenter.x, -chunkCenter.y, -chunkCenter.z);
+      for (const p of bucket.pieces) {
+        const pieceMesh = new THREE.Mesh(p.geom, p.mat);
+        pieceMesh.userData = { _disposeGeometryOnClear: true };
+        pieceMesh.applyMatrix4(p.matrix);
+        innerOffset.add(pieceMesh);
+      }
+      chunkGroup.add(innerOffset);
+
+      // 정확히 원래 비행기의 해당 부위 위치에서 분리되어 튕겨 나가도록 배치
+      const worldCenterOffset = chunkCenter.clone().applyQuaternion(planeQuat);
+      chunkGroup.position.copy(basePos).add(worldCenterOffset);
+      chunkGroup.quaternion.copy(planeQuat);
+
+      const spec = sectionSpecs[key];
+      const jitter = (s) => (Math.random() - 0.5) * s;
+      const localImpulse = new THREE.Vector3(
+        spec.impulse[0] + jitter(3.0),
+        spec.impulse[1] + Math.random() * 3.0,
+        spec.impulse[2] + jitter(3.0)
+      ).applyQuaternion(planeQuat);
+      localImpulse.y = Math.max(1.8, localImpulse.y);
+      chunkGroup.velocity = localImpulse.add(carryVel);
+      chunkGroup.angularVel = new THREE.Vector3(
+        spec.ang[0] + jitter(0.04),
+        spec.ang[1] + jitter(0.04),
+        spec.ang[2] + jitter(0.04)
+      );
+
+      this.scene.add(chunkGroup);
+      this.debrisPieces.push(chunkGroup);
+      spawned.push(chunkGroup);
+    }
+
+    return spawned;
+  },
+
   // 기체 구조 분해 잔해 조각 생성 (Debris Physics)
   spawnAirframeDebris(pos, rot) {
+    // 1. 실제 비행기 3D 메쉬에서 1:1 크기 구조 파편 직접 생성
+    const realChunks = this.buildAirframeMeshDebrisChunks(pos);
+    if (realChunks.length > 0) return realChunks;
+
+    // 2. 메쉬가 없는 폴백 환경에서도 기종 실제 전장(m)에 비례한 크기로 잔해 생성
+    const lengthByType = {
+      a320: 37.6, a320_detailed: 37.6, a320_simplified: 37.6,
+      a350: 66.8, b747: 70.6, dc10: 55.5, md80: 45.1,
+      concorde: 61.7, amphibian: 19.8, ancestor: 12.3
+    };
+    const scale = (lengthByType[(this.currentPlaneType || 'a320').toLowerCase()] || 37.6) / 37.6;
+
     const scorchedMat = new THREE.MeshStandardMaterial({
       color: 0x1e293b,
       roughness: 0.9,
@@ -1413,33 +1517,33 @@
     });
 
     // 1. 기수/조종석 잔해
-    const noseDebris = new THREE.Mesh(new THREE.ConeGeometry(2.6, 6, 12), scorchedMat);
-    noseDebris.position.copy(pos).add(new THREE.Vector3(0, 2, -10));
+    const noseDebris = new THREE.Mesh(new THREE.ConeGeometry(2.6 * scale, 9 * scale, 12), scorchedMat);
+    noseDebris.position.copy(pos).add(new THREE.Vector3(0, 2, -11 * scale));
     noseDebris.velocity = new THREE.Vector3((Math.random() - 0.5) * 6, 4 + Math.random() * 4, -8 - Math.random() * 6);
     noseDebris.angularVel = new THREE.Vector3(0.08, 0.05, 0.12);
     this.scene.add(noseDebris);
     this.debrisPieces.push(noseDebris);
 
     // 2. 좌측 주익 잔해
-    const leftWingDebris = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 4), burningWingMat);
-    leftWingDebris.position.copy(pos).add(new THREE.Vector3(-8, 1, 0));
+    const leftWingDebris = new THREE.Mesh(new THREE.BoxGeometry(16 * scale, 0.5 * scale, 5 * scale), burningWingMat);
+    leftWingDebris.position.copy(pos).add(new THREE.Vector3(-9 * scale, 1, 0));
     leftWingDebris.velocity = new THREE.Vector3(-7 - Math.random() * 5, 5 + Math.random() * 5, (Math.random() - 0.5) * 5);
     leftWingDebris.angularVel = new THREE.Vector3(0.1, 0.15, 0.06);
     this.scene.add(leftWingDebris);
     this.debrisPieces.push(leftWingDebris);
 
     // 3. 우측 주익 잔해
-    const rightWingDebris = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 4), burningWingMat);
-    rightWingDebris.position.copy(pos).add(new THREE.Vector3(8, 1, 0));
+    const rightWingDebris = new THREE.Mesh(new THREE.BoxGeometry(16 * scale, 0.5 * scale, 5 * scale), burningWingMat);
+    rightWingDebris.position.copy(pos).add(new THREE.Vector3(9 * scale, 1, 0));
     rightWingDebris.velocity = new THREE.Vector3(7 + Math.random() * 5, 5 + Math.random() * 5, (Math.random() - 0.5) * 5);
     rightWingDebris.angularVel = new THREE.Vector3(-0.1, -0.15, 0.06);
     this.scene.add(rightWingDebris);
     this.debrisPieces.push(rightWingDebris);
 
     // 4. 동체 중앙 잔해
-    const fuselageDebris = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 15, 16), scorchedMat);
+    const fuselageDebris = new THREE.Mesh(new THREE.CylinderGeometry(2.8 * scale, 2.8 * scale, 18 * scale, 16), scorchedMat);
     fuselageDebris.rotation.x = Math.PI / 2;
-    fuselageDebris.position.copy(pos).add(new THREE.Vector3(0, 2, 2));
+    fuselageDebris.position.copy(pos).add(new THREE.Vector3(0, 2, 2 * scale));
     fuselageDebris.velocity = new THREE.Vector3((Math.random() - 0.5) * 4, 3 + Math.random() * 3, -3);
     fuselageDebris.angularVel = new THREE.Vector3(0.04, 0.02, 0.08);
     this.scene.add(fuselageDebris);
@@ -1447,52 +1551,103 @@
 
     // 5. 엔진 잔해들 (구르고 튕김)
     for (let e = 0; e < 2; e++) {
-      const engDebris = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 5, 12), scorchedMat);
+      const engDebris = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * scale, 1.4 * scale, 5 * scale, 12), scorchedMat);
       engDebris.rotation.x = Math.PI / 2;
-      engDebris.position.copy(pos).add(new THREE.Vector3((e === 0 ? -7 : 7), 1, 0));
+      engDebris.position.copy(pos).add(new THREE.Vector3((e === 0 ? -7 : 7) * scale, 1, 0));
       engDebris.velocity = new THREE.Vector3((e === 0 ? -9 : 9), 6, -5 + Math.random() * 3);
       engDebris.angularVel = new THREE.Vector3(0.2, 0.1, 0.15);
       this.scene.add(engDebris);
       this.debrisPieces.push(engDebris);
     }
+    return this.debrisPieces;
   },
 
-  // 거대한 다단계 화염구, 충격파, 솟구치는 짙은 연기 기둥
+  // 거대한 다단계 분홍빛 화염구, 이중 충격파, 방사형 스파크 스트릭 & 연기 기둥
   createMassiveExplosion(pos) {
-    // 1. 충격파 링 (Ground Shockwave)
+    // 1-A. 지면 방사형 충격파 링 (Ground Shockwave Ring - 로즈 화이트)
     const shockRing = new THREE.Mesh(
-      new THREE.RingGeometry(1, 4, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffedd5, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
+      new THREE.RingGeometry(1.2, 4.4, 36),
+      new THREE.MeshBasicMaterial({ color: 0xfce7f3, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
     );
     shockRing.rotation.x = -Math.PI / 2;
     shockRing.position.copy(pos);
-    shockRing.position.y = 1.0;
+    shockRing.position.y = Math.max(1.2, pos.y - 2.0);
     shockRing.isShockwave = true;
-    shockRing.life = 0.9;
+    shockRing.life = 0.92;
     this.particles.push(shockRing);
     this.scene.add(shockRing);
 
-    // 2. 다단계 화염구 (Fireball Cluster)
-    const fireGeo = new THREE.SphereGeometry(3.5, 10, 10);
-    const fireColors = [0xffffff, 0xfacc15, 0xf97316, 0xef4444];
+    // 1-B. 입체 경사 충격파 링 (3D Pressure Wave Ring - 소프트 핑크)
+    const blastRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.8, 3.0, 32),
+      new THREE.MeshBasicMaterial({ color: 0xf9a8d4, transparent: true, opacity: 0.82, side: THREE.DoubleSide })
+    );
+    blastRing.rotation.set(Math.PI / 3.2, 0, Math.PI / 6);
+    blastRing.position.copy(pos);
+    blastRing.position.y += 1.5;
+    blastRing.isShockwave = true;
+    blastRing.life = 0.72;
+    this.particles.push(blastRing);
+    this.scene.add(blastRing);
+
+    // 1-C. 중심부 섬광 코어 (Luminous Pink-White Impact Flash Core)
+    const flashCore = new THREE.Mesh(
+      new THREE.SphereGeometry(5.2, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff1f2, transparent: true, opacity: 0.92 })
+    );
+    flashCore.position.copy(pos);
+    flashCore.position.y += 1.0;
+    flashCore.isShockwave = true;
+    flashCore.life = 0.48;
+    this.particles.push(flashCore);
+    this.scene.add(flashCore);
+
+    // 2. 다단계 분홍빛 화염구 (Soft Pink-Tinted Fireball Cluster)
+    const fireGeo = new THREE.SphereGeometry(3.2, 10, 10);
+    const fireColors = [0xfff1f2, 0xfbcfe8, 0xf9a8d4, 0xf472b6, 0xfb7185, 0xfda4af];
     for (let i = 0; i < 65; i++) {
       const color = fireColors[Math.floor(Math.random() * fireColors.length)];
-      const p = new THREE.Mesh(fireGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+      const p = new THREE.Mesh(fireGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92 }));
       p.position.copy(pos);
+      const scaleJitter = 0.7 + Math.random() * 0.75;
+      p.scale.setScalar(scaleJitter);
       const angle = Math.random() * Math.PI * 2;
-      const spd = 4.0 + Math.random() * 7.5;
-      p.velocity = new THREE.Vector3(Math.cos(angle) * spd, 3.0 + Math.random() * 6.5, Math.sin(angle) * spd);
-      p.life = 0.9 + Math.random() * 0.4;
+      const spd = 3.8 + Math.random() * 7.8;
+      p.velocity = new THREE.Vector3(Math.cos(angle) * spd, 2.8 + Math.random() * 6.8, Math.sin(angle) * spd);
+      p.life = 0.85 + Math.random() * 0.45;
       this.particles.push(p);
       this.scene.add(p);
     }
 
-    // 3. 하늘로 치솟는 짙은 연기 기둥 (Rising Black Smoke Column)
+    // 3. 방사형 충격 스파크 스트릭 (High-Velocity Rose-Gold Impact Streaks)
+    const streakGeo = new THREE.BoxGeometry(0.22, 0.22, 2.1);
+    const streakColors = [0xffe4e6, 0xfda4af, 0xf9a8d4, 0xfde68a];
+    for (let k = 0; k < 36; k++) {
+      const color = streakColors[Math.floor(Math.random() * streakColors.length)];
+      const streak = new THREE.Mesh(streakGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+      streak.position.copy(pos);
+      streak.position.y += 1.0;
+      const theta = Math.random() * Math.PI * 2;
+      const elev = 0.15 + Math.random() * 0.95;
+      const spd = 8.5 + Math.random() * 9.5;
+      const vx = Math.cos(theta) * Math.cos(elev) * spd;
+      const vy = Math.sin(elev) * spd;
+      const vz = Math.sin(theta) * Math.cos(elev) * spd;
+      streak.velocity = new THREE.Vector3(vx, vy, vz);
+      if (typeof streak.lookAt === 'function') {
+        streak.lookAt(pos.x + vx, pos.y + 1.0 + vy, pos.z + vz);
+      }
+      streak.life = 0.55 + Math.random() * 0.35;
+      this.particles.push(streak);
+      this.scene.add(streak);
+    }
+
+    // 4. 하늘로 치솟는 짙은 연기 기둥 (Rising Charcoal-Plum Smoke Column)
     const smokeGeo = new THREE.DodecahedronGeometry(4.5, 1);
-    const smokeColors = [0x1e293b, 0x334155, 0x475569];
+    const smokeColors = [0x1e293b, 0x334155, 0x4c1d3d];
     for (let s = 0; s < 50; s++) {
       const color = smokeColors[Math.floor(Math.random() * smokeColors.length)];
-      const smoke = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.85, roughness: 1.0 }));
+      const smoke = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.84, roughness: 1.0 }));
       smoke.position.copy(pos);
       smoke.position.x += (Math.random() - 0.5) * 8;
       smoke.position.z += (Math.random() - 0.5) * 8;
@@ -1504,14 +1659,32 @@
   },
 
   createDentSparks(pos) {
-    const pGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const pMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+    // 충격 지점 미니 펄스 링 + 방사형 로즈골드 스파크 스트릭
+    const pulseRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.4, 1.4, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfbcfe8, transparent: true, opacity: 0.88, side: THREE.DoubleSide })
+    );
+    pulseRing.rotation.x = -Math.PI / 2;
+    pulseRing.position.copy(pos);
+    pulseRing.position.y += 1.2;
+    pulseRing.isShockwave = true;
+    pulseRing.life = 0.45;
+    this.particles.push(pulseRing);
+    this.scene.add(pulseRing);
+
+    const pGeo = new THREE.BoxGeometry(0.18, 0.18, 1.1);
+    const sparkColors = [0xffe4e6, 0xfda4af, 0xf472b6];
     for (let i = 0; i < 24; i++) {
-      const p = new THREE.Mesh(pGeo, pMat);
+      const color = sparkColors[i % sparkColors.length];
+      const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
       p.position.copy(pos);
       p.position.y += 1.2;
-      p.velocity = new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3);
-      p.life = 0.5;
+      const vx = (Math.random() - 0.5) * 5.0;
+      const vy = 0.8 + Math.random() * 3.8;
+      const vz = (Math.random() - 0.5) * 5.0;
+      p.velocity = new THREE.Vector3(vx, vy, vz);
+      if (typeof p.lookAt === 'function') p.lookAt(pos.x + vx, pos.y + 1.2 + vy, pos.z + vz);
+      p.life = 0.48 + Math.random() * 0.18;
       this.particles.push(p);
       this.scene.add(p);
     }

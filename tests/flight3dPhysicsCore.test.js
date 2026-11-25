@@ -836,5 +836,86 @@ test('CL-215 normal water landing approach suppresses false PULL_UP and GEAR war
   assert.equal(fallbackGame.triggered?.type, 'PULL_UP', 'Fallback GPWS must trigger PULL_UP on 7.0 m/s water dive');
 });
 
+test('setupAirborneCruiseState sets level-flight pitch, cruise speed and trim across aircraft types', () => {
+  const uiCode = readFileSync('web/js/ui.js', 'utf8');
+  const sandbox = loadPhysicsSandbox();
+  const { THREE, AirplaneGame } = sandbox;
+  vm.runInContext(uiCode, sandbox);
+
+  const game = Object.create(AirplaneGame.prototype);
+  game.planeGroup = {
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    visible: false
+  };
+  game.velocity = new THREE.Vector3();
+
+  // 1. A320 jet airliner
+  game.currentPlaneType = 'a320';
+  game.setupAirborneCruiseState(100, 1200, -500);
+  assert.equal(game.planeGroup.position.x, 100);
+  assert.equal(game.planeGroup.position.y, 1200);
+  assert.equal(game.planeGroup.position.z, -500);
+  assert.ok(game.pitch > 0.05, `A320 cruise pitch must be nose-up positive (got ${game.pitch})`);
+  assert.ok(game.pitchTrim >= 3.5, `A320 cruise pitch trim must be positive for level flight (got ${game.pitchTrim})`);
+  assert.ok(game.velocity.z <= -100, `A320 cruise forward velocity must be >= 100 m/s (got ${game.velocity.z})`);
+  assert.equal(game.isOnGround, false);
+
+  // 2. Propeller ancestor aircraft
+  game.currentPlaneType = 'ancestor';
+  game.setupAirborneCruiseState(0, 800, 0);
+  assert.ok(game.pitch > 0.02, `Ancestor cruise pitch must be positive (got ${game.pitch})`);
+  assert.ok(game.velocity.z <= -50, `Ancestor cruise speed must be >= 50 m/s (got ${game.velocity.z})`);
+});
+
+test('catastrophic ground and terrain impact triggers triggerExplosion instead of silent freeze', () => {
+  const sandbox = loadPhysicsSandbox();
+  const { THREE, AirplaneGame } = sandbox;
+
+  let explosionCause = null;
+  const game = Object.create(AirplaneGame.prototype);
+  game.currentPlaneType = 'a320';
+  game.groundY = 6.84;
+  game.planeGroup = {
+    position: new THREE.Vector3(0, 10, 0),
+    quaternion: new THREE.Quaternion(),
+  };
+  game.velocity = new THREE.Vector3(0, -15, -70);
+  game.speed = 1.0;
+  game.verticalSpeed = -15;
+  game.pitch = -0.35;
+  game.roll = 0;
+  game.gearPhase = 'UP';
+  game.triggerExplosion = (cause) => { explosionCause = cause; };
+  game.showPopup = () => {};
+
+  // 1. Severe touchdown sink rate with gear retracted
+  game.handleFlight3dEvents([
+    {
+      type: 'touchdown',
+      sinkRate: 6.5,
+      contacts: [{ id: 'nose' }]
+    }
+  ], { telemetry: { gForce: 4.2 } });
+  assert.ok(explosionCause, 'Catastrophic touchdown (> 4.5 m/s sink) must invoke triggerExplosion');
+  assert.ok(explosionCause.includes('추락'), `Explosion cause must be a crash description (got: ${explosionCause})`);
+
+  // 2. Nose-first ground contact at flight speed
+  explosionCause = null;
+  game.speed = 0.8;
+  game.verticalSpeed = -8;
+  game.pitch = -0.4;
+  game.handleFlight3dEvents([
+    {
+      type: 'bodyDamage',
+      id: 'nose',
+      state: 'failed'
+    }
+  ], {});
+  assert.ok(explosionCause, 'High-speed nose ground impact must invoke triggerExplosion');
+  assert.ok(explosionCause.includes('기수'), `Explosion cause must mention nose (got: ${explosionCause})`);
+});
+
+
 
 

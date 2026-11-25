@@ -26,7 +26,39 @@
     }
   },
 
-  switchAircraft(type) {
+  setTakeoffPhaseLabel(text) {
+    if (!this.takeoffPhaseLabel && this.takeoffDirectBtn) {
+      this.takeoffPhaseLabel = this.takeoffDirectBtn.querySelector('.phase-label');
+    }
+    if (this.takeoffPhaseLabel) this.takeoffPhaseLabel.textContent = text;
+  },
+
+  showLobbyResult(result) {
+    const titleEl = document.getElementById('modal-title');
+    const descEl = document.getElementById('modal-desc');
+    if (titleEl) titleEl.textContent = result.title;
+    if (descEl) descEl.innerHTML = result.html;
+    if (result.primaryLabel && this.startBtn) this.startBtn.textContent = result.primaryLabel;
+    if (result.phaseLabel && typeof this.setTakeoffPhaseLabel === 'function') this.setTakeoffPhaseLabel(result.phaseLabel);
+    if (window.ScreenFlow) window.ScreenFlow.go('lobby', { result: true });
+  },
+
+  syncSettingsUI() {
+    const slider = document.getElementById('settings-effect-slider');
+    const value = document.getElementById('settings-effect-value');
+    const intensity = Number.isFinite(this.speedEffectIntensity) ? this.speedEffectIntensity : 0.35;
+    const pct = Math.round(intensity * 100);
+    if (slider) slider.value = String(pct);
+    if (value) value.textContent = `${pct}%`;
+    const soundBtn = document.getElementById('settings-sound-btn');
+    if (soundBtn) soundBtn.textContent = this.soundEnabled ? '🔊 사운드 ON' : '🔇 사운드 OFF';
+    const timeBtn = document.getElementById('settings-time-btn');
+    if (timeBtn) timeBtn.textContent = this.timeOfDay === 'night' ? '🌙 야간 모드' : '☀️ 주간 모드';
+    const topSoundBtn = document.getElementById('sound-btn');
+    if (topSoundBtn) topSoundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
+  },
+
+  switchAircraft(type, options) {
     if (!type) return;
     const names = {
       dc10: 'DC-10 삼발기',
@@ -34,6 +66,7 @@
       a320: 'A320 제트기',
       a320_detailed: 'A320-200 실물 고정밀',
       a320_simplified: 'A320-200 경량 최적화',
+      a350: 'A350-900 XWB',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
       amphibian: 'CL-215 수륙양용기',
@@ -53,8 +86,8 @@
     this.gearPhaseTimer = 0.0;
     this.updateGearUI('DOWN', 'gear-down');
 
-    // ★ 100% 공식 바이너리 GLB 3D 기체 즉시 로드
-    this.loadGLBPreset(type);
+    // 로비 선택은 상태만 갱신하고, GLB 로드는 비행 시작 시 buildAircraft에서 수행
+    if (!(options && options.deferLoad)) this.loadGLBPreset(type);
 
     const planeNameEl = document.getElementById('plane-name-text');
     if (planeNameEl) planeNameEl.textContent = nameText;
@@ -88,8 +121,13 @@
     this.reverserBtn = document.getElementById('reverser-btn');
     this.reverserText = document.getElementById('reverser-text');
 
-    // 자세계(인공수평의), VSI, 실속 뱃지, GPWS 배너 바인딩
+    // 자세계(인공수평의), 헤딩, VSI, 실속 뱃지, GPWS 배너 바인딩
     this.attitudeHorizon = document.getElementById('attitude-horizon');
+    this.headingVal = document.getElementById('heading-val');
+    this.headingCardinal = document.getElementById('heading-cardinal');
+    this.hudTopHeading = document.getElementById('hud-top-heading');
+    this.destinationSelect = document.getElementById('destination-select');
+    this.selectedDestinationIcao = this.selectedDestinationIcao || 'RKSI';
     this.speedBadge = document.getElementById('speed-status-badge');
     this.vsiVal = document.getElementById('vsi-val');
     this.gpwsBanner = document.getElementById('gpws-banner');
@@ -104,6 +142,7 @@
 
     this.startBtn = document.getElementById('start-btn');
     this.takeoffDirectBtn = document.getElementById('takeoff-direct-btn');
+    this.takeoffPhaseLabel = this.takeoffDirectBtn && this.takeoffDirectBtn.querySelector('.phase-label');
     this.gearBtn = document.getElementById('gear-btn');
     this.camToggleBtn = document.getElementById('cam-toggle-btn');
     this.camModeText = document.getElementById('cam-mode-text');
@@ -111,6 +150,57 @@
     this.planeToggleBtn = document.getElementById('plane-toggle-btn');
     this.targetArrow = document.querySelector('.target-indicator .arrow');
     this.targetDist = document.getElementById('target-dist');
+    this.airportIndicatorRows = [];
+    const airportRows = document.getElementById('airport-indicator-rows');
+    if (airportRows && window.AirportIndicators) {
+      for (const airport of window.AirportIndicators.airports) {
+        const row = document.createElement('div');
+        row.className = 'airport-indicator-row';
+        row.title = `${airport.name} · ${airport.runways.join(' / ')} · TWR ${airport.towerMHz} MHz · ELV ${airport.elevationM} m`;
+        const code = document.createElement('span');
+        code.className = 'apt-code';
+        code.textContent = airport.icao;
+        const name = document.createElement('span');
+        name.textContent = `${airport.iata} ${airport.short}`;
+        const dist = document.createElement('span');
+        dist.className = 'apt-dist';
+        const brg = document.createElement('span');
+        brg.className = 'apt-brg';
+        row.append(code, name, dist, brg);
+        row.addEventListener('click', () => {
+          this.setDestinationAirport(airport.icao);
+        });
+        airportRows.appendChild(row);
+        this.airportIndicatorRows.push({ icao: airport.icao, airport, row, dist, brg });
+      }
+    }
+    this.landmarkPanel = document.getElementById('landmark-panel');
+    this.landmarkList = document.getElementById('landmark-list');
+    this.landmarkStatus = document.getElementById('landmark-status');
+    this.landmarkSource = document.getElementById('landmark-source');
+    this.landmarkBtnText = document.getElementById('landmark-btn-text');
+    this.landmarkPanelOpen = false;
+    this.landmarkItems = [];
+    this.landmarkRows = [];
+    this.landmarkLoadSeq = 0;
+    this.landmarkLastLoad = 0;
+    this.landmarkLastAt = null;
+    this.landmarkLanguage = (typeof navigator !== 'undefined' && /^en/i.test(navigator.language || '')) ? 'en' : 'ko';
+    this.landmarkDetail = document.getElementById('landmark-detail');
+    this.landmarkDetailTitle = document.getElementById('landmark-detail-title');
+    this.landmarkDetailExtract = document.getElementById('landmark-detail-extract');
+    this.landmarkDetailCoords = document.getElementById('landmark-detail-coords');
+    this.landmarkDetailDistance = document.getElementById('landmark-detail-distance');
+    this.landmarkDetailBearing = document.getElementById('landmark-detail-bearing');
+    this.landmarkDetailLink = document.getElementById('landmark-detail-link');
+    this.selectedLandmarkItem = null;
+    this.selectedLandmarkId = null;
+    if (typeof window !== 'undefined' && window.NearbyLandmarks && window.LandmarkPins) {
+      window.LandmarkPins.setItems(window.NearbyLandmarks.localLandmarks());
+    }
+    if (this.destinationSelect && this.selectedDestinationIcao) {
+      this.destinationSelect.value = this.selectedDestinationIcao;
+    }
     this.emergencyPanel = document.getElementById('emergency-panel');
     this.timeToggleBtn = document.getElementById('time-toggle-btn');
     this.timeModeText = document.getElementById('time-mode-text');
@@ -119,11 +209,38 @@
     this.micToggleBtn = document.getElementById('mic-toggle-btn');
     this.engineShutdownBtn = document.getElementById('engine-shutdown-btn');
     this.gateEngineShutdownBtn = document.getElementById('gate-engine-shutdown-btn');
+    if (this.getActiveAirlineSkin) {
+      const activeSkin = this.getActiveAirlineSkin();
+      document.querySelectorAll('.skin-choice-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset && btn.dataset.skin === activeSkin.id);
+      });
+    }
+    this.placePickerPanel = document.getElementById('place-picker-panel');
+    this.placeSelect = document.getElementById('place-select');
+    this.placeCoords = document.getElementById('place-coords');
+    if (this.placeSelect) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '기본 공항 선택 (Gimhae)';
+      placeholder.selected = true;
+      this.placeSelect.appendChild(placeholder);
+      for (const preset of this.getPlacePresets()) {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.name;
+        option.dataset.lat = String(preset.lat);
+        option.dataset.lon = String(preset.lon);
+        option.dataset.elev = String(preset.elevationM || 0);
+        this.placeSelect.appendChild(option);
+      }
+      this.placeSelect.addEventListener('change', () => this.updateSelectedPlaceReadout());
+      this.updateSelectedPlaceReadout();
+    }
     this.updateSpeedEffectUI();
   },
 
   // ----------------------------------------------------------------
-  // 장거리 200km 항로 배속 순항 토글 시스템 (Fast Cruise 1x/2x/4x)
+  // 장거리 340km 항로 배속 순항 토글 시스템 (Fast Cruise 1x/2x/4x)
   // ----------------------------------------------------------------
   toggleCruiseSpeed() {
     this.cruiseMultiplier = this.cruiseMultiplier === 1 ? 2 : (this.cruiseMultiplier === 2 ? 4 : 1);
@@ -135,21 +252,24 @@
     if (this.cruiseSpeedBtn) {
       this.cruiseSpeedBtn.className = `icon-btn glass cruise-btn${this.cruiseMultiplier === 2 ? ' fast-2x' : (this.cruiseMultiplier === 4 ? ' fast-4x' : '')}`;
     }
-    this.showPopup(this.cruiseMultiplier > 1 
-      ? `🚀 [${this.cruiseMultiplier}x 배속 순항 활성화] 200km 대륙 횡단 항로를 ${this.cruiseMultiplier}배 빠른 속도로 순항합니다!`
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const routeKm = nav ? Math.round(nav.routeDistanceKm) : 340;
+    this.showPopup(this.cruiseMultiplier > 1
+      ? `🚀 [${this.cruiseMultiplier}x 배속 순항 활성화] ${routeKm}km 대륙 횡단 항로를 ${this.cruiseMultiplier}배 빠른 속도로 순항합니다!`
       : '✈️ [1x 표준 순항 복귀] 일반 속도로 순항합니다.');
   },
 
   // ----------------------------------------------------------------
   // 낮/밤 시간대 전환 시스템 (Day / Night Switcher)
   // ----------------------------------------------------------------
-  setTimeOfDay(mode) {
+  setTimeOfDay(mode, options = {}) {
     this.timeOfDay = mode;
+    if (typeof this.persistTimeOfDay === 'function') this.persistTimeOfDay();
     const isNight = (mode === 'night');
 
     // 1. 하늘 배경색 및 안개 색상/밀도
     if (this.scene) {
-      this.scene.background.setHex(isNight ? 0x050a18 : 0x7ec8e3);
+      if (this.scene.background) this.scene.background.setHex(isNight ? 0x050a18 : 0x7ec8e3);
       if (this.scene.fog) {
         this.scene.fog.color.setHex(isNight ? 0x060d1f : 0xa3d5ed);
         this.scene.fog.density = isNight ? 0.000032 : 0.000028;
@@ -195,6 +315,7 @@
     };
     toggleNightGroup(this.airportGroup);
     toggleNightGroup(this.destAirportGroup);
+    toggleNightGroup(this.jejuAirportGroup);
 
     // 6. 비행기 객실 창문 야간 골든 글로우 & 항법등 & 프로시저럴 그래픽 텍스처 업데이트
     if (this.updateFuselageTexture) {
@@ -239,18 +360,55 @@
         : '☀️ <span id="time-mode-text">낮</span>';
     }
 
-    this.showPopup(isNight 
-      ? '🌙 야간 비행 모드: 밤하늘의 은하수 별빛, 활주로 유도등 및 기체 항법등이 점등되었습니다!' 
-      : '☀️ 주간 비행 모드: 맑은 푸른 하늘과 쾌청한 태양광 아래를 비행합니다.');
+    if (options.announce !== false) {
+      this.showPopup(isNight 
+        ? '🌙 야간 비행 모드: 밤하늘의 은하수 별빛, 활주로 유도등 및 기체 항법등이 점등되었습니다!' 
+        : '☀️ 주간 비행 모드: 맑은 푸른 하늘과 쾌청한 태양광 아래를 비행합니다.');
+    }
   },
 
   toggleTimeOfDay() {
     this.setTimeOfDay(this.timeOfDay === 'day' ? 'night' : 'day');
   },
 
-  // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 3800m 활주로 중앙 정렬)
+  // 모드 1: 활주로 즉시 이륙 (Direct Runway Takeoff - 김해 3200m 활주로 중앙 정렬)
   startDirectTakeoff() {
     this.overlay.classList.add('hidden');
+    // If a place is selected from the place selector, start airborne at that place
+    if (this.placeSelect && this.placeSelect.selectedOptions && this.placeSelect.selectedOptions.length > 0) {
+      const option = this.placeSelect.selectedOptions[0];
+      const lat = Number(option.dataset.lat);
+      const lon = Number(option.dataset.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        this.startAtPlace({
+          id: option.value,
+          name: option.textContent || option.value,
+          lat,
+          lon,
+          elevationM: Number(option.dataset.elev) || 0
+        });
+        return;
+      }
+    }
+    if (this.defaultGeoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
+      if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
+        this.retargetGeo(this.defaultGeoAnchor, {
+          simAnchor: { x: 160, y: 0, z: 1600 },
+          flatZones: [
+            { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+            { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+          ]
+        });
+      } else {
+        Object.assign(this.geoAnchor, this.defaultGeoAnchor);
+        if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
+        if (window.GEO_SIM_ANCHOR) {
+          window.GEO_SIM_ANCHOR.x = 160;
+          window.GEO_SIM_ANCHOR.z = 0;
+        }
+      }
+    }
+    this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -261,6 +419,7 @@
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
     this.emergencyBonusGiven = false;
     this.isEngineOff = false;
     this.isJetwayDocked = false;
@@ -279,7 +438,9 @@
     this.isStalling = false;
     this.clearGPWS();
 
-    const isFromDest = (this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE');
+    const isFromDest = (typeof window !== 'undefined' && window.RouteModel && this.planeGroup)
+      ? window.RouteModel.isFromDestination(this.selectedDestinationIcao || 'RKSI', this.planeGroup.position.x, this.planeGroup.position.z, !this.geoLayer)
+      : ((this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE'));
     this.flightPhase = 'TAKEOFF_RUN';
     this.phaseDisplay.textContent = isFromDest ? '대륙 활주로 이륙 활주' : '활주로 이륙 활주 (Takeoff)';
 
@@ -305,15 +466,54 @@
     this.updateFlapsUI();
     this.updateSpoilerUI();
     this.updateReverserUI();
-    this.showPopup(isFromDest 
-      ? '🛫 대륙 3,800m 메가 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!' 
+    this.showPopup(isFromDest
+      ? '🛫 대륙 3,800m 메가 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!'
       : '🛫 3,800m 초대형 활주로 정렬! (플랩 1 전개 완료) 속도 200km/h 도달 시 ↓ 아래 화살표를 당겨 이륙하세요!');
     this.startJetSound();
+  },
+  // Lobby phase action: runway takeoff (legacy name kept for URL hooks).
+  startTakeoffPhase() {
+    this.startDirectTakeoff();
   },
 
   // 모드 2: 게이트 탑승 & 유도로 주행 (Full Gate Departure - 1번 게이트 정지선)
   startGateDeparture() {
     this.overlay.classList.add('hidden');
+    // If a place is selected from the place selector, start airborne at that place
+    if (this.placeSelect && this.placeSelect.selectedOptions && this.placeSelect.selectedOptions.length > 0) {
+      const option = this.placeSelect.selectedOptions[0];
+      const lat = Number(option.dataset.lat);
+      const lon = Number(option.dataset.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        this.startAtPlace({
+          id: option.value,
+          name: option.textContent || option.value,
+          lat,
+          lon,
+          elevationM: Number(option.dataset.elev) || 0
+        });
+        return;
+      }
+    }
+    if (this.defaultGeoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
+      if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
+        this.retargetGeo(this.defaultGeoAnchor, {
+          simAnchor: { x: 160, y: 0, z: 1600 },
+          flatZones: [
+            { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+            { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+          ]
+        });
+      } else {
+        Object.assign(this.geoAnchor, this.defaultGeoAnchor);
+        if (window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
+        if (window.GEO_SIM_ANCHOR) {
+          window.GEO_SIM_ANCHOR.x = 160;
+          window.GEO_SIM_ANCHOR.z = 0;
+        }
+      }
+    }
+    this.isJejuFlyover = false;
     this.showGateActionPrompt(false);
     this.isPlaying = true;
     this.isDestroyed = false;
@@ -324,6 +524,7 @@
     this.isWaterLanding = false;
     this.waterSuccessShown = false;
     this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
     this.emergencyBonusGiven = false;
     this.isEngineOff = false;
     this.isJetwayDocked = false;
@@ -342,7 +543,9 @@
     this.isStalling = false;
     this.clearGPWS();
 
-    const isFromDest = (this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE');
+    const isFromDest = (typeof window !== 'undefined' && window.RouteModel && this.planeGroup)
+      ? window.RouteModel.isFromDestination(this.selectedDestinationIcao || 'RKSI', this.planeGroup.position.x, this.planeGroup.position.z, !this.geoLayer)
+      : ((this.planeGroup && this.planeGroup.position.z < -25000) || (this.flightPhase === 'MISSION_COMPLETE'));
     this.flightPhase = 'TAXI_OUT';
     this.phaseDisplay.textContent = isFromDest ? '대륙 공항 유도로 주행' : '유도로 주행 (Taxiway)';
 
@@ -371,6 +574,374 @@
       : '📢 승객 285명 탑승 완료! 0~9 키로 출력을 올려 유도로(황색선)로 이동하세요.');
     this.startJetSound();
   },
+  // 로비 페이즈 시작: 상공 순항 (Selected destination or place)
+  startCruisePhase() {
+    const place = typeof this.getSelectedPlace === 'function' ? this.getSelectedPlace() : null;
+    if (place) {
+      this.startAtPlace(place);
+      return;
+    }
+    this.overlay.classList.add('hidden');
+    this.startAirbornePhase('CLIMB_CRUISE', '상공 순항 비행 (Cruise)');
+    const dest = (window.AirportIndicators && window.AirportIndicators.byIcao && window.AirportIndicators.byIcao[this.selectedDestinationIcao])
+      || (window.AirportIndicators && window.AirportIndicators.destination);
+    this.showPopup(dest
+      ? `✈️ ${dest.name} 방향 순항 비행 시작! 목적지까지 항법 유도선을 따르세요.`
+      : '✈️ 상공 순항 비행 시작! 항법 유도선을 따라 목적지로 향하세요.');
+  },
+
+  // 로비 페이즈 시작: 착륙 접근 (Selected destination or place, 5 km final)
+  startApproachPhase() {
+    this.overlay.classList.add('hidden');
+    const place = typeof this.getSelectedPlace === 'function' ? this.getSelectedPlace() : null;
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const icao = this.selectedDestinationIcao || 'RKSI';
+    const airport = (nav && nav.byIcao && nav.byIcao[icao]) || (nav && nav.destination);
+    const targetLat = place ? place.lat : (airport ? airport.lat : 37.4690);
+    const targetLon = place ? place.lon : (airport ? airport.lon : 126.4510);
+    const target = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
+      ? window.geoLocalDelta({ lat: targetLat, lon: targetLon, old: { x: 0, z: 0 } }).local
+      : { x: 160, z: -45000 };
+    this.startAirbornePhase('FINAL_APPROACH', '착륙 접근 (Final Approach)', {
+      x: target.x,
+      y: 450 + (place ? (Number(place.elevationM) || 0) : ((airport && airport.elevationM) || 0)),
+      z: target.z + 5000,
+      gearDown: true,
+      flapIndex: 3
+    });
+    this.showPopup(place
+      ? `🛬 ${place.name} 착륙 접근 시작! 기어·플랩 FULL 전개, 활주로 정렬 후 접지하세요.`
+      : `🛬 ${airport ? airport.name : '목적지'} 착륙 접근 시작! 기어·플랩 FULL 전개, 활주로 정렬 후 접지하세요.`);
+  },
+
+  // Shared reset for airborne lobby starts (cruise / final approach).
+  startAirbornePhase(phase, label, options) {
+    const opts = options || {};
+    this.isJejuFlyover = false;
+    this.showGateActionPrompt(false);
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = opts.gearDown === true;
+    this.gearPhase = this.gearExtended ? 'DOWN' : 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI(this.gearPhase, this.gearPhase === 'DOWN' ? 'gear-down' : 'gear-up');
+    this.flapIndex = opts.flapIndex || 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+    this.buildAircraft(this.currentPlaneType);
+    const spawn = (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+    this.setupAirborneCruiseState(
+      Number.isFinite(opts.x) ? opts.x : spawn.x,
+      Number.isFinite(opts.y) ? opts.y : 1100,
+      Number.isFinite(opts.z) ? opts.z : -15000
+    );
+    if (opts.gearDown) this.velocity.set(0, -12, -85);
+    this.flightPhase = phase;
+    this.phaseDisplay.textContent = label;
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+    this.startJetSound();
+  },
+
+  setupAirborneCruiseState(posX, posY, posZ) {
+    const type = (this.currentPlaneType || 'a320').toLowerCase();
+    const isSmallProp = (type === 'ancestor' || type === 'c172');
+    const isAmphibian = (type === 'amphibian' || type === 'cl215');
+    const cruiseSpeedMs = isSmallProp ? 55 : (isAmphibian ? 75 : 118);
+    const cruisePitchRad = isSmallProp ? 0.05 : (isAmphibian ? 0.09 : 0.078);
+    const cruiseTrimDeg = isSmallProp ? 2.0 : (isAmphibian ? 6.0 : 4.0);
+    const cruiseThrottle = isSmallProp ? 0.70 : (isAmphibian ? 0.65 : 0.58);
+    const cruiseN1 = isSmallProp ? 75.0 : (isAmphibian ? 72.0 : 70.0);
+
+    this.throttle = cruiseThrottle;
+    this.n1 = cruiseN1;
+    this.targetN1 = cruiseN1;
+    if (typeof this.syncTouchThrottleUI === 'function') this.syncTouchThrottleUI(cruiseThrottle);
+
+    this.planeGroup.position.set(posX, posY, posZ);
+    this.yaw = 0;
+    this.pitch = cruisePitchRad;
+    this.roll = 0;
+    this.pitchTrim = cruiseTrimDeg;
+
+    const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
+    this.planeGroup.quaternion.copy(qYaw).multiply(qPitch);
+    this.planeGroup.visible = true;
+
+    this.velocity.set(0, 0, -cruiseSpeedMs);
+    this.speed = cruiseSpeedMs / 77.777;
+    this.groundSpeed = cruiseSpeedMs;
+    this.verticalSpeed = 0;
+    this.isOnGround = false;
+  },
+
+  // 시나리오: 해운대 상공 비행 (Haeundae overhead flight)
+  startHaeundaeFlight() {
+    this.overlay.classList.add('hidden');
+    this.isJejuFlyover = false;
+    this.showGateActionPrompt(false);
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+
+    this.buildAircraft(this.currentPlaneType);
+    // Haeundae LCT in the Gimhae-anchored frame; start 800 m south over the sea.
+    const haeundae = window.geoLocalDelta
+      ? window.geoLocalDelta(window.GEO_POINTS.haeundae).local
+      : { x: -180, z: -28700 };
+    this.setupAirborneCruiseState(haeundae.x, 1100, haeundae.z + 800);
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = '해운대 상공 비행 (Haeundae)';
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = window.GEO_ION_TOKEN || '';
+      try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    }
+    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    this.showPopup(tilesOn
+      ? '🌊 해운대 상공 비행 시작! 실제 스트리밍 지형이 표시됩니다. (Flying over Haeundae)'
+      : '🌊 해운대 상공 비행 시작! 이 빌드에는 지형 토큰이 없어 기존 절차적 경관이 표시됩니다. (Flying over Haeundae)');
+    this.startJetSound();
+  },
+
+  // 시나리오: 제주공항 상공 비행 (Flying over Jeju Airport)
+  startJejuFlyover() {
+    this.overlay.classList.add('hidden');
+    this.showGateActionPrompt(false);
+    this.isJejuFlyover = true;
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+
+    this.buildAircraft(this.currentPlaneType);
+    const jeju = this.getJejuLocalPosition();
+    this.setupAirborneCruiseState(jeju.x, 1100, jeju.z + 4200);
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = '제주공항 상공 비행 (Jeju Flyover)';
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = window.GEO_ION_TOKEN || '';
+      try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    }
+    const tilesOn = typeof this.enableGeoTiles === 'function' && this.enableGeoTiles(token);
+    if (this.jejuAirportGroup) this.jejuAirportGroup.visible = true;
+    const streamReady = () => Boolean(this.geoLayer && this.geoLayer.stats && this.geoLayer.stats.tiles > 0);
+    if (tilesOn || this.geoLayer) {
+      const syncFallbackVisibility = () => {
+        if (!this.isJejuFlyover || !this.jejuAirportGroup) return;
+        if (streamReady()) {
+          this.jejuAirportGroup.visible = false;
+        } else {
+          setTimeout(syncFallbackVisibility, 1000);
+        }
+      };
+      syncFallbackVisibility();
+    }
+    this.showPopup('🏝️ 제주공항 상공 비행 시작! 제주도 경관과 3,000m 활주로를 조망하세요. (Flying over Jeju Airport)');
+    this.startJetSound();
+  },
+
+  getPlacePresets() {
+    const presets = [];
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    if (nav && Array.isArray(nav.airports)) {
+      for (const airport of nav.airports) {
+        presets.push({
+          id: airport.icao,
+          name: `${airport.iata} ${airport.short} (${airport.icao})`,
+          lat: airport.lat,
+          lon: airport.lon,
+          elevationM: airport.elevationM || 0
+        });
+      }
+    }
+    const haeundae = (typeof window !== 'undefined' && window.GEO_POINTS) ? window.GEO_POINTS.haeundae : null;
+    if (haeundae) {
+      presets.push({
+        id: 'HAEUNDAE',
+        name: '해운대 LCT (Haeundae)',
+        lat: haeundae.lat,
+        lon: haeundae.lon,
+        elevationM: 0
+      });
+    }
+    return presets;
+  },
+
+  updateSelectedPlaceReadout() {
+    if (!this.placeSelect || !this.placeCoords) return;
+    const option = this.placeSelect.selectedOptions && this.placeSelect.selectedOptions[0];
+    if (!option) return;
+    const lat = Number(option.dataset.lat);
+    const lon = Number(option.dataset.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      this.placeCoords.textContent = '—';
+      return;
+    }
+    this.placeCoords.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+  },
+
+  getSelectedPlace() {
+    const option = this.placeSelect && this.placeSelect.selectedOptions && this.placeSelect.selectedOptions[0];
+    if (!option) return null;
+    const lat = Number(option.dataset.lat);
+    const lon = Number(option.dataset.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return {
+      id: option.value,
+      name: option.textContent || option.value,
+      lat,
+      lon,
+      elevationM: Number(option.dataset.elev) || 0
+    };
+  },
+
+  startAtPlace(place) {
+    if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return;
+    if (this.placePickerPanel) this.placePickerPanel.classList.add('hidden');
+    if (this.overlay) this.overlay.classList.add('hidden');
+    this.showGateActionPrompt(false);
+    this.isJejuFlyover = false;
+    this.isPlaying = true;
+    this.isDestroyed = false;
+    this.isBellySliding = false;
+    if (typeof this.resetPartialDamageState === 'function') this.resetPartialDamageState();
+    this.isWaterLanding = false;
+    this.waterSuccessShown = false;
+    this.currentEmergency = null;
+    if (typeof this.resetTailstrikeState === 'function') this.resetTailstrikeState();
+    this.emergencyBonusGiven = false;
+    this.isEngineOff = false;
+    this.isJetwayDocked = false;
+    const engBtnText = document.getElementById('engine-status-text');
+    const engBtn = document.getElementById('engine-shutdown-btn');
+    if (engBtnText) engBtnText.textContent = '엔진 ON';
+    if (engBtn) engBtn.classList.remove('engine-off-btn');
+    this.hullIntegrity = 100;
+    this.passengers = 285;
+    this.gearExtended = false;
+    this.gearPhase = 'UP';
+    this.gearPhaseTimer = 0.0;
+    if (typeof this.updateGearUI === 'function') this.updateGearUI('UP', 'gear-up');
+    this.flapIndex = 0;
+    this.spoilerExtended = false;
+    this.reverseThrustActive = false;
+
+    this.buildAircraft(this.currentPlaneType);
+    const local = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
+      ? window.geoLocalDelta({ lat: place.lat, lon: place.lon, old: { x: 0, z: 0 } }).local
+      : { x: 0, z: 0 };
+    this.setupAirborneCruiseState(local.x, 1100 + (Number(place.elevationM) || 0), local.z);
+    this.flightPhase = 'CLIMB_CRUISE';
+    this.phaseDisplay.textContent = `${place.name} 상공 비행 (Selected Place)`;
+    this.startTime = Date.now();
+    this.isStalling = false;
+    this.clearGPWS();
+    if (this.cameraState) this.cameraState.chaseTargetInitialized = false;
+    if (typeof this.resetFlight3dPhysics === 'function') this.resetFlight3dPhysics();
+    this.updateFlapsUI();
+    this.updateSpoilerUI();
+    this.updateReverserUI();
+
+    let token = typeof window !== 'undefined' ? (window.GEO_ION_TOKEN || '') : '';
+    try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    const tilesOn = typeof this.retargetGeo === 'function'
+      && this.retargetGeo(
+        { lat: place.lat, lon: place.lon, height: Number(place.elevationM) || 0 },
+        { ionToken: token, simAnchor: { x: local.x, y: 0, z: local.z } }
+      );
+    const tilesActive = Boolean(this.geoLayer) || Boolean(tilesOn);
+    this.showPopup(tilesActive
+      ? `📍 ${place.name} 상공 비행 시작! (${place.lat.toFixed(4)}°, ${place.lon.toFixed(4)}°) · 선택 지점 기준 타일 프레임`
+      : `📍 ${place.name} 상공 비행 시작! (${place.lat.toFixed(4)}°, ${place.lon.toFixed(4)}°) · 타일 프레임 사용 불가`);
+    this.startJetSound();
+  },
 
   getCameraModeDefs() {
     return [
@@ -389,6 +960,11 @@
     const defs = this.getCameraModeDefs();
     const def = defs.find((d) => d.id === mode) || defs[0];
     this.cameraMode = def.id;
+
+    if (this.planeGroup) {
+      const hideAirframeForInteriorView = (def.id === '1st' || def.id === 'hud');
+      this.planeGroup.visible = !this.isDestroyed && !hideAirframeForInteriorView;
+    }
 
     const cs = typeof this.ensureCameraState === 'function' ? this.ensureCameraState() : this.cameraState;
     if (cs) {
@@ -443,7 +1019,7 @@
       ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
       : 0.35;
     const pct = Math.round(intensity * 100);
-    const labelText = pct === 0 ? '기류 OFF' : `기류 ${pct}%`;
+    const labelText = pct === 0 ? '속도감 OFF' : `속도감 ${pct}%`;
 
     const btnText = document.getElementById('effect-intensity-text');
     if (btnText) btnText.textContent = labelText;
@@ -503,6 +1079,243 @@
     if (this.reverserBtn) {
       if (this.reverseThrustActive) this.reverserBtn.classList.add('reverser-active');
       else this.reverserBtn.classList.remove('reverser-active');
+    }
+  },
+
+  // ----------------------------------------------------------------
+  // Nearby landmark panel — Wikipedia geosearch, bundled offline fallback
+  // ----------------------------------------------------------------
+  setLandmarkPanelVisible(visible) {
+    const panel = this.landmarkPanel;
+    if (!panel) return;
+    this.landmarkPanelOpen = Boolean(visible);
+    panel.classList.toggle('hidden', !this.landmarkPanelOpen);
+    const button = document.getElementById('landmark-btn');
+    if (button) button.classList.toggle('active', this.landmarkPanelOpen);
+    if (this.landmarkBtnText) {
+      this.landmarkBtnText.textContent = this.landmarkPanelOpen ? '닫기' : '주변 명소';
+    }
+    if (!this.landmarkPanelOpen) {
+      if (this.landmarkDetail) this.landmarkDetail.classList.add('hidden');
+      this.selectedLandmarkItem = null;
+      this.selectedLandmarkId = null;
+      const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+      if (pins && typeof pins.select === 'function') pins.select(null);
+    }
+  },
+
+  toggleLandmarkPanel(forceClose = false) {
+    const next = forceClose ? false : !this.landmarkPanelOpen;
+    this.setLandmarkPanelVisible(next);
+    if (next) this.loadLandmarks(true);
+    else this.landmarkLoadSeq++;
+  },
+
+  refreshLandmarkPanel() {
+    if (!this.landmarkPanelOpen) this.toggleLandmarkPanel();
+    else this.loadLandmarks(true);
+  },
+
+  landmarkPosition() {
+    const pos = this.planeGroup && this.planeGroup.position;
+    if (!pos) return null;
+    const route = typeof window !== 'undefined' ? window.RouteModel : null;
+    if (route && typeof route.currentLatLon === 'function') {
+      const at = route.currentLatLon(pos.x, pos.z, !this.geoLayer, this.selectedDestinationIcao);
+      if (at && Number.isFinite(at.lat) && Number.isFinite(at.lon)) return at;
+    }
+    if (typeof window.geoLocalToLatLon === 'function') {
+      const base = this.geoSimAnchorBase || window.GEO_SIM_ANCHOR || { x: 160, z: 0 };
+      return window.geoLocalToLatLon(pos.x - base.x, pos.z - (base.z || 0));
+    }
+    return null;
+  },
+
+  setLandmarkStatus(text, kind) {
+    if (!this.landmarkStatus) return;
+    this.landmarkStatus.textContent = text;
+    this.landmarkStatus.classList.toggle('online', kind === 'online');
+    this.landmarkStatus.classList.toggle('local', kind === 'local');
+  },
+
+  loadLandmarks(force = false) {
+    const service = typeof window !== 'undefined' ? window.NearbyLandmarks : null;
+    if (!service) return;
+    const at = this.landmarkPosition();
+    if (!at) {
+      this.setLandmarkStatus('위치 확인 중', 'local');
+      return;
+    }
+    const now = Date.now();
+    const nav = window.AirportIndicators;
+    const moved = !this.landmarkLastAt || (nav && typeof nav.distanceKm === 'function'
+      ? nav.distanceKm(at, this.landmarkLastAt)
+      : 0) > 0.8;
+    if (!force && now - (this.landmarkLastLoad || 0) < 8000 && !moved) return;
+    this.landmarkLastLoad = now;
+    this.landmarkLastAt = at;
+    const seq = ++this.landmarkLoadSeq;
+    this.setLandmarkStatus('온라인 검색 중…');
+    service.load({
+      lat: at.lat,
+      lon: at.lon,
+      radiusM: service.DEFAULT_RADIUS_M,
+      limit: service.DEFAULT_LIMIT,
+      language: this.landmarkLanguage,
+      force
+    }).then(result => {
+      if (seq !== this.landmarkLoadSeq) return;
+      this.landmarkItems = result.items || [];
+      if (this.landmarkPanelOpen) this.renderLandmarkRows();
+      const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+      if (pins && typeof pins.setItems === 'function') pins.setItems(this.landmarkItems);
+      const online = result.source === 'online';
+      this.setLandmarkStatus(online ? '온라인' : '오프라인', online ? 'online' : 'local');
+      if (this.landmarkSource) {
+        this.landmarkSource.textContent = online
+          ? `Wikipedia · CC BY-SA · ${String(this.landmarkLanguage).toUpperCase()}`
+          : '내장 랜드마크 · 오프라인';
+      }
+    }).catch(() => {
+      if (seq === this.landmarkLoadSeq) {
+        this.setLandmarkStatus('검색 실패', 'local');
+      }
+    });
+  },
+
+  renderLandmarkRows() {
+    if (!this.landmarkList) return;
+    this.landmarkList.replaceChildren();
+    this.landmarkRows = [];
+    const items = this.landmarkItems || [];
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'landmark-empty';
+      empty.textContent = '주변 10 km 내 정보가 없습니다.';
+      this.landmarkList.appendChild(empty);
+      return;
+    }
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'landmark-row';
+      row.addEventListener('click', () => this.showLandmarkDetail(item));
+      if (item.thumbnail) {
+        const image = document.createElement('img');
+        image.className = 'landmark-thumb';
+        image.alt = '';
+        image.loading = 'lazy';
+        image.referrerPolicy = 'no-referrer';
+        image.src = item.thumbnail;
+        image.addEventListener('error', () => {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'landmark-thumb-placeholder';
+          placeholder.textContent = '🗺️';
+          image.replaceWith(placeholder);
+        });
+        row.appendChild(image);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'landmark-thumb-placeholder';
+        placeholder.textContent = '🗺️';
+        row.appendChild(placeholder);
+      }
+      const info = document.createElement('div');
+      info.className = 'landmark-info';
+      const title = document.createElement(item.url ? 'a' : 'div');
+      title.className = 'landmark-name';
+      title.textContent = item.title;
+      if (item.url) {
+        title.href = item.url;
+        title.target = '_blank';
+        title.rel = 'noopener noreferrer';
+      }
+      const extract = document.createElement('div');
+      extract.className = 'landmark-extract';
+      extract.textContent = item.extract || '설명 없음';
+      const metrics = document.createElement('div');
+      metrics.className = 'landmark-metrics';
+      const distance = document.createElement('span');
+      distance.className = 'dist';
+      distance.textContent = '--';
+      const bearing = document.createElement('span');
+      bearing.className = 'brg';
+      bearing.textContent = '---°';
+      metrics.append(distance, bearing);
+      info.append(title, extract, metrics);
+      row.appendChild(info);
+      this.landmarkList.appendChild(row);
+      this.landmarkRows.push({ item, row, distance, bearing });
+    }
+    this.updateLandmarkRows();
+  },
+
+  updateLandmarkRows() {
+    const service = typeof window !== 'undefined' ? window.NearbyLandmarks : null;
+    const at = this.landmarkPosition();
+    if (!service || !at || !this.landmarkRows) return;
+    const formatKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
+    for (const row of this.landmarkRows) {
+      const km = service.distanceKm(at, row.item);
+      const brg = service.bearingDeg(at, row.item);
+      row.distance.textContent = formatKm(km);
+      row.bearing.textContent = `${String(Math.round(brg) % 360).padStart(3, '0')}°`;
+    }
+    if (this.landmarkDetail && !this.landmarkDetail.classList.contains('hidden') && this.selectedLandmarkItem) {
+      const km = service.distanceKm(at, this.selectedLandmarkItem);
+      const brg = service.bearingDeg(at, this.selectedLandmarkItem);
+      if (this.landmarkDetailDistance) this.landmarkDetailDistance.textContent = formatKm(km);
+      if (this.landmarkDetailBearing) {
+        this.landmarkDetailBearing.textContent = `${String(Math.round(brg) % 360).padStart(3, '0')}°`;
+      }
+    }
+  },
+
+  showLandmarkDetail(item) {
+    if (!item) return;
+    this.selectedLandmarkItem = item;
+    this.selectedLandmarkId = item.id;
+    this.setLandmarkPanelVisible(true);
+    if (!this.landmarkRows.length && this.landmarkItems && this.landmarkItems.length) {
+      this.renderLandmarkRows();
+    }
+    if (this.landmarkDetail) {
+      if (this.landmarkDetailTitle) this.landmarkDetailTitle.textContent = item.title || '장소 정보';
+      if (this.landmarkDetailExtract) {
+        this.landmarkDetailExtract.textContent = item.extract || '설명이 없습니다.';
+        this.landmarkDetailExtract.scrollTop = 0;
+      }
+      if (this.landmarkDetailCoords) {
+        this.landmarkDetailCoords.textContent = Number.isFinite(item.lat) && Number.isFinite(item.lon)
+          ? `${item.lat.toFixed(5)}°, ${item.lon.toFixed(5)}°`
+          : '';
+      }
+      if (this.landmarkDetailLink) {
+        if (item.url) {
+          this.landmarkDetailLink.href = item.url;
+          this.landmarkDetailLink.classList.remove('hidden');
+        } else {
+          this.landmarkDetailLink.removeAttribute('href');
+          this.landmarkDetailLink.classList.add('hidden');
+        }
+      }
+      this.landmarkDetail.classList.remove('hidden');
+    }
+    const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+    if (pins && typeof pins.select === 'function') pins.select(item.id);
+    for (const row of this.landmarkRows || []) {
+      if (row.row) row.row.classList.toggle('selected', String(row.item.id) === String(item.id));
+    }
+    this.updateLandmarkRows();
+  },
+
+  closeLandmarkDetail() {
+    this.selectedLandmarkItem = null;
+    this.selectedLandmarkId = null;
+    if (this.landmarkDetail) this.landmarkDetail.classList.add('hidden');
+    const pins = typeof window !== 'undefined' ? window.LandmarkPins : null;
+    if (pins && typeof pins.select === 'function') pins.select(null);
+    for (const row of this.landmarkRows || []) {
+      if (row.row) row.row.classList.remove('selected');
     }
   },
 
@@ -619,41 +1432,182 @@
     if (this.scoreDisplay) this.scoreDisplay.textContent = this.score;
     if (this.paxDisplay) this.paxDisplay.textContent = `${this.passengers}명`;
 
+    // 현재 항공기 진방위(True Heading) 갱신 (PFD 계기판 및 상단 타겟 바)
+    if (this.headingVal || this.headingCardinal || this.hudTopHeading) {
+      const hdg = this.getAircraftHeadingDeg();
+      const cardinal = this.getCardinalDirection(hdg);
+      const hdgStr = String(hdg).padStart(3, '0');
+      if (this.headingVal) this.headingVal.textContent = `${hdgStr}°`;
+      if (this.headingCardinal) this.headingCardinal.textContent = cardinal;
+      if (this.hudTopHeading) this.hudTopHeading.textContent = `HDG ${hdgStr}° ${cardinal}`;
+    }
+
     const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
     const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
     const s = String(elapsed % 60).padStart(2, '0');
     this.timeDisplay.textContent = `${m}:${s}`;
 
-    let targetPos = new THREE.Vector3(160, this.groundY, 0);
+    const nav = window.AirportIndicators;
+    const zProgress = Math.min(1.0, Math.max(0, -this.planeGroup.position.z / 45000));
+    const destIcao = this.selectedDestinationIcao || 'RKSI';
+    const compressed = !this.geoLayer;
+    const progress = (typeof window !== 'undefined' && window.RouteModel)
+      ? window.RouteModel.progress(destIcao, this.planeGroup.position.x, this.planeGroup.position.z, compressed)
+      : zProgress;
+    const navState = this.getDestinationNavigationState(progress, compressed);
+    const targetPos = navState.targetPos;
+    this.targetDist.textContent = navState.targetLabel;
+
+    if (nav && this.airportIndicatorRows && this.airportIndicatorRows.length) {
+      const position = navState.position;
+      const activeIcao = navState.activeIcao;
+      for (const entry of this.airportIndicatorRows) {
+        const indicator = nav.indicatorFrom(position, entry.airport);
+        const dist = indicator.distanceKm;
+        entry.dist.textContent = `${dist < 10 ? dist.toFixed(1) : dist.toFixed(0)}km`;
+        entry.brg.textContent = `${String(Math.round(indicator.bearingDeg)).padStart(3, '0')}°`;
+        entry.row.classList.toggle('active', indicator.icao === activeIcao);
+      }
+    }
+    if (this.landmarkPanelOpen) this.updateLandmarkRows();
+    this.loadLandmarks();
+    const localVec = targetPos.clone();
+    if (this.renderOrigin) localVec.sub(this.renderOrigin);
+    this.planeGroup.worldToLocal(localVec);
+    const angle = Math.atan2(localVec.x, -localVec.z);
+    this.targetArrow.style.transform = `rotate(${angle}rad)`;
+  },
+
+  getAircraftHeadingDeg() {
+    const anchorHeading = (this.geoAnchor && Number.isFinite(this.geoAnchor.headingDeg))
+      ? this.geoAnchor.headingDeg
+      : (typeof window !== 'undefined' && window.GEO_ANCHOR && Number.isFinite(window.GEO_ANCHOR.headingDeg)
+          ? window.GEO_ANCHOR.headingDeg
+          : 353.9);
+    let relDeg = 0;
+    if (this.planeGroup && this.planeGroup.quaternion) {
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+      if (Math.hypot(fwd.x, fwd.z) > 1e-4) {
+        relDeg = Math.atan2(fwd.x, -fwd.z) * (180 / Math.PI);
+      }
+    } else if (Number.isFinite(this.yaw)) {
+      relDeg = -this.yaw * (180 / Math.PI);
+    }
+    const normalized = ((anchorHeading + relDeg) % 360 + 360) % 360;
+    const rounded = Math.round(normalized) % 360;
+    return rounded === 0 ? 360 : rounded;
+  },
+
+  getCardinalDirection(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const idx = Math.round((((deg % 360) + 360) % 360) / 45) % 8;
+    return dirs[idx];
+  },
+
+  setDestinationAirport(icao) {
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const key = (icao || 'RKSI').toUpperCase();
+    const airport = (nav && nav.byIcao && nav.byIcao[key]) ? nav.byIcao[key] : (nav ? nav.destination : null);
+    this.selectedDestinationIcao = airport ? airport.icao : 'RKSI';
+
+    if (this.destinationSelect && this.destinationSelect.value !== this.selectedDestinationIcao) {
+      this.destinationSelect.value = this.selectedDestinationIcao;
+    }
+
+    if (this.airportIndicatorRows && this.airportIndicatorRows.length) {
+      for (const entry of this.airportIndicatorRows) {
+        entry.row.classList.toggle('active', entry.icao === this.selectedDestinationIcao);
+      }
+    }
+
+    if (airport && typeof this.showPopup === 'function') {
+      const pos = this.planeGroup ? this.planeGroup.position : { x: 160, z: 0 };
+      const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+      const curLatLon = (typeof window !== 'undefined' && typeof window.geoLocalToLatLon === 'function')
+        ? window.geoLocalToLatLon(pos.x - anchorBase.x, pos.z - (anchorBase.z || 0))
+        : (nav ? nav.origin : { lat: 35.165, lon: 128.939 });
+      const ind = nav ? nav.indicatorFrom(curLatLon, airport) : null;
+      const info = ind ? ` (${ind.distanceKm.toFixed(0)}km · BRG ${String(Math.round(ind.bearingDeg)).padStart(3, '0')}°)` : '';
+      this.showPopup(`🎯 목적지 설정: ${airport.name} [${airport.iata}]${info}`);
+    }
+    return this.selectedDestinationIcao;
+  },
+
+  getDestinationNavigationState(zProgress, compressed = !this.geoLayer) {
+    const nav = typeof window !== 'undefined' ? window.AirportIndicators : null;
+    const destIcao = this.selectedDestinationIcao || 'RKSI';
+    const destAirport = (nav && nav.byIcao && nav.byIcao[destIcao]) || (nav ? nav.destination : null);
+    const groundY = this.groundY || 6.84;
+    const pos = this.planeGroup ? this.planeGroup.position : new THREE.Vector3(160, groundY, 0);
+
+    let targetPos = new THREE.Vector3(160, groundY, 0);
     let targetLabel = '활주로 36L';
+    const isDefaultIncheon = destIcao === 'RKSI';
 
-    if (this.flightPhase === 'TAXI_OUT') {
-      targetPos = new THREE.Vector3(160, this.groundY, 800);
+    // Compressed arcade flights map z onto the great circle; geo-tile flights
+    // use the active exact geodetic anchor.
+    const anchorBase = this.geoSimAnchorBase || (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) || { x: 160, z: 0 };
+    const position = (typeof window !== 'undefined' && window.RouteModel)
+      ? window.RouteModel.currentLatLon(pos.x, pos.z, compressed, destIcao)
+      : (isDefaultIncheon || typeof window === 'undefined' || typeof window.geoLocalToLatLon !== 'function')
+        ? (nav ? nav.positionAlongRoute(zProgress) : { lat: 35.165, lon: 128.939 })
+        : window.geoLocalToLatLon(pos.x - anchorBase.x, pos.z - (anchorBase.z || 0));
+
+    if (this.isJejuFlyover) {
+      const jeju = this.getJejuLocalPosition();
+      targetPos = new THREE.Vector3(jeju.x, groundY, jeju.z);
+      targetLabel = `제주국제공항 (${Math.round(pos.distanceTo(targetPos))}m)`;
+    } else if (this.flightPhase === 'TAXI_OUT') {
+      targetPos = new THREE.Vector3(160, groundY, 800);
       targetLabel = '이륙 활주로 36L (150m)';
-    } else if (this.flightPhase === 'CLIMB_CRUISE' || this.flightPhase === 'TAKEOFF_RUN') {
-      targetPos = new THREE.Vector3(160, this.groundY, -45000);
-      // Z = 0 (출발지) ~ Z = -45,000 (인천공항 메인 활주로 16R) 구간을 200.0km 장거리 항로로 정밀 비례 매핑
-      const zProgress = Math.min(1.0, Math.max(0, -this.planeGroup.position.z / 45000));
-      const remKm = (200.0 * (1.0 - zProgress)).toFixed(1);
-
+    } else if (isDefaultIncheon && (this.flightPhase === 'TAXI_IN' || this.flightPhase === 'DEPLANING' || this.flightPhase === 'MISSION_COMPLETE')) {
+      const gate = (typeof window !== 'undefined' && window.RouteModel)
+        ? window.RouteModel.gateSim(destIcao, compressed) : { x: -330, z: -45000 };
+      targetPos = new THREE.Vector3(gate.x, groundY, gate.z);
+      const gateDistM = Math.round(pos.distanceTo(targetPos) * 2);
+      targetLabel = `인천공항 T1 탑승교 1번 게이트 (${gateDistM}m)`;
+    } else if (isDefaultIncheon) {
+      const destSim = (typeof window !== 'undefined' && window.RouteModel)
+        ? window.RouteModel.destinationSim(destIcao, compressed) : { x: 160, z: -45000 };
+      targetPos = new THREE.Vector3(destSim.x, groundY, destSim.z);
+      const routeKm = nav ? nav.routeDistanceKm : 339.5;
+      const remValue = (typeof window !== 'undefined' && window.RouteModel)
+        ? window.RouteModel.remainingKm(destIcao, pos.x, pos.z, compressed)
+        : routeKm * (1.0 - zProgress);
+      const remKm = Math.max(0, remValue).toFixed(1);
       if (zProgress > 0.96) {
-        const distM = Math.round(this.planeGroup.position.distanceTo(targetPos) * 2);
-        targetLabel = `인천국제공항 16R 착륙 활주로 (${distM}m)`;
+        const remM = Math.round(Math.max(0, remValue) * 1000);
+        targetLabel = `인천국제공항 16R 착륙 활주로 (${remM}m)`;
       } else {
         const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x 배속순항]` : '';
         targetLabel = `인천국제공항 16R (${remKm}km)${speedTag}`;
       }
-    } else if (this.flightPhase === 'TAXI_IN' || this.flightPhase === 'DEPLANING' || this.flightPhase === 'MISSION_COMPLETE') {
-      targetPos = new THREE.Vector3(-330, this.groundY, -45000);
-      const gateDistM = Math.round(this.planeGroup.position.distanceTo(targetPos) * 2);
-      targetLabel = `인천공항 T1 탑승교 1번 게이트 (${gateDistM}m)`;
+    } else if (destIcao === 'RKPK') {
+      targetPos = new THREE.Vector3(160, groundY, 0);
+      const distM = Math.round(Math.hypot(pos.x - 160, pos.z));
+      const distText = distM >= 1000 ? `${(distM / 1000).toFixed(1)}km` : `${distM}m`;
+      const brg = nav ? String(Math.round(nav.bearingDeg(position, destAirport))).padStart(3, '0') : '174';
+      targetLabel = `김해국제공항 36L (${distText} · BRG ${brg}°)`;
+    } else if (destAirport) {
+      let destSim = { x: 160, z: -45000 };
+      if (typeof window !== 'undefined' && window.RouteModel) {
+        destSim = window.RouteModel.destinationSim(destIcao, compressed);
+      } else if (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function') {
+        const local = window.geoLocalDelta({ lat: destAirport.lat, lon: destAirport.lon, old: { x: 0, z: 0 } }).local;
+        destSim = { x: local.x + 160, z: local.z };
+      }
+      targetPos = new THREE.Vector3(destSim.x, groundY, destSim.z);
+      const ind = nav ? nav.indicatorFrom(position, destAirport) : { distanceKm: 0, bearingDeg: 0 };
+      const distText = ind.distanceKm < 1
+        ? `${Math.round(ind.distanceKm * 1000)}m`
+        : `${ind.distanceKm.toFixed(1)}km`;
+      const brg = String(Math.round(ind.bearingDeg)).padStart(3, '0');
+      const speedTag = (this.cruiseMultiplier > 1) ? ` [${this.cruiseMultiplier}x]` : '';
+      targetLabel = `${destAirport.name} (${destAirport.iata} · ${distText} · BRG ${brg}°)${speedTag}`;
     }
-    this.targetDist.textContent = targetLabel;
 
-    const localVec = targetPos.clone();
-    this.planeGroup.worldToLocal(localVec);
-    const angle = Math.atan2(localVec.x, -localVec.z);
-    this.targetArrow.style.transform = `rotate(${angle}rad)`;
+    const activeIcao = (this.flightPhase === 'TAXI_OUT') ? 'RKPK' : destIcao;
+    return { targetPos, targetLabel, activeIcao, position };
   },
 
   // ----------------------------------------------------------------
@@ -848,6 +1802,7 @@
       a320: 'A320 제트기',
       a320_detailed: 'A320-200 실물 고정밀',
       a320_simplified: 'A320-200 경량 최적화',
+      a350: 'A350-900 XWB',
       b747: 'B747-400 점보',
       concorde: '콩코드 초음속기',
       amphibian: 'CL-215 수륙양용기',
@@ -856,15 +1811,13 @@
     const planeName = names[this.currentPlaneType] || '항공기';
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle && modalDesc) {
-        modalTitle.textContent = '🏆 FLIGHT MISSION COMPLETED';
-        modalDesc.innerHTML = `
+      this.showLobbyResult({
+        title: '🏆 FLIGHT MISSION COMPLETED',
+        html: `
           <div style="text-align:left; background:rgba(15,23,42,0.65); padding:14px; border-radius:10px; border:1px solid rgba(56,189,248,0.3); margin-bottom:12px;">
             <div style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:8px;">🛫 대륙 횡단 비행 임무 성공!</div>
             <div style="font-size:13px; color:#e2e8f0; line-height:1.7;">
-              • <strong>운항 노선:</strong> 하준 해상 국제공항 (RKSI) ➔ 인천국제공항 (Incheon Int'l Airport Hub) [200km 대륙 횡단 정기편]<br>
+              • <strong>운항 노선:</strong> 김해국제공항 (RKPK/PUS) ➔ 인천국제공항 (RKSI/ICN) [${Math.round(window.AirportIndicators.routeDistanceKm)}km 대륙 횡단 정기편]<br>
               • <strong>운항 기종:</strong> ${planeName}<br>
               • <strong>비행 시간:</strong> ${m}분 ${s}초<br>
               • <strong>승객 수송:</strong> <span style="color:#10b981; font-weight:700;">285명 전원 안전 하선 완료 (만족도 100%)</span><br>
@@ -875,11 +1828,10 @@
             승객들이 탑승교를 통해 모두 터미널로 들어갔습니다.<br>
             새로운 승객 탑승 및 기체 정비를 마치고 <strong>다음 비행 임무</strong>를 시작하세요!
           </div>
-        `;
-        if (this.startBtn) this.startBtn.textContent = '🛫 다음 비행 임무 준비하기 (새 승객 285명 탑승)';
-        if (this.takeoffDirectBtn) this.takeoffDirectBtn.textContent = '대륙 활주로에서 즉시 이륙하기 🛫';
-        this.overlay.classList.remove('hidden');
-      }
+        `,
+        primaryLabel: '🛫 다음 비행 임무 준비하기 (새 승객 285명 탑승)',
+        phaseLabel: '다음 이륙'
+      });
     }, 600);
   }
 

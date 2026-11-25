@@ -799,6 +799,7 @@
 
     // 모든 공항, 인천공항, 지형/대양/산맥, 해운대 메트로폴리스를 GLB 모델로 즉각 마운트
     this.loadAllRealGLBModels();
+    this.initJejuAirport();
   },
 
   initCollisionBoxes() {
@@ -886,6 +887,14 @@
         name: `해운대 마린시티 마천루 #${i + 1} (${h}m)`
       });
     });
+
+    if (window.geoLocalDelta && window.GEO_POINTS) {
+      const h = window.geoLocalDelta(window.GEO_POINTS.haeundae);
+      const hVec = new THREE.Vector3(h.x, h.y, h.z);
+      this.obstacles.forEach(o => {
+        if (/해운대|광안대교|마린시티/.test(o.name)) o.box.translate(hVec);
+      });
+    }
 
     this.initTerrainColliders();
   },
@@ -1156,6 +1165,21 @@
   },
 
   getTerrainColliderHit(worldX, worldY, worldZ, clearance = 6.0) {
+    // 제주 상공 비행은 DEM과 3D 타일 불일치 가능성이 있어 기존 동작을 유지한다.
+    // 선택 지점 상공은 프레임이 정렬된 provider 지형 충돌을 사용한다.
+    if (this.isJejuFlyover) return null;
+    if (this.geoLayer) {
+      if (!this.terrainProvider?.isReady?.(worldX, worldZ) || this.terrainProvider.isWater?.(worldX, worldZ)) {
+        return null;
+      }
+      const simH = this.terrainProvider.getHeight(worldX, worldZ);
+      if (!Number.isFinite(simH) || simH <= 10.0) return null;
+      const terrainY = 2.12 + simH;
+      if (worldY <= terrainY) {
+        return { collider: { name: '산악 지형' }, terrainY };
+      }
+      return null;
+    }
     if (!this.terrainColliders || this.terrainColliders.length === 0) return null;
     for (let i = 0; i < this.terrainColliders.length; i++) {
       const c = this.terrainColliders[i];

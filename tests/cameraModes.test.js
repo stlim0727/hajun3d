@@ -59,12 +59,12 @@ function createThreeMock() {
   };
 }
 
-function loadCameraRuntime() {
+function loadCameraRuntime(win = {}) {
   const THREE = createThreeMock();
   const sandbox = {
     THREE,
     AirplaneGame: { prototype: {} },
-    window: {},
+    window: win,
     document: {
       querySelectorAll: () => [],
       getElementById: () => null
@@ -129,7 +129,26 @@ test('Flight3d-style camera modes: all 8 modes cycle, update, and clamp ground c
     assert.ok(Number.isFinite(game.camera.position.y), `${def.id} y finite`);
     assert.ok(Number.isFinite(game.camera.position.z), `${def.id} z finite`);
     assert.ok(game.camera.position.y >= 2.6, `${def.id} must not clip below runway (${game.camera.position.y})`);
+    const expectHidden = def.id === '1st' || def.id === 'hud';
+    assert.equal(game.planeGroup.visible, !expectHidden, `${def.id} airframe visibility`);
   }
+
+  // Destroyed airframe stays hidden even in exterior modes
+  game.isDestroyed = true;
+  game.setCameraMode('3rd');
+  game.updateCameraFromPhysics(0, 0.016);
+  assert.equal(game.planeGroup.visible, false);
+  game.isDestroyed = false;
+
+  // Per-aircraft cockpit camera offsets match aircraft nose/deck geometry
+  const a320Eye = game.getCockpitCameraOffset('a320', '1st');
+  const dc10Eye = game.getCockpitCameraOffset('dc10', '1st');
+  const a350Eye = game.getCockpitCameraOffset('a350', '1st');
+  const ancestorEye = game.getCockpitCameraOffset('ancestor', '1st');
+  assert.ok(dc10Eye.z < a320Eye.z, 'DC-10 cockpit must sit further forward than A320');
+  assert.ok(dc10Eye.y > a320Eye.y, 'DC-10 cockpit must sit higher than A320');
+  assert.ok(a350Eye.z < dc10Eye.z, 'A350 cockpit must sit further forward than DC-10');
+  assert.ok(ancestorEye.z > a320Eye.z, 'Ancestor cockpit must sit closer to center than A320');
 
   // Verify tower mode selects Incheon ATC tower when near Incheon (z < -22500)
   game.planeGroup.position.set(-155, 6.84, -45000);
@@ -156,4 +175,97 @@ test('web/index.html includes camera mode selector menu and mobile camera button
   for (const mode of ['3rd', '1st', 'wing', 'drone', 'flyby', 'tower', 'gear', 'hud']) {
     assert.ok(html.includes(`data-cam-mode="${mode}"`), `index.html must include data-cam-mode="${mode}"`);
   }
+});
+
+test('in-game POV drag follows terrain provider grab-world direction', () => {
+  const windowListeners = {};
+  const { proto } = loadCameraRuntime({
+    addEventListener(type, handler) { windowListeners[type] = handler; }
+  });
+
+  const targetListeners = {};
+  const target = {
+    clientHeight: 800,
+    addEventListener(type, handler) { targetListeners[type] = handler; }
+  };
+
+  const cs = {
+    chaseYaw: 0, chasePitch: 0,
+    lookYaw: 0, lookPitch: -0.06,
+    wingLookYaw: 0, wingLookPitch: 0,
+    gearLookYaw: 0, gearLookPitch: 0,
+    droneOrbitAngle: 0, dronePitch: 0.28,
+    isDraggingLook: false, dragPointerId: null,
+    dragLastX: 0, dragLastY: 0
+  };
+  const game = Object.create(proto);
+  game.isPlaying = true;
+  game.container = target;
+  game.renderer = { domElement: target };
+  game.camera = { zoom: 1, updateProjectionMatrix() {} };
+  game.ensureCameraState = () => cs;
+  game.showPopup = () => {};
+  game.setupCameraDragControls();
+
+  const dragRightDown = () => {
+    targetListeners.pointerdown({
+      pointerId: 7, pointerType: 'mouse', button: 0,
+      clientX: 100, clientY: 100, target, preventDefault() {}
+    });
+    windowListeners.pointermove({ pointerId: 7, clientX: 200, clientY: 150 });
+    windowListeners.pointerup({ pointerId: 7 });
+  };
+
+  // 1st-person sensitivity matches terrainprovider.html: 0.0055 * 0.8 = 0.0044 rad/px.
+  game.cameraMode = '1st';
+  dragRightDown();
+  assert.ok(Math.abs(cs.lookYaw - 0.44) < 1e-9, 'cockpit drag right must increase yaw');
+  assert.ok(Math.abs(cs.lookPitch - 0.16) < 1e-9, 'cockpit drag down must increase pitch');
+
+  game.cameraMode = 'wing';
+  dragRightDown();
+  assert.ok(cs.wingLookYaw > 0, 'wing drag right must increase yaw');
+  assert.ok(cs.wingLookPitch > 0, 'wing drag down must increase pitch');
+
+  game.cameraMode = 'gear';
+  dragRightDown();
+  assert.ok(cs.gearLookYaw < 0, 'belly-cam look target uses the opposite yaw offset sign');
+  assert.ok(cs.gearLookPitch > 0, 'belly-cam drag down must raise the look target');
+});
+
+test('projection zoom reaches a near-infinite wide view but never reaches zero', () => {
+  const windowListeners = {};
+  const { proto } = loadCameraRuntime({
+    addEventListener(type, handler) { windowListeners[type] = handler; }
+  });
+
+  const targetListeners = {};
+  const target = {
+    clientHeight: 800,
+    addEventListener(type, handler) { targetListeners[type] = handler; }
+  };
+  const camera = { zoom: 1, updateProjectionMatrix() { this.projectionUpdates = (this.projectionUpdates || 0) + 1; } };
+  const game = Object.create(proto);
+  game.isPlaying = true;
+  game.container = target;
+  game.renderer = { domElement: target };
+  game.camera = camera;
+  game.ensureCameraState = () => ({});
+  game.setupCameraDragControls();
+
+  const wheel = (deltaY) => targetListeners.wheel({
+    deltaY, deltaMode: 0, shiftKey: false, ctrlKey: false, preventDefault() {}
+  });
+
+  wheel(100000);
+  assert.equal(camera.zoom, 0.01, 'wheel zoom-out must reach the wide-view floor');
+
+  wheel(-100000);
+  assert.equal(camera.zoom, 3, 'wheel zoom-in cap must still hold');
+
+  targetListeners.pointerdown({ pointerId: 1, pointerType: 'touch', button: 0, clientX: 100, clientY: 100, target, preventDefault() {} });
+  targetListeners.pointerdown({ pointerId: 2, pointerType: 'touch', button: 0, clientX: 1100, clientY: 100, target, preventDefault() {} });
+  windowListeners.pointermove({ pointerId: 2, clientX: 100, clientY: 100 });
+  assert.equal(camera.zoom, 0.01, 'pinch zoom-out must use the same floor');
+  assert.ok(camera.projectionUpdates > 0, 'zoom changes must refresh the projection matrix');
 });

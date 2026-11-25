@@ -68,7 +68,7 @@
         hasBuiltInGear: true,
         gearMaterialRegex: /^Material\.(034|036|037|040|042|044|045|049|050|056)$/,
         sharedGearMaterials: /^(Material\.016|material_0)$/,
-        fans: [{ radius: 0.80, blades: 24, leftX: -5.30, rightX: 5.30, y: -2.20, z: -0.25 }]
+        fans: [{ radius: 0.80, blades: 24, leftX: -5.72, rightX: 5.72, y: -2.27, z: -0.45 }]
       };
       return {
         a320,
@@ -96,13 +96,19 @@
           wingParams:   [4.0, 16.0, 32.0, 5.15],
           wingProfile:  [0.34, 0.31, -1.5, 5.0],
           hasBuiltInGear: false,
-          fans: [{ radius: 1.35, blades: 24, leftX: -9.49, rightX: 9.49, y: 0.48, z: -1.0 }],
+          fans: [{ radius: 0.50, blades: 24, leftX: -10.57, rightX: 10.57, y: -0.89, z: -4.10 }],
           gearDefs: {
             // Main gear pivots sit below the thin wing skin, with fixed mounts reaching into it.
             nose: { x: 0, y: -1.0, z: -22.0, isNose: true, is4Wheel: false, strutLength: 2.77 },
             mainL: { x: -5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 },
             mainR: { x: 5.4, y: 0.39, z: 2.1, isNose: false, is4Wheel: true, strutLength: 3.65, mountHeight: 0.20 }
           }
+        },
+        b747: {
+          fans: [
+            { radius: 1.25, blades: 24, leftX: -20.03, rightX: 20.03, y: -6.04, z: 2.30 },
+            { radius: 1.25, blades: 24, leftX: -11.52, rightX: 11.52, y: -6.04, z: -1.70 }
+          ]
         },
         dc10: {
           rudderParams: [22.45, 26.6, 6.05, 0.43],
@@ -112,6 +118,9 @@
           surfaceMaterials: { rudder: /^Body_Purple$/, elevator: /^Metal_Rear_Wings$/, wing: /^Metal_Wings$/ },
           hasBuiltInGear: true,
           hasRiggedAnimation: true
+        },
+        md80: {
+          fans: [{ radius: 0.78, blades: 20, leftX: -2.40, rightX: 2.40, y: -1.74, z: 10.75 }]
         },
         amphibian: {
           rudderParams: [5.3, 6.6, -4.5, 0.10],
@@ -175,6 +184,8 @@
 
       scene.updateMatrixWorld(true);
       const finalBox = new THREE.Box3().setFromObject(scene);
+      scene.userData = scene.userData || {};
+      scene.userData.normalizedMinY = finalBox.min.y;
       const finalSize = finalBox.getSize(new THREE.Vector3());
       return { scale, size: finalSize, box: finalBox };
     }
@@ -307,6 +318,7 @@
 
       gearAssembly.add(strutPivot);
 
+      const wheelRadius = is4WheelBogie ? 0.75 : (isNose ? 0.65 : 0.78);
       gearAssembly.userData = {
         gearId: isNose ? 'nose' : (x < 0 ? 'mainLeft' : 'mainRight'),
         strutPivot,
@@ -316,6 +328,7 @@
         bogieBeam: bogieBeamGroup,
         isNose,
         is4WheelBogie,
+        localBottomY: y - strutLength - wheelRadius,
         origPos: new THREE.Vector3(x, y, z)
       };
 
@@ -1201,6 +1214,7 @@
           this.applyEnvironmentTexturesToGLB(scene, 'airport');
         }
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
+        scene.name = 'DepartureAirfieldGLB';
         this.airportGroup.add(scene);
         this.glbAirportBuffer = buf;
         if (typeof this.addRunwayVisualDetails === 'function') {
@@ -1210,8 +1224,12 @@
             polygonOffsetFactor: -4,
             polygonOffsetUnits: -4
           });
-          this.addRunwayVisualDetails(this.airportGroup, 160, 0, 3800, whiteMat);
+          const runway = new THREE.Group();
+          runway.name = 'DepartureRunway';
+          this.addRunwayVisualDetails(runway, 160, 0, 3200, whiteMat);
+          this.airportGroup.add(runway);
         }
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         this.initPAPILights();
       }
     });
@@ -1226,6 +1244,7 @@
         scene.traverse((c) => { if (c.isMesh) c.receiveShadow = true; });
         this.incheonAirportGroup.add(scene);
         this.glbIncheonBuffer = buf;
+        if (this.geoLayer && typeof this.applyAirfieldMinimalism === 'function') this.applyAirfieldMinimalism();
         if (typeof this.addRunwayVisualDetails === 'function') {
           const whiteMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,
@@ -1329,6 +1348,47 @@
     }
   },
 
+  // Align the lowest extended-gear point with the airport runway surface.
+  // Per-type normalisation offsets were calibrated on the A320; the B747 and
+  // DC-10 gear hangs much lower, so those models used to spawn underground.
+  alignGLBToRunway(scene) {
+    if (!scene || typeof THREE === 'undefined') return;
+    const runwaySurfaceY = 2.12;
+    const groundY = Number.isFinite(this.groundY) ? this.groundY : 6.84;
+    // Prefer the parent-free bound captured during normalization. A live Box3
+    // can mix floating-origin and simulation frames when a GLB finishes loading
+    // after the aircraft has already been repositioned for a new phase.
+    const storedMinY = scene.userData?.normalizedMinY;
+    const groupWorldY = this.planeGroup && typeof this.planeGroup.getWorldPosition === 'function'
+      ? this.planeGroup.getWorldPosition(new THREE.Vector3()).y
+      : 0;
+    const bounds = Number.isFinite(storedMinY) ? null : new THREE.Box3().setFromObject(scene);
+    let localMinY = Number.isFinite(storedMinY) ? storedMinY : bounds.min.y - groupWorldY;
+    // Include procedural/attached landing gear (e.g. A350) whose tires extend lower than
+    // the bare GLB fuselage/engines captured during normalizeAircraftScene().
+    if (Array.isArray(this.landingGears) && this.landingGears.length > 0) {
+      for (const gear of this.landingGears) {
+        if (!gear) continue;
+        if (Number.isFinite(gear.userData?.localBottomY)) {
+          localMinY = Math.min(localMinY, gear.userData.localBottomY);
+        } else if (typeof THREE.Box3 === 'function') {
+          const gb = new THREE.Box3().setFromObject(gear);
+          if (Number.isFinite(gb.min?.y)) {
+            localMinY = Math.min(localMinY, gb.min.y - groupWorldY);
+          }
+        }
+      }
+    }
+    const correction = (runwaySurfaceY - groundY) - localMinY;
+    if (!Number.isFinite(correction) || Math.abs(correction) < 1e-3) return;
+    // Attached fans, gear and nav lights are calibrated against the unaligned
+    // model, so move them together with the GLB scene.
+    for (const child of (this.planeGroup?.children || [scene])) {
+      child.position.y += correction;
+    }
+    if (typeof scene.updateMatrixWorld === 'function') scene.updateMatrixWorld(true);
+  },
+
   applyGLBScene(scene, fileName, animations) {
     if (!scene) return;
     if (!this.planeGroup) {
@@ -1374,6 +1434,10 @@
         }
       }
     });
+    // 선택한 항공사 스킨을 GLB 외피/ACCENT 머티리얼에 적용
+    if (typeof this.applyAirlineSkin === 'function') {
+      this.applyAirlineSkin(scene);
+    }
 
     this.customGLBModel = scene;
     this.planeGroup.add(scene);
@@ -1414,6 +1478,7 @@
     }
 
     this.setupGLBControlSurfaceShaders(scene, this.currentPlaneType);
+    this.alignGLBToRunway(scene);
 
     this.planeGroup.updateMatrixWorld(true);
     const fanExhaustPoints = [];
@@ -1433,13 +1498,13 @@
       this.engineExhaustPoints = fanExhaustPoints;
     } else {
       const fallbackByType = {
-        a320: [[-5.06, -1.5, 1.8], [5.06, -1.5, 1.8]],
-        a350: [[-9.8, -2.1, 2.8], [9.8, -2.1, 2.8]],
-        b747: [[-11.5, -1.4, -0.5], [-6.2, -1.8, 2.2], [6.2, -1.8, 2.2], [11.5, -1.4, -0.5]],
-        dc10: [[-6.8, -1.8, 2.2], [0, 3.6, 13.5], [6.8, -1.8, 2.2]],
-        md80: [[-2.6, 0.5, 13.0], [2.6, 0.5, 13.0]],
-        concorde: [[-3.8, -1.4, 12.5], [3.8, -1.4, 12.5]],
-        amphibian: [[-4.8, 1.5, 0.8], [4.8, 1.5, 0.8]],
+        a320: [[-5.72, -2.27, 2.98], [5.72, -2.27, 2.98]],
+        a350: [[-10.57, 1.22, 2.53], [10.57, 1.22, 2.53]],
+        b747: [[-20.03, -6.04, 6.50], [-11.52, -6.04, 2.50], [11.52, -6.04, 2.50], [20.03, -6.04, 6.50]],
+        dc10: [[-8.21, -3.30, 3.50], [0, 4.25, 24.50], [8.21, -3.30, 3.50]],
+        md80: [[-2.40, -1.74, 14.80], [2.40, -1.74, 14.80]],
+        concorde: [[-4.30, -3.40, 14.90], [4.30, -3.40, 14.90]],
+        amphibian: [[-2.58, -1.41, 0.50], [2.58, -1.41, 0.50]],
         ancestor: [[0.8, 1.2, 0.6]]
       };
       const coords = fallbackByType[this.currentPlaneType] || fallbackByType.a320;

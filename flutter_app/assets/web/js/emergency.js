@@ -83,12 +83,368 @@
         this.showPopup('🛞 유압 시스템 고장으로 랜딩 기어가 전개되지 않습니다! 동체 비상 착륙을 시도하세요!');
         this.triggerPassengerReaction('emergency_gear_failure');
         break;
+
+      case 'tail_loss':
+        this.triggerTailFinBreakoff();
+        break;
+
+      case 'in_flight_breakup':
+        this.triggerInFlightBreakup();
+        break;
     }
+  },
+
+  resetTailstrikeState() {
+    this.hasTakeoffTailstrike = false;
+    this.tailFinDetached = false;
+    this.tailstrikeFailureMode = null;
+    this.tailBulkheadTriggerAltM = 1600;
+    if (Array.isArray(this._detachedTailNodes)) {
+      for (const node of this._detachedTailNodes) {
+        if (node) node.visible = true;
+      }
+    }
+    this._detachedTailNodes = [];
+
+    if (Array.isArray(this._detachedTailGeometryBackups)) {
+      for (const entry of this._detachedTailGeometryBackups) {
+        if (!entry || !entry.mesh || !entry.mesh.geometry) continue;
+        const geom = entry.mesh.geometry;
+        geom.setIndex(entry.origIndex || null);
+        if (Array.isArray(entry.origGroups) && entry.origGroups.length > 0 && typeof geom.clearGroups === 'function') {
+          geom.clearGroups();
+          for (const g of entry.origGroups) {
+            geom.addGroup(g.start, g.count, g.materialIndex);
+          }
+        }
+      }
+    }
+    this._detachedTailGeometryBackups = [];
+
+    if (this._detachedTailDebrisGroup) {
+      if (this.scene && typeof this.scene.remove === 'function') {
+        this.scene.remove(this._detachedTailDebrisGroup);
+      }
+      if (Array.isArray(this.debrisPieces)) {
+        const idx = this.debrisPieces.indexOf(this._detachedTailDebrisGroup);
+        if (idx >= 0) this.debrisPieces.splice(idx, 1);
+      }
+      this._detachedTailDebrisGroup = null;
+    }
+  },
+
+  recordTakeoffTailstrike() {
+    if (this.hasTakeoffTailstrike || this.tailFinDetached || this.isDestroyed) return false;
+    this.hasTakeoffTailstrike = true;
+    this.tailFinDetached = false;
+    // 테일스트라이크 부실 수리/균열 진행 결과를 랜덤 결정 (플레이어에게는 비공개):
+    //  - 'tail_loss': JAL 123편식 격벽 파열 → 꼬리날개 이탈, 유압 상실 (비상착륙 시도 가능)
+    //  - 'breakup'  : CAL 611편식 금속 피로 균열 → 고고도에서 공중 분해 (생존 불가)
+    this.tailstrikeFailureMode = Math.random() < 0.5 ? 'tail_loss' : 'breakup';
+    this.tailBulkheadTriggerAltM = this.tailstrikeFailureMode === 'breakup'
+      ? 2000 + Math.round(Math.random() * 500)
+      : 1500 + Math.round(Math.random() * 400);
+    if (typeof this.applyBodyDamageEvent === 'function') {
+      this.applyBodyDamageEvent('tail', 'damaged');
+    } else if (this.partDamage) {
+      this.partDamage.tail = 'damaged';
+    }
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('⚠️ [테일 스트라이크] 이륙 중 꼬리 지면 접촉! 후방 압력 격벽 균열 — 고고도 상승 시 파손 위험!');
+    }
+    return true;
+  },
+
+  checkTailstrikeAltitudeFailure() {
+    if (!this.hasTakeoffTailstrike || this.tailFinDetached || this.isDestroyed || this.isOnGround) return false;
+    if (this.currentEmergency === 'in_flight_breakup') return false;
+    if (!this.planeGroup) return false;
+    const altM = Math.max(0, this.planeGroup.position.y - (this.groundY || 6.84));
+    const triggerAlt = this.tailBulkheadTriggerAltM || 1600;
+    if (altM >= triggerAlt) {
+      if (this.tailstrikeFailureMode === 'breakup') this.triggerInFlightBreakup();
+      else this.triggerTailFinBreakoff();
+      return true;
+    }
+    return false;
+  },
+
+  // 중화항공(CAL 611)식 공중 분해: 부실 수리된 꼬리 부위 피로 균열이 한계에 도달해
+  // 후방 동체가 떨어져 나간 뒤 기체가 연쇄 파괴된다. 짧은 분해 시퀀스 후 추락 처리.
+  triggerInFlightBreakup() {
+    if (this.isDestroyed || this.currentEmergency === 'in_flight_breakup') return false;
+    this.currentEmergency = 'in_flight_breakup';
+    this.emergencyTimer = 0;
+    this.emergencyBonusGiven = true; // 비상착륙 보너스 대상 아님
+    this.hasTakeoffTailstrike = true;
+    this.partDamage = this.partDamage || {
+      nose: 'normal', belly: 'normal', tail: 'normal',
+      wingL: 'normal', wingR: 'normal', engineL: 'normal', engineR: 'normal'
+    };
+    this.partDamage.tail = 'failed';
+    this.screenShake = Math.max(this.screenShake || 0, 1.8);
+
+    // 꼬리 구조물 분리 연출 (수직꼬리날개 절단 + 파편)
+    const detachResult = typeof this.detachVerticalTailFinGeometry === 'function'
+      ? this.detachVerticalTailFinGeometry()
+      : { removedTriangles: 0 };
+    this.spawnDetachedTailFinDebris(detachResult.removedTriangles > 0);
+
+    if (typeof this.playMetalCrunchSound === 'function') this.playMetalCrunchSound();
+    if (typeof this.playGPWSWhoopSiren === 'function') this.playGPWSWhoopSiren();
+    if (typeof this.triggerGPWS === 'function') {
+      this.triggerGPWS(
+        'EMERGENCY',
+        '💥 STRUCTURAL FAILURE! AFT FUSELAGE BREAKING UP!',
+        '꼬리 부위 피로 균열 파열! 기체가 공중 분해되고 있습니다!',
+        'danger'
+      );
+    }
+    if (typeof this.speakGPWS === 'function') this.speakGPWS('STRUCTURAL FAILURE');
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('💥 [공중 분해] 부실 수리된 꼬리 부위 금속 피로 파단! 기체가 분해됩니다!');
+    }
+    if (typeof this.triggerPassengerReaction === 'function') {
+      this.triggerPassengerReaction('emergency_engine_fire');
+    }
+    return true;
+  },
+
+  detachVerticalTailFinGeometry() {
+    if (!this.planeGroup || typeof THREE === 'undefined' || !THREE.Box3 || !THREE.Matrix4) {
+      return { removedTriangles: 0, detachedGroup: null };
+    }
+    this._detachedTailGeometryBackups = this._detachedTailGeometryBackups || [];
+    if (typeof this.planeGroup.updateMatrixWorld === 'function') {
+      this.planeGroup.updateMatrixWorld(true);
+    }
+    if (!this.planeGroup.matrixWorld) {
+      return { removedTriangles: 0, detachedGroup: null };
+    }
+
+    const planeInv = new THREE.Matrix4().copy(this.planeGroup.matrixWorld).invert();
+    const localBox = new THREE.Box3();
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const meshToPlane = new THREE.Matrix4();
+
+    const meshes = [];
+    if (typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.visible || !obj.geometry) return;
+        const posAttr = obj.geometry.attributes && obj.geometry.attributes.position;
+        if (!posAttr || posAttr.count < 3) return;
+        meshes.push(obj);
+        meshToPlane.multiplyMatrices(planeInv, obj.matrixWorld);
+        for (let i = 0; i < posAttr.count; i++) {
+          vA.fromBufferAttribute(posAttr, i).applyMatrix4(meshToPlane);
+          localBox.expandByPoint(vA);
+        }
+      });
+    }
+
+    if (localBox.isEmpty()) return { removedTriangles: 0, detachedGroup: null };
+
+    const length = localBox.max.z - localBox.min.z;
+    const height = localBox.max.y - localBox.min.y;
+    const span = localBox.max.x - localBox.min.x;
+
+    // Plane-local vertical stabilizer clip box (+Z = tail, +Y = up, X = 0 centerline).
+    // Slices off the entire vertical fin (like JAL 123) while keeping fuselage & horizontal stabilizers intact.
+    const type = (this.currentPlaneType || 'a320').toLowerCase();
+    const yRatio = type === 'b747' ? 0.46 : (type === 'dc10' ? 0.56 : 0.52);
+    const zMin = localBox.max.z - length * 0.28;
+    const yBase = localBox.max.y - height * yRatio;
+    const xMax = Math.max(1.6, span * 0.05);
+
+    const detachedGroup = typeof THREE.Group === 'function' ? new THREE.Group() : null;
+    let totalRemoved = 0;
+
+    for (const mesh of meshes) {
+      const geom = mesh.geometry;
+      const posAttr = geom.attributes.position;
+      const origIndex = geom.index;
+      const origGroups = Array.isArray(geom.groups)
+        ? geom.groups.map((g) => ({ start: g.start, count: g.count, materialIndex: g.materialIndex }))
+        : [];
+      const indexCount = origIndex ? origIndex.count : posAttr.count;
+      if (Math.floor(indexCount / 3) <= 0) continue;
+
+      meshToPlane.multiplyMatrices(planeInv, mesh.matrixWorld);
+      const kept = [];
+      const detached = [];
+      const newGroups = [];
+
+      const isFinTriangle = (ia, ib, ic) => {
+        vA.fromBufferAttribute(posAttr, ia).applyMatrix4(meshToPlane);
+        vB.fromBufferAttribute(posAttr, ib).applyMatrix4(meshToPlane);
+        vC.fromBufferAttribute(posAttr, ic).applyMatrix4(meshToPlane);
+        const cx = (vA.x + vB.x + vC.x) / 3;
+        const cy = (vA.y + vB.y + vC.y) / 3;
+        const cz = (vA.z + vB.z + vC.z) / 3;
+        const jagged = Math.sin(cz * 1.3) * 0.35;
+        return cz >= zMin && cy >= (yBase + jagged) && Math.abs(cx) <= xMax;
+      };
+
+      if (origGroups.length > 0 && Array.isArray(mesh.material)) {
+        for (const g of origGroups) {
+          const groupStart = kept.length;
+          const end = Math.min(indexCount, g.start + g.count);
+          for (let i = g.start; i + 2 < end; i += 3) {
+            const ia = origIndex ? origIndex.getX(i) : i;
+            const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+            const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+            if (isFinTriangle(ia, ib, ic)) detached.push(ia, ib, ic);
+            else kept.push(ia, ib, ic);
+          }
+          const groupCount = kept.length - groupStart;
+          if (groupCount > 0) {
+            newGroups.push({ start: groupStart, count: groupCount, materialIndex: g.materialIndex });
+          }
+        }
+      } else {
+        for (let i = 0; i + 2 < indexCount; i += 3) {
+          const ia = origIndex ? origIndex.getX(i) : i;
+          const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+          const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+          if (isFinTriangle(ia, ib, ic)) detached.push(ia, ib, ic);
+          else kept.push(ia, ib, ic);
+        }
+      }
+
+      if (detached.length === 0) continue;
+
+      totalRemoved += detached.length / 3;
+      this._detachedTailGeometryBackups.push({ mesh, origIndex, origGroups });
+
+      geom.setIndex(kept);
+      if (origGroups.length > 0 && Array.isArray(mesh.material) && typeof geom.clearGroups === 'function') {
+        geom.clearGroups();
+        for (const g of newGroups) geom.addGroup(g.start, g.count, g.materialIndex);
+      }
+
+      if (detachedGroup && typeof THREE.BufferGeometry === 'function' && typeof THREE.Mesh === 'function') {
+        const pieceGeom = new THREE.BufferGeometry();
+        for (const attrName of Object.keys(geom.attributes)) {
+          pieceGeom.setAttribute(attrName, geom.attributes[attrName]);
+        }
+        pieceGeom.setIndex(detached);
+        const pieceMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const pieceMesh = new THREE.Mesh(pieceGeom, pieceMat);
+        pieceMesh.applyMatrix4(meshToPlane);
+        detachedGroup.add(pieceMesh);
+      }
+    }
+
+    if (totalRemoved > 0 && detachedGroup && this.scene) {
+      detachedGroup.position.copy(this.planeGroup.position);
+      detachedGroup.quaternion.copy(this.planeGroup.quaternion);
+      const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
+      detachedGroup.velocity = backward.multiplyScalar(1.8).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.35, 0));
+      detachedGroup.angularVel = new THREE.Vector3(0.06, 0.09, 0.11);
+      if (Array.isArray(this.debrisPieces)) this.debrisPieces.push(detachedGroup);
+      this.scene.add(detachedGroup);
+      this._detachedTailDebrisGroup = detachedGroup;
+    }
+
+    return { removedTriangles: totalRemoved, detachedGroup: totalRemoved > 0 ? detachedGroup : null };
+  },
+
+  spawnDetachedTailFinDebris(skipBoxFallback = false) {
+    if (!this.scene || !this.planeGroup || typeof THREE === 'undefined') return;
+    const pos = this.planeGroup.position;
+    const quat = this.planeGroup.quaternion;
+    const tailOffset = new THREE.Vector3(0, 3.2, 16.0).applyQuaternion(quat);
+    const tailWorld = pos.clone().add(tailOffset);
+    const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat);
+
+    // 1. 지오메트리 추출 파편이 없을 때만 폴백 수직꼬리날개 파편 메쉬 생성
+    if (!skipBoxFallback && typeof THREE.BoxGeometry === 'function' && typeof THREE.MeshStandardMaterial === 'function') {
+      const finGeo = new THREE.BoxGeometry(0.65, 5.8, 4.6);
+      const finMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.4 });
+      const finMesh = new THREE.Mesh(finGeo, finMat);
+      finMesh.position.copy(tailWorld);
+      finMesh.quaternion.copy(quat);
+      finMesh.velocity = backward.clone().multiplyScalar(1.8).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.35, 0));
+      finMesh.angularVel = new THREE.Vector3(0.06, 0.09, 0.11);
+      if (Array.isArray(this.debrisPieces)) this.debrisPieces.push(finMesh);
+      this.scene.add(finMesh);
+    }
+
+    // 2. 고고도 급감압 백색 안개 & 기체 파편 파티클 분출
+    if (typeof this.emitPartParticles === 'function') {
+      this.emitPartParticles('tail', 'spark', 14);
+      this.emitPartParticles('tail', 'smoke', 12);
+    }
+  },
+
+  triggerTailFinBreakoff() {
+    if (this.tailFinDetached || this.isDestroyed) return false;
+    this.tailFinDetached = true;
+    this.currentEmergency = 'tail_loss';
+    this.emergencyTimer = 0;
+    this.emergencyBonusGiven = false;
+    this.partDamage = this.partDamage || {
+      nose: 'normal', belly: 'normal', tail: 'normal',
+      wingL: 'normal', wingR: 'normal', engineL: 'normal', engineR: 'normal'
+    };
+    this.partDamage.tail = 'failed';
+    this.hullIntegrity = Math.max(20, (this.hullIntegrity || 100) - 35);
+    this.screenShake = Math.max(this.screenShake || 0, 1.6);
+
+    // 수직꼬리날개 / 방향타 메쉬를 시각적으로 이탈 처리 (종료하지 않고 비행 계속 가능)
+    this._detachedTailNodes = this._detachedTailNodes || [];
+    const hideNode = (node) => {
+      if (!node || !node.visible) return;
+      node.visible = false;
+      this._detachedTailNodes.push(node);
+    };
+    if (this.glbMovingPartsController && Array.isArray(this.glbMovingPartsController.controlPanels)) {
+      for (const panel of this.glbMovingPartsController.controlPanels) {
+        if (panel && panel.control === 'rudder' && panel.pivot) hideNode(panel.pivot);
+      }
+    }
+    if (this.controlSurfaces && this.controlSurfaces.rudder) {
+      hideNode(this.controlSurfaces.rudder);
+    }
+    if (this.planeGroup && typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (obj && obj.isMesh && /rudder|vstab|vertical.*stab|tail.*fin/i.test(obj.name || '')) {
+          hideNode(obj);
+        }
+      });
+    }
+
+    // GLB 통합 메쉬에서 수직꼬리날개 전체 삼각형을 완전히 절단·분리 (JAL 123 방식)
+    const detachResult = this.detachVerticalTailFinGeometry();
+    this.spawnDetachedTailFinDebris(detachResult.removedTriangles > 0);
+
+    if (typeof this.playMetalCrunchSound === 'function') this.playMetalCrunchSound();
+    if (typeof this.playGearSnapSound === 'function') this.playGearSnapSound();
+    if (typeof this.playGPWSWhoopSiren === 'function') this.playGPWSWhoopSiren();
+    if (typeof this.triggerGPWS === 'function') {
+      this.triggerGPWS(
+        'EMERGENCY',
+        '💥 TOTAL HYDRAULIC LOSS! TAIL FIN GONE!',
+        '전 유압 상실 & 꼬리날개 이탈! 좌우는 요크, 상하(피치/고도)는 엔진 출력으로 조종해 비상착륙하십시오!',
+        'danger'
+      );
+    }
+    if (typeof this.speakGPWS === 'function') this.speakGPWS('HYDRAULIC FAILURE, TAIL DAMAGED');
+    if (typeof this.showPopup === 'function') {
+      this.showPopup('💥 [전 유압 상실 · 꼬리날개 이탈] 요크 상하 불능! 좌우는 요크, 상하는 엔진 출력(스로틀)으로 조종하세요!');
+    }
+    if (typeof this.triggerPassengerReaction === 'function') {
+      this.triggerPassengerReaction('emergency_engine_fire');
+    }
+    return true;
   },
 
   clearEmergency() {
     this.currentEmergency = null;
     this.emergencyTimer = 0;
+    this.resetTailstrikeState();
     this.isGearCollapsed = false;
     this.gearExtended = true;
     this.gearPhase = 'DOWN';
@@ -131,9 +487,9 @@
     if (this.engineExhaustPoints.length === 0) return;
     const leftEnginePos = this.engineExhaustPoints[0].clone().applyQuaternion(this.planeGroup.quaternion).add(this.planeGroup.position);
 
-    // 1. 오렌지/레드 화염
+    // 1. 분홍빛 화염 (Soft Pink-Tinted Engine Fire)
     const fireGeo = new THREE.BoxGeometry(0.9, 0.9, 1.2);
-    const fireColors = [0xef4444, 0xf97316, 0xfbbf24];
+    const fireColors = [0xfb7185, 0xf472b6, 0xfbcfe8];
     const fireMat = new THREE.MeshBasicMaterial({
       color: fireColors[Math.floor(Math.random() * fireColors.length)],
       transparent: true,
@@ -183,6 +539,20 @@
         this.screenShake = Math.max(this.screenShake, 0.08);
         break;
 
+      case 'in_flight_breakup':
+        // 공중 분해: 극심한 진동 후 약 1.6초 뒤 기체 완전 파괴 (폭발·잔해 분산)
+        this.screenShake = Math.max(this.screenShake, 1.2 + Math.min(0.8, this.emergencyTimer * 0.5));
+        if (typeof this.emitPartParticles === 'function') {
+          this.emitPartParticles('tail', 'spark', 3);
+          this.emitPartParticles('tail', 'smoke', 3);
+        }
+        if (this.emergencyTimer >= 1.6) {
+          this.triggerExplosion('고고도 압력 격벽 파열 공중 분해', {
+            finding: '이륙 중 꼬리 접촉 부위가 부실하게 수리되어 금속 피로 균열이 누적되었고, 고고도에서 후방 동체와 꼬리 구조가 떨어져 나가며 기체가 공중에서 연쇄 분해되었습니다. (중화항공 611편식 공중 분해)'
+          });
+        }
+        break;
+
       case 'bird_strike':
         // 전 엔진 정지: 스로틀 0 강제 유지
         this.throttle = 0;
@@ -207,6 +577,16 @@
           this.landingGears.forEach(g => g.visible = false);
         }
         break;
+
+      case 'tail_loss':
+        // 꼬리날개 이탈 후 기체 떨림 및 감압 연기 지속 (조종 불능 종료 없이 비상착륙 시도 가능)
+        this.screenShake = Math.max(this.screenShake, 0.12);
+        if (!this._flight3dCore && !this.isOnGround && this.planeGroup) {
+          const osc = Math.sin(this.emergencyTimer * 1.45);
+          this.planeGroup.rotateY(osc * 0.0028);
+          this.planeGroup.rotateZ(Math.cos(this.emergencyTimer * 1.45) * 0.0022);
+        }
+        break;
     }
   },
 
@@ -221,7 +601,8 @@
       engine_fire: '🔥 1번 엔진 화재 극복 착륙',
       bird_strike: '🦅 버드 스트라이크 무동력 활공 착륙',
       windshear: '🌪️ 마이크로버스트 윈드시어 돌파 착륙',
-      gear_failure: '🛞 기어 고장 동체 비상착륙 (Belly Landing)'
+      gear_failure: '🛞 기어 고장 동체 비상착륙 (Belly Landing)',
+      tail_loss: '💥 꼬리날개 파손(테일스트라이크 격벽 파열) 기적의 비상착륙'
     };
     const emTitle = titles[this.currentEmergency] || '비상 상황 안전 착륙';
 
@@ -238,20 +619,17 @@
     this.triggerPassengerReaction('emergency_landing_success');
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle && modalDesc) {
-        modalTitle.textContent = '🏆 HEROIC EMERGENCY LANDING';
-        modalDesc.innerHTML = `
+      this.showLobbyResult({
+        title: '🏆 HEROIC EMERGENCY LANDING',
+        html: `
           <span style="color:#f59e0b; font-weight:800; font-size:18px;">${emTitle} 성공!</span><br>
           방식: <strong style="color:#38bdf8;">${landName}</strong><br>
           비상 상황 속에서도 침착한 조종술로 승객 전원의 생명을 구했습니다.<br>
           <span style="color:#10b981; font-weight:700;">🎖️ 비상착륙 특별 보너스: +3,000점 획득!</span>
-        `;
-        if (this.startBtn) this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-        if (this.takeoffDirectBtn) this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
-        this.overlay.classList.remove('hidden');
-      }
+        `,
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 1800);
   }
 

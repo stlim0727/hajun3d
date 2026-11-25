@@ -6,6 +6,19 @@
 (function() {
   'use strict';
 
+  // 엔진음 기본 레벨 및 카메라 시점별 감쇠 계수
+  const ENGINE_BASE_GAIN = 0.325;
+  const CAMERA_ENGINE_GAIN = {
+    '1st': 1.0,
+    hud: 1.0,
+    wing: 0.9,
+    gear: 0.8,
+    '3rd': 0.7,
+    drone: 0.4,
+    flyby: 0.4,
+    tower: 0.3
+  };
+
   Object.assign(AirplaneGame.prototype, {
   // ----------------------------------------------------------------
   // 6. 사운드 시스템 (합성 Web Audio & DynamicsCompressor 마스터링 리미터)
@@ -43,6 +56,11 @@
       this.masterGain.connect(this.compressor);
       this.compressor.connect(this.makeupGain);
       this.makeupGain.connect(this.audioCtx.destination);
+
+      // 엔진 전용 버스: 전체 엔진음 레벨 및 카메라 시점 감쇠를 한곳에서 제어
+      this.engineBus = this.audioCtx.createGain();
+      this.engineBus.gain.setValueAtTime(1.0, this.audioCtx.currentTime);
+      this.engineBus.connect(this.masterGain);
 
       // 4. 모바일/블루투스 오디오 경로 변경 및 일시정지 상태 복구 리스너
       if (typeof this.audioCtx.onstatechange !== 'undefined') {
@@ -240,7 +258,7 @@
 
     this.engineNoise.connect(this.jetNoiseFilter);
     this.jetNoiseFilter.connect(this.jetNoiseGain);
-    this.jetNoiseGain.connect(this.masterGain);
+    this.jetNoiseGain.connect(this.engineBus);
     this.engineNoise.start();
 
     // 호환성 참조 유지
@@ -260,7 +278,7 @@
 
     this.jetRumble.connect(rumbleFilter);
     rumbleFilter.connect(this.rumbleGainNode);
-    this.rumbleGainNode.connect(this.masterGain);
+    this.rumbleGainNode.connect(this.engineBus);
     this.jetRumble.start();
 
     // 3. Primary N1 저압 팬 컴프레서 스풀업 휘파람 (Sine Oscillator: 420Hz ~ 1800Hz)
@@ -272,7 +290,7 @@
     this.turbineGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
 
     this.turbineWhine.connect(this.turbineGainNode);
-    this.turbineGainNode.connect(this.masterGain);
+    this.turbineGainNode.connect(this.engineBus);
     this.turbineWhine.start();
 
     // 4. Secondary N2 고압 코어 컴프레서 & 고조파 트윈 스풀 휘파람 (Triangle Oscillator: 840Hz ~ 3200Hz)
@@ -284,7 +302,7 @@
     this.turbineGainNode2.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
 
     this.turbineWhine2.connect(this.turbineGainNode2);
-    this.turbineGainNode2.connect(this.masterGain);
+    this.turbineGainNode2.connect(this.engineBus);
     this.turbineWhine2.start();
 
     // 5. 고속 배기 제트 블라스트 (Broadband High-Velocity Exhaust Blast: 680Hz ~ 2430Hz)
@@ -302,7 +320,7 @@
 
     this.jetBlastSrc.connect(this.jetBlastFilter);
     this.jetBlastFilter.connect(this.jetBlastGain);
-    this.jetBlastGain.connect(this.masterGain);
+    this.jetBlastGain.connect(this.engineBus);
     this.jetBlastSrc.start();
 
     // 6. 고출력 이륙 팬 팁 초음속 버즈쏘(Buzzsaw) 하모닉 레이어
@@ -320,7 +338,7 @@
 
     this.jetBuzzsaw.connect(this.buzzsawFilter);
     this.buzzsawFilter.connect(this.buzzsawGain);
-    this.buzzsawGain.connect(this.masterGain);
+    this.buzzsawGain.connect(this.engineBus);
     this.jetBuzzsaw.start();
   },
 
@@ -354,7 +372,7 @@
 
     this.pistonPulse.connect(this.pistonFilter);
     this.pistonFilter.connect(this.pistonGain);
-    this.pistonGain.connect(this.masterGain);
+    this.pistonGain.connect(this.engineBus);
     this.pistonPulse.start();
 
     // 프로펠러 날 통과 공기 파동음 (블레이드 회전 주파수로 진폭 변조)
@@ -379,7 +397,7 @@
 
     this.propNoise.connect(this.propFilter);
     this.propFilter.connect(this.propGain);
-    this.propGain.connect(this.masterGain);
+    this.propGain.connect(this.engineBus);
 
     this.propBeat.connect(this.propModGain);
     this.propModGain.connect(this.propGain.gain);
@@ -466,6 +484,13 @@
     const isPiston = this.currentPlaneType === 'ancestor' || this.currentPlaneType === 'amphibian';
     const isRunning = this.jetSoundActive && !this.isEngineOff && !this.isDestroyed;
 
+    // 엔진음은 카메라 시점에 따라 감쇠: 조종석/날개는 가깝고, 드론·플라이바이·관제탑은 원거리
+    if (this.engineBus) {
+      const cameraGain = CAMERA_ENGINE_GAIN[this.cameraMode] ?? CAMERA_ENGINE_GAIN['3rd'];
+      const targetEngineVol = this.soundEnabled ? ENGINE_BASE_GAIN * cameraGain : 0.0;
+      this.engineBus.gain.setTargetAtTime(targetEngineVol, now, 0.12);
+    }
+
     // 1. 조종석 팩 에어컨/항전장비 팬 앰비언트 (엔진 꺼지면 대기 전원 수준 0.05로 감쇠)
     if (this.packGain) {
       const targetPack = (!this.soundEnabled || this.isDestroyed) ? 0.0 : (this.isEngineOff ? 0.05 : 0.16);
@@ -501,8 +526,11 @@
       const groundSpeedKmh = this.groundSpeed ? Math.abs(this.groundSpeed * 3.6) : ((this.speed || 0) * 280);
       if (this.isOnGround && groundSpeedKmh > 3 && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
         const rumbleRatio = Math.min(1.0, groundSpeedKmh / 220.0);
-        const targetRumbleVol = Math.min(0.85, 0.12 + Math.pow(rumbleRatio, 0.85) * 0.68);
-        const targetRumbleCutoff = 190 + rumbleRatio * 280;
+        const isWater = Boolean(this._isOverWaterSurface);
+        const targetRumbleVol = isWater
+          ? Math.min(0.55, rumbleRatio * 0.45)
+          : Math.min(0.85, 0.12 + Math.pow(rumbleRatio, 0.85) * 0.68);
+        const targetRumbleCutoff = isWater ? (320 + rumbleRatio * 280) : (190 + rumbleRatio * 280);
         this.groundRumbleFilter.frequency.setTargetAtTime(targetRumbleCutoff, now, 0.08);
         this.groundRumbleGain.gain.setTargetAtTime(targetRumbleVol, now, 0.08);
       } else if (!this.isOnGround && this.soundEnabled && !this.isDestroyed && this.jetSoundActive) {
@@ -731,6 +759,21 @@
     // 2. 올레오 스트럿 서스펜션 압축 둔탁한 타격 쿵 (180Hz 저역 통과)
     const severity = Math.min(1, Math.max(0.3, (typeof sinkRate === 'number' ? sinkRate : 1.5) / 3));
     this.playContactNoise(0.25, 180, 1.1 * severity, 'lowpass');
+  },
+
+  playWaterSplashSound(groundSpeedMs = 35, sinkRate = 2.0) {
+    if (!this.audioCtx || !this.soundEnabled) return;
+    this.resumeAudio();
+
+    const speed = Math.min(1.2, Math.max(0.25, (typeof groundSpeedMs === 'number' ? groundSpeedMs : 35) / 45));
+    const severity = Math.min(1.2, Math.max(0.35, Math.abs(typeof sinkRate === 'number' ? sinkRate : 2.0) / 3.0));
+
+    // 1. 선체 수면 충격 둔탁한 파동음 (150Hz 저역 통과)
+    this.playContactNoise(0.45, 150, 0.95 * severity, 'lowpass');
+    // 2. V자 선수파 쇄파 중역대 포말음 (620Hz 대역 통과)
+    this.playContactNoise(0.75 + 0.25 * speed, 620, 0.45 * speed, 'bandpass');
+    // 3. 고속 물보라 스프레이 고역대 치찰음 (1900Hz 대역 통과)
+    this.playContactNoise(0.55 + 0.25 * speed, 1900, 0.32 * speed, 'bandpass');
   },
 
   playExplosionSound() {
@@ -1135,6 +1178,7 @@
 
   setMuted(muted) {
     this.soundEnabled = !muted;
+    if (typeof this.persistSoundEnabled === 'function') this.persistSoundEnabled();
     if (this.masterGain && this.audioCtx) {
       const target = this.soundEnabled ? 1.0 : 0.0;
       this.masterGain.gain.setTargetAtTime(target, this.audioCtx.currentTime, 0.05);

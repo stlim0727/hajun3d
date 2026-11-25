@@ -95,12 +95,8 @@
       // ignore storage errors in restricted environments
     }
 
-    if (clamped <= 0.005) {
-      if (this.speedLineMaterial) this.speedLineMaterial.opacity = 0;
-      if (this.speedLinesGroup) this.speedLinesGroup.visible = false;
-      if (this.speedVignetteEl) this.speedVignetteEl.style.opacity = '0';
-    } else if (this.speedLinesGroup) {
-      this.speedLinesGroup.visible = true;
+    if (clamped <= 0.005 && this.speedVignetteEl) {
+      this.speedVignetteEl.style.opacity = '0';
     }
 
     if (typeof this.updateSpeedEffectUI === 'function') {
@@ -110,54 +106,13 @@
     if (options.announce && typeof this.showPopup === 'function') {
       const pct = Math.round(clamped * 100);
       this.showPopup(pct === 0
-        ? '💨 기류/속도선 이펙트: 끄기 (0%)'
-        : `💨 기류/속도선 이펙트 강도: ${pct}%`);
+        ? '💨 속도감 이펙트: 끄기 (0%)'
+        : `💨 속도감 이펙트 강도: ${pct}%`);
     }
   },
 
   initSpeedEffects() {
     this.speedEffectIntensity = this.loadSpeedEffectIntensity();
-
-    // 1. 고속 공기 기류 스트림 라인 (3D Speed Lines)
-    const lineCount = 180;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(lineCount * 6); // 2 vertices per line (x,y,z, x,y,z)
-
-    this.speedLineData = [];
-    for (let i = 0; i < lineCount; i++) {
-      const radius = 6.0 + Math.random() * 32.0;
-      const angle = Math.random() * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * 0.65 + 1.5;
-      const z = -45.0 + Math.random() * 90.0;
-      const length = 12.0 + Math.random() * 22.0;
-      const speedMult = 1.0 + Math.random() * 0.8;
-
-      this.speedLineData.push({ x, y, z, length, speedMult });
-
-      const idx = i * 6;
-      positions[idx] = x;
-      positions[idx + 1] = y;
-      positions[idx + 2] = z;
-      positions[idx + 3] = x;
-      positions[idx + 4] = y;
-      positions[idx + 5] = z - length;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    this.speedLineMaterial = new THREE.LineBasicMaterial({
-      color: 0xbae6fd,
-      transparent: true,
-      opacity: 0.0,
-      blending: THREE.AdditiveBlending,
-      linewidth: 1.5
-    });
-
-    this.speedLinesGroup = new THREE.LineSegments(geometry, this.speedLineMaterial);
-    this.speedLinesGroup.frustumCulled = false;
-    this.speedLinesGroup.visible = this.speedEffectIntensity > 0.005;
-    this.scene.add(this.speedLinesGroup);
 
     this.speedVignetteEl = document.getElementById('speed-vignette');
     if (typeof this.updateSpeedEffectUI === 'function') {
@@ -230,7 +185,7 @@
     this.proximityShadowMesh.renderOrder = 1;
     this.scene.add(this.proximityShadowMesh);
 
-    // 2. 저고도 수면 다운워시 파문 링 (Water Downwash Skim Ring)
+    // 2. 저고도 수면 다운워시 & 동심원 물결 파문 링 (Multi-Crest Concentric Water Ripple Texture)
     let ringTex = null;
     if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
       const rCanvas = document.createElement('canvas');
@@ -238,10 +193,14 @@
       rCanvas.height = 128;
       const rCtx = rCanvas.getContext && rCanvas.getContext('2d');
       if (rCtx) {
-        const rGrad = rCtx.createRadialGradient(64, 64, 24, 64, 64, 62);
+        const rGrad = rCtx.createRadialGradient(64, 64, 14, 64, 64, 63);
         rGrad.addColorStop(0.0, 'rgba(224, 242, 254, 0.0)');
-        rGrad.addColorStop(0.55, 'rgba(224, 242, 254, 0.35)');
-        rGrad.addColorStop(0.78, 'rgba(255, 255, 255, 0.55)');
+        rGrad.addColorStop(0.28, 'rgba(186, 230, 253, 0.22)');
+        rGrad.addColorStop(0.42, 'rgba(14, 165, 233, 0.05)');
+        rGrad.addColorStop(0.58, 'rgba(224, 242, 254, 0.45)');
+        rGrad.addColorStop(0.70, 'rgba(14, 165, 233, 0.08)');
+        rGrad.addColorStop(0.84, 'rgba(255, 255, 255, 0.72)');
+        rGrad.addColorStop(0.94, 'rgba(186, 230, 253, 0.28)');
         rGrad.addColorStop(1.0, 'rgba(224, 242, 254, 0.0)');
         rCtx.fillStyle = rGrad;
         rCtx.fillRect(0, 0, 128, 128);
@@ -262,6 +221,109 @@
     this.waterWakeRingMesh.visible = false;
     this.waterWakeRingMesh.renderOrder = 2;
     this.scene.add(this.waterWakeRingMesh);
+
+    // 2-B. 켈빈 V자형 함수파 및 활주 포말 항적 (Kelvin V-Bow Wave & Stepped-Hull Foam Wake)
+    let bowWakeTex = null;
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      const wCanvas = document.createElement('canvas');
+      wCanvas.width = 128;
+      wCanvas.height = 128;
+      const wCtx = wCanvas.getContext && wCanvas.getContext('2d');
+      if (wCtx) {
+        const coreGrad = wCtx.createRadialGradient(64, 54, 4, 64, 64, 58);
+        coreGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.65)');
+        coreGrad.addColorStop(0.35, 'rgba(224, 242, 254, 0.35)');
+        coreGrad.addColorStop(0.75, 'rgba(186, 230, 253, 0.10)');
+        coreGrad.addColorStop(1.0, 'rgba(186, 230, 253, 0.0)');
+        wCtx.fillStyle = coreGrad;
+        wCtx.fillRect(0, 0, 128, 128);
+
+        wCtx.lineCap = 'round';
+        // 주 V자 함수파(Outer Kelvin Bow Wave Arms) + 2차 내부 파랑(Feathered Wavelets)
+        const wakeArms = [
+          { tipY: 14, endX: 12, endY: 118, ctrlX: 34, ctrlY: 56, width: 5.5, color: 'rgba(255, 255, 255, 0.78)' },
+          { tipY: 18, endX: 24, endY: 118, ctrlX: 44, ctrlY: 62, width: 3.5, color: 'rgba(224, 242, 254, 0.55)' },
+          { tipY: 26, endX: 36, endY: 116, ctrlX: 52, ctrlY: 70, width: 2.4, color: 'rgba(186, 230, 253, 0.40)' }
+        ];
+        for (let i = 0; i < wakeArms.length; i++) {
+          const arm = wakeArms[i];
+          wCtx.strokeStyle = arm.color;
+          wCtx.lineWidth = arm.width;
+          // 좌현 함수파
+          wCtx.beginPath();
+          wCtx.lineTo(64, arm.tipY);
+          wCtx.bezierCurveTo(arm.ctrlX, arm.ctrlY, arm.endX + 10, arm.endY - 18, arm.endX, arm.endY);
+          wCtx.stroke();
+          // 우현 함수파
+          const rCtrlX = 128 - arm.ctrlX;
+          const rEndX = 128 - arm.endX;
+          wCtx.beginPath();
+          wCtx.lineTo(64, arm.tipY);
+          wCtx.bezierCurveTo(rCtrlX, arm.ctrlY, rEndX - 10, arm.endY - 18, rEndX, arm.endY);
+          wCtx.stroke();
+        }
+
+        // 중앙 선체 스텝 후류 포말(Turbulent Centerline Foam Trail)
+        const trailGrad = wCtx.createLinearGradient(64, 18, 64, 124);
+        trailGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.72)');
+        trailGrad.addColorStop(0.5, 'rgba(224, 242, 254, 0.42)');
+        trailGrad.addColorStop(1.0, 'rgba(186, 230, 253, 0.0)');
+        wCtx.strokeStyle = trailGrad;
+        wCtx.lineWidth = 10;
+        wCtx.beginPath();
+        wCtx.lineTo(64, 20);
+        wCtx.lineTo(64, 122);
+        wCtx.stroke();
+
+        bowWakeTex = new THREE.CanvasTexture(wCanvas);
+      }
+    }
+
+    const bowWakeMat = new THREE.MeshBasicMaterial({
+      color: 0xe0f2fe,
+      map: bowWakeTex,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    this.waterBowWakeMesh = new THREE.Mesh(shadowGeo, bowWakeMat);
+    this.waterBowWakeMesh.rotation.x = -Math.PI / 2;
+    this.waterBowWakeMesh.visible = false;
+    this.waterBowWakeMesh.renderOrder = 3;
+    this.scene.add(this.waterBowWakeMesh);
+
+    // 2-C. Zero-GC 확산 동심원 물결 풀 (Expanding Concentric Water Ripple Pool, 16개 재사용)
+    const ripplePoolSize = 16;
+    this.waterRipplePool = [];
+    this._waterRippleCursor = 0;
+    this._waterRippleSpawnAccum = 0;
+    for (let i = 0; i < ripplePoolSize; i++) {
+      const rMat = new THREE.MeshBasicMaterial({
+        color: 0xe0f2fe,
+        map: ringTex,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      const rMesh = new THREE.Mesh(shadowGeo, rMat);
+      rMesh.rotation.x = -Math.PI / 2;
+      rMesh.visible = false;
+      rMesh.renderOrder = 2;
+      this.scene.add(rMesh);
+      this.waterRipplePool.push({
+        mesh: rMesh,
+        mat: rMat,
+        active: false,
+        life: 0,
+        maxLife: 1.35,
+        baseScale: 12,
+        growRate: 28,
+        maxOpacity: 0.62,
+        aspect: 1.3
+      });
+    }
 
     // 3. Zero-GC 수면 물보라 파티클 풀 (36개 고정 재사용)
     const poolSize = 36;
@@ -296,6 +358,92 @@
     }
   },
 
+  spawnWaterRippleRing(x, z, surfaceY, opts = {}) {
+    const pool = this.waterRipplePool;
+    if (!pool || pool.length === 0) return;
+
+    const r = pool[this._waterRippleCursor];
+    this._waterRippleCursor = (this._waterRippleCursor + 1) % pool.length;
+
+    r.active = true;
+    r.maxLife = opts.maxLife ?? 1.35;
+    r.life = r.maxLife;
+    r.baseScale = opts.baseScale ?? 12;
+    r.growRate = opts.growRate ?? 28;
+    r.maxOpacity = opts.maxOpacity ?? 0.62;
+    r.aspect = opts.aspect ?? 1.3;
+
+    r.mesh.position.set(x, surfaceY + 0.11, z);
+    r.mesh.rotation.z = opts.heading || 0;
+    r.mesh.scale.set(r.baseScale, r.baseScale * r.aspect, 1);
+    r.mat.opacity = r.maxOpacity * 0.35;
+    r.mesh.visible = true;
+  },
+
+  triggerWaterTouchdownSplash(sinkRate = 2.0) {
+    if (!this.planeGroup) return;
+    const pos = this.planeGroup.position;
+    const { surfaceY, isWater } = this.getSurfaceUnderPlane(pos.x, pos.z);
+    if (!isWater) return;
+
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
+    const heading = typeof this.yaw === 'number'
+      ? this.yaw
+      : (this.planeGroup.rotation ? this.planeGroup.rotation.y : Math.atan2(-forward.x, -forward.z));
+    const impactSeverity = Math.min(1.5, Math.max(0.6, Math.abs(sinkRate || 2.0) / 2.6));
+
+    // 착수 순간 4중 동심원 충격 파문 생성
+    for (let i = 0; i < 4; i++) {
+      const aft = -3 + i * 4.5;
+      this.spawnWaterRippleRing(
+        pos.x - forward.x * aft,
+        pos.z - forward.z * aft,
+        surfaceY,
+        {
+          heading,
+          baseScale: 10 + i * 5.5,
+          growRate: (26 + i * 8) * impactSeverity,
+          maxLife: 1.25 + i * 0.28,
+          maxOpacity: Math.min(0.85, (0.72 - i * 0.1) * impactSeverity),
+          aspect: 1.35
+        }
+      );
+    }
+
+    // 선체 차인 양옆으로 솟구치는 대형 착수 물보라 커튼 (최대 12개)
+    const pool = this.proximityParticlePool;
+    if (!pool || pool.length === 0) return;
+    const burstCount = Math.min(12, pool.length);
+    for (let i = 0; i < burstCount; i++) {
+      const p = pool[this._proximityPoolCursor];
+      this._proximityPoolCursor = (this._proximityPoolCursor + 1) % pool.length;
+
+      const sideSign = i % 2 === 0 ? -1 : 1;
+      const sideOffset = sideSign * (2.4 + Math.random() * 3.4);
+      const foreAft = (Math.random() - 0.35) * 10.0;
+      p.active = true;
+      p.maxLife = 0.7 + Math.random() * 0.45;
+      p.life = p.maxLife;
+      p.baseScale = 1.8 + impactSeverity * 1.4;
+      p.growRate = 11.0;
+      p.maxOpacity = Math.min(0.82, 0.65 * impactSeverity);
+
+      p.mat.color.setHex(i % 3 === 0 ? 0xffffff : 0xe0f2fe);
+      p.mesh.position.set(
+        pos.x + right.x * sideOffset - forward.x * foreAft,
+        surfaceY + 0.4 + Math.random() * 0.5,
+        pos.z + right.z * sideOffset - forward.z * foreAft
+      );
+      p.vx = right.x * sideSign * (7.5 + Math.random() * 6.5) - forward.x * (3.0 + Math.random() * 5.0);
+      p.vy = (5.0 + Math.random() * 4.8) * impactSeverity;
+      p.vz = right.z * sideSign * (7.5 + Math.random() * 6.5) - forward.z * (3.0 + Math.random() * 5.0);
+      p.mesh.scale.setScalar(p.baseScale);
+      p.mat.opacity = p.maxOpacity;
+      p.mesh.visible = true;
+    }
+  },
+
   updateProximitySurfaceEffects(dt, currentKmh) {
     if (!this.planeGroup) return;
 
@@ -306,11 +454,22 @@
     this._surfaceClearance = clearance;
     this._isOverWaterSurface = isWater;
 
+    const onWaterSurface = isWater && (
+      Boolean(this.isOnGround) ||
+      Boolean(this._flight3dCore?.telemetry?.onWater) ||
+      pos.y <= surfaceY + 2.4
+    );
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
+    const heading = typeof this.yaw === 'number'
+      ? this.yaw
+      : (this.planeGroup.rotation ? this.planeGroup.rotation.y : Math.atan2(-forward.x, -forward.z));
+
     // 1. 근접 투영 그림자 업데이트 (수면 초저고도에서는 부드러운 수면 투영 그림자 유지, 활주로/육상에서는 정밀 2048 섀도우 맵의 선명한 실루엣을 위해 원형 블러 메쉬 숨김)
     if (this.proximityShadowMesh) {
       if (isWater && clearance < 180) {
         const prox = 1.0 - clearance / 180;
-        const span = this.currentPlaneType === 'dc10' ? 48 : (this.currentPlaneType === 'a380' ? 68 : 34);
+        const span = this.currentPlaneType === 'dc10' ? 48 : (this.currentPlaneType === 'a380' ? 68 : (this.currentPlaneType === 'amphibian' ? 29 : 34));
         const spread = span * (0.85 + (clearance / 180) * 1.45);
         this.proximityShadowMesh.visible = true;
         this.proximityShadowMesh.position.set(pos.x, surfaceY + 0.08, pos.z);
@@ -321,64 +480,157 @@
       }
     }
 
-    // 2. 저고도 수면 다운워시 파문 링 (수면 위 28m 이하, 속도 60km/h 이상)
+    // 2. 저고도 수면 다운워시 파문 링 (수면 위 28m 이하 60km/h 이상, 또는 수상 활주 12km/h 이상)
     if (this.waterWakeRingMesh) {
-      if (isWater && clearance < 28 && currentKmh > 60) {
-        const waterProx = 1.0 - clearance / 28;
-        const speedFactor = Math.min(1.0, currentKmh / 280);
+      if (isWater && ((clearance < 28 && currentKmh > 60) || (onWaterSurface && currentKmh > 12))) {
+        const waterProx = onWaterSurface ? 1.0 : (1.0 - clearance / 28);
+        const speedFactor = Math.min(1.0, currentKmh / 240);
         const pulse = 1.0 + Math.sin(performance.now() * 0.012) * 0.08;
-        const ringScale = (24 + (1.0 - waterProx) * 18) * pulse;
+        const ringScale = (20 + (1.0 - waterProx) * 18 + speedFactor * 8) * pulse;
         this.waterWakeRingMesh.visible = true;
         this.waterWakeRingMesh.position.set(pos.x, surfaceY + 0.12, pos.z);
         this.waterWakeRingMesh.scale.set(ringScale, ringScale * 1.55, 1);
-        this.waterWakeRingMesh.rotation.z = this.planeGroup.rotation.y;
-        this.waterWakeRingMesh.material.opacity = Math.min(0.65, waterProx * speedFactor * 0.65);
+        this.waterWakeRingMesh.rotation.z = heading;
+        this.waterWakeRingMesh.material.opacity = Math.min(0.65, waterProx * (0.25 + speedFactor * 0.48));
       } else {
         this.waterWakeRingMesh.visible = false;
       }
     }
 
-    // 3. 저고도 수면 물보라 파티클 스폰 & 업데이트 (Zero-GC, 수면 위에서만 발생)
+    // 2-B. 켈빈 V자형 함수파 및 활주 포말 항적 업데이트
+    if (this.waterBowWakeMesh) {
+      if (isWater && (onWaterSurface || clearance < 12) && currentKmh > 12) {
+        const wakeProx = onWaterSurface ? 1.0 : (1.0 - clearance / 12);
+        const speedFactor = Math.min(1.0, currentKmh / 180);
+        const wakeWidth = 18 + speedFactor * 18;
+        const wakeLength = 26 + speedFactor * 52;
+        const aftOffset = 6.0 + speedFactor * 10.0;
+        this.waterBowWakeMesh.visible = true;
+        this.waterBowWakeMesh.position.set(
+          pos.x - forward.x * aftOffset,
+          surfaceY + 0.14,
+          pos.z - forward.z * aftOffset
+        );
+        this.waterBowWakeMesh.scale.set(wakeWidth, wakeLength, 1);
+        this.waterBowWakeMesh.rotation.z = heading;
+        this.waterBowWakeMesh.material.opacity = Math.min(0.85, wakeProx * (0.28 + speedFactor * 0.57));
+      } else {
+        this.waterBowWakeMesh.visible = false;
+      }
+    }
+
+    // 2-C. 확산 동심원 물결 스폰 & 업데이트 (Zero-GC)
+    const ripplePool = this.waterRipplePool;
+    if (ripplePool && ripplePool.length > 0) {
+      if (isWater && (onWaterSurface || (clearance < 16 && currentKmh > 55))) {
+        const rippleRate = onWaterSurface
+          ? (currentKmh > 20 ? 4.5 + Math.min(6.5, currentKmh / 32) : 1.6)
+          : 3.5 * (1.0 - clearance / 16);
+        this._waterRippleSpawnAccum += dt * rippleRate;
+
+        while (this._waterRippleSpawnAccum >= 1.0) {
+          this._waterRippleSpawnAccum -= 1.0;
+          const speedRatio = Math.min(1.0, currentKmh / 200);
+          const aftDist = onWaterSurface ? (2.0 + speedRatio * 5.0) : 0.0;
+          this.spawnWaterRippleRing(
+            pos.x - forward.x * aftDist,
+            pos.z - forward.z * aftDist,
+            surfaceY,
+            {
+              heading,
+              baseScale: onWaterSurface ? (11 + speedRatio * 5) : 16,
+              growRate: onWaterSurface ? (22 + speedRatio * 24) : 26,
+              maxLife: onWaterSurface ? (1.25 + (1.0 - speedRatio) * 0.45) : 0.95,
+              maxOpacity: onWaterSurface ? (0.45 + speedRatio * 0.25) : 0.40 * (1.0 - clearance / 16),
+              aspect: 1.2 + speedRatio * 0.35
+            }
+          );
+        }
+      }
+
+      for (let i = 0; i < ripplePool.length; i++) {
+        const r = ripplePool[i];
+        if (!r.active) continue;
+        r.life -= dt;
+        if (r.life <= 0) {
+          r.active = false;
+          r.mesh.visible = false;
+          continue;
+        }
+        const t = 1.0 - r.life / r.maxLife;
+        const s = r.baseScale + t * r.growRate;
+        r.mesh.scale.set(s, s * r.aspect, 1);
+        r.mat.opacity = r.maxOpacity * Math.sin(t * Math.PI) * (1.0 - t * 0.45);
+      }
+    }
+
+    // 3. 저고도 수면 물보라 / 선체 차인 스프레이 파티클 스폰 & 업데이트 (Zero-GC, 수면 위에서만 발생)
     const pool = this.proximityParticlePool;
     if (!pool || pool.length === 0) return;
 
     const maxSpawnClearance = 34;
-    const shouldSpawn = isWater && currentKmh > 65 && clearance < maxSpawnClearance;
+    const shouldSpawn = isWater && ((onWaterSurface && currentKmh > 18) || (currentKmh > 65 && clearance < maxSpawnClearance));
 
     if (shouldSpawn) {
-      const prox = 1.0 - clearance / maxSpawnClearance;
-      const spawnRate = 42 * prox * Math.min(1.2, currentKmh / 220);
+      const prox = onWaterSurface ? 1.0 : (1.0 - clearance / maxSpawnClearance);
+      const speedNorm = onWaterSurface ? Math.min(1.2, Math.max(0.35, currentKmh / 150)) : Math.min(1.2, currentKmh / 220);
+      const spawnRate = (onWaterSurface ? 56 : 42) * prox * speedNorm;
       this._proximitySpawnAccum += dt * spawnRate;
-
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.planeGroup.quaternion);
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.planeGroup.quaternion);
 
       while (this._proximitySpawnAccum >= 1.0) {
         this._proximitySpawnAccum -= 1.0;
         const p = pool[this._proximityPoolCursor];
         this._proximityPoolCursor = (this._proximityPoolCursor + 1) % pool.length;
 
-        const side = (Math.random() - 0.5) * 26;
-        const backOffset = 4 + Math.random() * 10;
-        p.active = true;
-        p.maxLife = 0.45 + Math.random() * 0.35;
-        p.life = p.maxLife;
-        p.baseScale = 1.4 + prox * 1.8;
-        p.growRate = 9.5;
-        p.maxOpacity = 0.58 * prox;
+        if (onWaterSurface) {
+          const isFloatTip = Math.random() < 0.25;
+          const sideSign = Math.random() < 0.5 ? -1 : 1;
+          const side = sideSign * (isFloatTip ? (12.0 + Math.random() * 1.5) : (2.2 + Math.random() * 3.2));
+          const backOffset = isFloatTip ? (Math.random() * 3.0) : (1.5 + Math.random() * 8.5);
+          p.active = true;
+          p.maxLife = 0.55 + Math.random() * 0.42;
+          p.life = p.maxLife;
+          p.baseScale = (isFloatTip ? 1.0 : 1.5) + speedNorm * 1.3;
+          p.growRate = isFloatTip ? 6.5 : 10.5;
+          p.maxOpacity = Math.min(0.80, (isFloatTip ? 0.48 : 0.68) * (0.45 + speedNorm * 0.55));
 
-        p.mat.color.setHex(Math.random() > 0.35 ? 0xe0f2fe : 0xffffff);
-        p.mesh.position.set(
-          pos.x + right.x * side - forward.x * backOffset,
-          surfaceY + 0.35 + Math.random() * 0.6,
-          pos.z + right.z * side - forward.z * backOffset
-        );
-        p.vx = right.x * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.x * (6 + Math.random() * 8);
-        p.vy = 3.2 + prox * 3.5 + Math.random() * 2.0;
-        p.vz = right.z * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.z * (6 + Math.random() * 8);
-        p.mesh.scale.setScalar(p.baseScale);
-        p.mat.opacity = p.maxOpacity;
-        p.mesh.visible = true;
+          p.mat.color.setHex(Math.random() > 0.35 ? 0xffffff : 0xe0f2fe);
+          p.mesh.position.set(
+            pos.x + right.x * side - forward.x * backOffset,
+            surfaceY + 0.35 + Math.random() * 0.45,
+            pos.z + right.z * side - forward.z * backOffset
+          );
+          const outSpeed = (isFloatTip ? 4.0 : 6.0) + Math.random() * 7.0 * speedNorm;
+          const aftSpeed = 5.0 + Math.random() * 7.0;
+          p.vx = right.x * sideSign * outSpeed - forward.x * aftSpeed;
+          p.vy = (3.5 + Math.random() * 5.0) * (0.5 + 0.5 * speedNorm);
+          p.vz = right.z * sideSign * outSpeed - forward.z * aftSpeed;
+          p.mesh.scale.setScalar(p.baseScale);
+          p.mat.opacity = p.maxOpacity;
+          p.mesh.visible = true;
+        } else {
+          const side = (Math.random() - 0.5) * 26;
+          const backOffset = 4 + Math.random() * 10;
+          p.active = true;
+          p.maxLife = 0.45 + Math.random() * 0.35;
+          p.life = p.maxLife;
+          p.baseScale = 1.4 + prox * 1.8;
+          p.growRate = 9.5;
+          p.maxOpacity = 0.58 * prox;
+
+          p.mat.color.setHex(Math.random() > 0.35 ? 0xe0f2fe : 0xffffff);
+          p.mesh.position.set(
+            pos.x + right.x * side - forward.x * backOffset,
+            surfaceY + 0.35 + Math.random() * 0.6,
+            pos.z + right.z * side - forward.z * backOffset
+          );
+          p.vx = right.x * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.x * (6 + Math.random() * 8);
+          p.vy = 3.2 + prox * 3.5 + Math.random() * 2.0;
+          p.vz = right.z * (side > 0 ? 1 : -1) * (4 + Math.random() * 6) - forward.z * (6 + Math.random() * 8);
+          p.mesh.scale.setScalar(p.baseScale);
+          p.mat.opacity = p.maxOpacity;
+          p.mesh.visible = true;
+        }
       }
     }
 
@@ -395,7 +647,11 @@
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      p.vy -= 4.5 * dt;
+      p.vy -= (isWater ? 7.5 : 4.5) * dt;
+      if (isWater && p.mesh.position.y < surfaceY + 0.15) {
+        p.mesh.position.y = surfaceY + 0.15;
+        if (p.vy < 0) p.vy = 0;
+      }
       const s = p.baseScale + t * p.growRate;
       p.mesh.scale.set(s, s * 0.65, s);
       p.mat.opacity = p.maxOpacity * (1.0 - t);
@@ -403,53 +659,11 @@
   },
 
   updateSpeedEffects(dt, currentKmh) {
-    if (!this.speedLinesGroup || !this.speedLineMaterial) return;
-
     const intensity = typeof this.speedEffectIntensity === 'number'
       ? Math.min(1.0, Math.max(0.0, this.speedEffectIntensity))
       : DEFAULT_SPEED_EFFECT_INTENSITY;
 
-    // 시속 135 km/h 이상부터 스트림 라인 점진 등장 (이륙 활주 체감 강화), 800 km/h에서 최고조
-    const speedRatio = Math.min(1.0, Math.max(0, (currentKmh - 135) / 665)); // 0.0 ~ 1.0
-
-    const rawTargetOpacity = speedRatio > 0.04 ? (0.06 + speedRatio * 0.62) : 0.0;
-    const targetOpacity = rawTargetOpacity * intensity;
-    this.speedLineMaterial.opacity = THREE.MathUtils.lerp(this.speedLineMaterial.opacity, targetOpacity, 0.1);
-    this.speedLinesGroup.visible = this.speedLineMaterial.opacity > 0.005;
-
-    // 스피드 라인 위치 및 회전을 기체 중심으로 추종
-    this.speedLinesGroup.position.copy(this.planeGroup.position);
-    this.speedLinesGroup.quaternion.copy(this.planeGroup.quaternion);
-
-    if (this.speedLinesGroup.visible && this.speedLineMaterial.opacity > 0.01) {
-      const posAttr = this.speedLinesGroup.geometry.attributes.position;
-      const posArr = posAttr.array;
-      const moveSpeed = (42.0 + speedRatio * 145.0) * dt * 60;
-
-      for (let i = 0; i < this.speedLineData.length; i++) {
-        const item = this.speedLineData[i];
-        item.z += moveSpeed * item.speedMult;
-        if (item.z > 50) {
-          item.z = -50 - Math.random() * 20;
-          const radius = 6.0 + Math.random() * 32.0;
-          const angle = Math.random() * Math.PI * 2;
-          item.x = Math.cos(angle) * radius;
-          item.y = Math.sin(angle) * radius * 0.65 + 1.5;
-          item.length = 12.0 + Math.random() * 22.0;
-        }
-
-        const idx = i * 6;
-        posArr[idx] = item.x;
-        posArr[idx + 1] = item.y;
-        posArr[idx + 2] = item.z;
-        posArr[idx + 3] = item.x;
-        posArr[idx + 4] = item.y;
-        posArr[idx + 5] = item.z - item.length;
-      }
-      posAttr.needsUpdate = true;
-    }
-
-    // 2. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
+    // 1. 고속 윙팁 베이퍼 트레일 (날개 끝 응축운)
     if (!this.isOnGround && (currentKmh > 520 || (currentKmh > 320 && Math.abs(this.roll) > 0.35))) {
       const wingSpan = this.currentPlaneType === 'dc10' ? 24.5 : 17.5;
       [-wingSpan, wingSpan].forEach(sideX => {
@@ -458,7 +672,7 @@
       });
     }
 
-    // 3. 화면 테두리 스피드 비네트 효과
+    // 2. 화면 테두리 스피드 비네트 효과
     if (this.speedVignetteEl) {
       if (intensity > 0.01 && currentKmh > 420) {
         const vigOpacity = Math.min(0.85, (currentKmh - 420) / 400) * intensity;
@@ -467,10 +681,13 @@
         this.speedVignetteEl.style.opacity = '0';
       }
     }
-
-    // 4. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
+    // 3. 바다 텍스처 미세 너울 애니메이션 (실제 이동에 의한 광학 흐름과 조화)
     if (this.oceanTexture) {
       this.oceanTexture.offset.y -= dt * 0.035;
+    }
+    if (this.oceanNormalTexture) {
+      this.oceanNormalTexture.offset.x -= dt * 0.018;
+      this.oceanNormalTexture.offset.y += dt * 0.01;
     }
   },
 
@@ -526,6 +743,7 @@
     };
     this._partSparkFrame = 0;
     this._partSmokeFrame = 0;
+    if (typeof this.clearAirframeDebris === 'function') this.clearAirframeDebris();
   },
 
   _collapseGearAssembly(gear, idx) {
@@ -663,10 +881,10 @@
     const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
 
     if (!this._dmgSparkMat) {
-      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
-      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfda4af });
+      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xf472b6 });
       this._dmgSmokeMat = new THREE.MeshBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.72 });
-      this._dmgGeo = new THREE.BoxGeometry(0.55, 0.55, 0.85);
+      this._dmgGeo = new THREE.BoxGeometry(0.45, 0.45, 1.05);
     }
 
     const pGeo = this.sharedExhaustGeo || this._dmgGeo;
@@ -947,7 +1165,7 @@
   },
 
   // 3. 다단계 대폭발 & 기체 파쇄 분해 (Catastrophic Explosion Breakup)
-  triggerExplosion(cause = '추락 폭발') {
+  triggerExplosion(cause = '추락 폭발', options = {}) {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
     this.isPlaying = false;
@@ -959,6 +1177,7 @@
     const impactKmh = Math.max(35, Math.round(this.speed * 280));
     const sinkRate = Math.abs(this.verticalSpeed);
     const report = this.analyzeCrashSeverity(cause, impactKmh, sinkRate);
+    if (options && options.finding) report.finding = options.finding;
 
     this.hullIntegrity = 0;
     this.speed = 0;
@@ -979,14 +1198,12 @@
     this.displayPassengerDialogue(`💥 [객실 탑승객 285명] "쿵!! (충격 ${report.estimatedG}G로 기체 대폭발! 사망 ${report.fatalities}명, 부상 ${report.seriousInjuries + report.minorInjuries}명 발생!)"`);
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle) modalTitle.textContent = '🚨 CRASH INVESTIGATION REPORT';
-      if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
-
-      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
-      this.overlay.classList.remove('hidden');
+      this.showLobbyResult({
+        title: '🚨 CRASH INVESTIGATION REPORT',
+        html: this.renderCrashReportHTML(report),
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 2400);
   },
 
@@ -996,6 +1213,9 @@
     if (x >= -700 && x <= 700 && z >= -2200 && z <= 2200) return true;
     // 2. 목적지 거대 대륙 육지 전체 (Z <= -28000): 드넓은 대륙 평야 및 육지 공항
     if (z <= -28000 && x >= -25000 && x <= 25000) return true;
+    // 3. 제주공항 섬 (Flying over Jeju Airport)
+    const jeju = this.getJejuLocalPosition ? this.getJejuLocalPosition() : null;
+    if (jeju && Math.hypot(x - jeju.x, z - jeju.z) <= this.JEJU_AIRPORT.islandRadius) return true;
     return false;
   },
 
@@ -1029,14 +1249,12 @@
     this.displayPassengerDialogue(`🌊 [객실 탑승객 285명] "바다로 격돌!! (충격 ${report.estimatedG}G! 사망 ${report.fatalities}명, 부상 ${report.seriousInjuries + report.minorInjuries}명 발생!)"`);
 
     setTimeout(() => {
-      const modalTitle = document.getElementById('modal-title');
-      const modalDesc = document.getElementById('modal-desc');
-      if (modalTitle) modalTitle.textContent = '🌊 SEA IMPACT & CASUALTY REPORT';
-      if (modalDesc) modalDesc.innerHTML = this.renderCrashReportHTML(report);
-
-      this.startBtn.textContent = '게이트에서 다시 시작 🔄';
-      this.takeoffDirectBtn.textContent = '활주로에서 즉시 이륙하기 🛫';
-      this.overlay.classList.remove('hidden');
+      this.showLobbyResult({
+        title: '🌊 SEA IMPACT & CASUALTY REPORT',
+        html: this.renderCrashReportHTML(report),
+        primaryLabel: '게이트에서 다시 시작 🔄',
+        phaseLabel: '다시 이륙'
+      });
     }, 2400);
   },
 
@@ -1096,8 +1314,198 @@
     }
   },
 
+  clearAirframeDebris() {
+    if (!Array.isArray(this.debrisPieces)) {
+      this.debrisPieces = [];
+      return;
+    }
+    for (const piece of this.debrisPieces) {
+      if (this.scene && typeof this.scene.remove === 'function') {
+        this.scene.remove(piece);
+      }
+      if (piece && typeof piece.traverse === 'function') {
+        piece.traverse((obj) => {
+          if (obj && obj.userData && obj.userData._disposeGeometryOnClear && obj.geometry && typeof obj.geometry.dispose === 'function') {
+            obj.geometry.dispose();
+          }
+        });
+      }
+    }
+    this.debrisPieces = [];
+  },
+
+  // 현재 탑승 중인 비행기(GLB / 프로시저럴) 메쉬 자체를 1:1 실물 크기 6개 구조 파편으로 절단·생성
+  // (좌주익, 우주익, 기수/조종석, 중앙동체, 수직꼬리날개, 후방동체/수평꼬리날개)
+  buildAirframeMeshDebrisChunks(pos) {
+    if (!this.planeGroup || !this.scene || typeof THREE === 'undefined') return [];
+    if (!THREE.Box3 || !THREE.Matrix4 || !THREE.BufferGeometry || !THREE.Group || !THREE.Mesh) return [];
+
+    if (typeof this.planeGroup.updateMatrixWorld === 'function') {
+      this.planeGroup.updateMatrixWorld(true);
+    }
+    if (!this.planeGroup.matrixWorld) return [];
+
+    const planeInv = new THREE.Matrix4().copy(this.planeGroup.matrixWorld).invert();
+    const localBox = new THREE.Box3();
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const meshToPlane = new THREE.Matrix4();
+
+    const sourceMeshes = [];
+    if (typeof this.planeGroup.traverse === 'function') {
+      this.planeGroup.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.geometry) return;
+        const posAttr = obj.geometry.attributes && obj.geometry.attributes.position;
+        if (!posAttr || posAttr.count < 3) return;
+        sourceMeshes.push(obj);
+        meshToPlane.multiplyMatrices(planeInv, obj.matrixWorld);
+        for (let i = 0; i < posAttr.count; i++) {
+          vA.fromBufferAttribute(posAttr, i).applyMatrix4(meshToPlane);
+          localBox.expandByPoint(vA);
+        }
+      });
+    }
+
+    if (sourceMeshes.length === 0 || localBox.isEmpty()) return [];
+
+    const length = Math.max(1, localBox.max.z - localBox.min.z);
+    const span = Math.max(1, localBox.max.x - localBox.min.x);
+    const height = Math.max(1, localBox.max.y - localBox.min.y);
+    const fuselageHalfW = Math.max(1.8, span * 0.085);
+    const noseMaxZ = localBox.min.z + length * 0.28;
+    const tailMinZ = localBox.max.z - length * 0.28;
+    const finMinY = localBox.max.y - height * 0.52;
+
+    const sectionSpecs = {
+      leftWing:       { impulse: [-8.5, 4.8, -1.5], ang: [0.09, 0.13, 0.07] },
+      rightWing:      { impulse: [8.5, 4.8, -1.5],  ang: [-0.09, -0.13, 0.07] },
+      nose:           { impulse: [0.0, 4.0, -9.5],  ang: [0.11, 0.06, 0.09] },
+      centerFuselage: { impulse: [0.0, 2.8, -2.5],  ang: [0.05, 0.03, 0.07] },
+      tailFin:        { impulse: [1.5, 6.2, 7.5],   ang: [0.13, 0.11, 0.15] },
+      aftTail:        { impulse: [-1.5, 3.6, 6.5],  ang: [-0.08, 0.07, -0.10] }
+    };
+
+    const buckets = {};
+    for (const key of Object.keys(sectionSpecs)) {
+      buckets[key] = { pieces: [], box: new THREE.Box3(), triCount: 0 };
+    }
+
+    const classifyCentroid = (cx, cy, cz) => {
+      if (cx < -fuselageHalfW && cz > noseMaxZ * 0.9 && cz < tailMinZ) return 'leftWing';
+      if (cx > fuselageHalfW && cz > noseMaxZ * 0.9 && cz < tailMinZ) return 'rightWing';
+      if (cz < noseMaxZ) return 'nose';
+      if (cz > tailMinZ) return (cy > finMinY && Math.abs(cx) <= Math.max(1.8, span * 0.06)) ? 'tailFin' : 'aftTail';
+      return 'centerFuselage';
+    };
+
+    for (const mesh of sourceMeshes) {
+      const geom = mesh.geometry;
+      const posAttr = geom.attributes.position;
+      const origIndex = geom.index;
+      const indexCount = origIndex ? origIndex.count : posAttr.count;
+      if (Math.floor(indexCount / 3) <= 0) continue;
+
+      meshToPlane.multiplyMatrices(planeInv, mesh.matrixWorld);
+      const localIndices = {
+        leftWing: [], rightWing: [], nose: [], centerFuselage: [], tailFin: [], aftTail: []
+      };
+
+      for (let i = 0; i + 2 < indexCount; i += 3) {
+        const ia = origIndex ? origIndex.getX(i) : i;
+        const ib = origIndex ? origIndex.getX(i + 1) : i + 1;
+        const ic = origIndex ? origIndex.getX(i + 2) : i + 2;
+        vA.fromBufferAttribute(posAttr, ia).applyMatrix4(meshToPlane);
+        vB.fromBufferAttribute(posAttr, ib).applyMatrix4(meshToPlane);
+        vC.fromBufferAttribute(posAttr, ic).applyMatrix4(meshToPlane);
+        const cx = (vA.x + vB.x + vC.x) / 3;
+        const cy = (vA.y + vB.y + vC.y) / 3;
+        const cz = (vA.z + vB.z + vC.z) / 3;
+        const key = classifyCentroid(cx, cy, cz);
+        localIndices[key].push(ia, ib, ic);
+        buckets[key].box.expandByPoint(vA);
+        buckets[key].box.expandByPoint(vB);
+        buckets[key].box.expandByPoint(vC);
+        buckets[key].triCount += 1;
+      }
+
+      for (const key of Object.keys(localIndices)) {
+        const idxArr = localIndices[key];
+        if (idxArr.length === 0) continue;
+        const pieceGeom = new THREE.BufferGeometry();
+        for (const attrName of Object.keys(geom.attributes)) {
+          pieceGeom.setAttribute(attrName, geom.attributes[attrName]);
+        }
+        pieceGeom.setIndex(idxArr);
+        const pieceMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        buckets[key].pieces.push({ geom: pieceGeom, mat: pieceMat, matrix: meshToPlane.clone() });
+      }
+    }
+
+    const planeQuat = this.planeGroup.quaternion ? this.planeGroup.quaternion.clone() : new THREE.Quaternion();
+    const basePos = pos ? pos.clone() : this.planeGroup.position.clone();
+    const carryVel = this.velocity ? this.velocity.clone().multiplyScalar(0.03) : new THREE.Vector3();
+    const spawned = [];
+
+    for (const [key, bucket] of Object.entries(buckets)) {
+      if (bucket.pieces.length === 0 || bucket.box.isEmpty()) continue;
+      const chunkCenter = bucket.box.getCenter(new THREE.Vector3());
+      const chunkGroup = new THREE.Group();
+      chunkGroup.name = `Debris_${key}`;
+      chunkGroup.userData = { debrisSection: key, sourceAircraft: this.currentPlaneType || 'a320', triCount: bucket.triCount };
+
+      const innerOffset = new THREE.Group();
+      innerOffset.position.set(-chunkCenter.x, -chunkCenter.y, -chunkCenter.z);
+      for (const p of bucket.pieces) {
+        const pieceMesh = new THREE.Mesh(p.geom, p.mat);
+        pieceMesh.userData = { _disposeGeometryOnClear: true };
+        pieceMesh.applyMatrix4(p.matrix);
+        innerOffset.add(pieceMesh);
+      }
+      chunkGroup.add(innerOffset);
+
+      // 정확히 원래 비행기의 해당 부위 위치에서 분리되어 튕겨 나가도록 배치
+      const worldCenterOffset = chunkCenter.clone().applyQuaternion(planeQuat);
+      chunkGroup.position.copy(basePos).add(worldCenterOffset);
+      chunkGroup.quaternion.copy(planeQuat);
+
+      const spec = sectionSpecs[key];
+      const jitter = (s) => (Math.random() - 0.5) * s;
+      const localImpulse = new THREE.Vector3(
+        spec.impulse[0] + jitter(3.0),
+        spec.impulse[1] + Math.random() * 3.0,
+        spec.impulse[2] + jitter(3.0)
+      ).applyQuaternion(planeQuat);
+      localImpulse.y = Math.max(1.8, localImpulse.y);
+      chunkGroup.velocity = localImpulse.add(carryVel);
+      chunkGroup.angularVel = new THREE.Vector3(
+        spec.ang[0] + jitter(0.04),
+        spec.ang[1] + jitter(0.04),
+        spec.ang[2] + jitter(0.04)
+      );
+
+      this.scene.add(chunkGroup);
+      this.debrisPieces.push(chunkGroup);
+      spawned.push(chunkGroup);
+    }
+
+    return spawned;
+  },
+
   // 기체 구조 분해 잔해 조각 생성 (Debris Physics)
   spawnAirframeDebris(pos, rot) {
+    // 1. 실제 비행기 3D 메쉬에서 1:1 크기 구조 파편 직접 생성
+    const realChunks = this.buildAirframeMeshDebrisChunks(pos);
+    if (realChunks.length > 0) return realChunks;
+
+    // 2. 메쉬가 없는 폴백 환경에서도 기종 실제 전장(m)에 비례한 크기로 잔해 생성
+    const lengthByType = {
+      a320: 37.6, a320_detailed: 37.6, a320_simplified: 37.6,
+      a350: 66.8, b747: 70.6, dc10: 55.5, md80: 45.1,
+      concorde: 61.7, amphibian: 19.8, ancestor: 12.3
+    };
+    const scale = (lengthByType[(this.currentPlaneType || 'a320').toLowerCase()] || 37.6) / 37.6;
+
     const scorchedMat = new THREE.MeshStandardMaterial({
       color: 0x1e293b,
       roughness: 0.9,
@@ -1109,33 +1517,33 @@
     });
 
     // 1. 기수/조종석 잔해
-    const noseDebris = new THREE.Mesh(new THREE.ConeGeometry(2.6, 6, 12), scorchedMat);
-    noseDebris.position.copy(pos).add(new THREE.Vector3(0, 2, -10));
+    const noseDebris = new THREE.Mesh(new THREE.ConeGeometry(2.6 * scale, 9 * scale, 12), scorchedMat);
+    noseDebris.position.copy(pos).add(new THREE.Vector3(0, 2, -11 * scale));
     noseDebris.velocity = new THREE.Vector3((Math.random() - 0.5) * 6, 4 + Math.random() * 4, -8 - Math.random() * 6);
     noseDebris.angularVel = new THREE.Vector3(0.08, 0.05, 0.12);
     this.scene.add(noseDebris);
     this.debrisPieces.push(noseDebris);
 
     // 2. 좌측 주익 잔해
-    const leftWingDebris = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 4), burningWingMat);
-    leftWingDebris.position.copy(pos).add(new THREE.Vector3(-8, 1, 0));
+    const leftWingDebris = new THREE.Mesh(new THREE.BoxGeometry(16 * scale, 0.5 * scale, 5 * scale), burningWingMat);
+    leftWingDebris.position.copy(pos).add(new THREE.Vector3(-9 * scale, 1, 0));
     leftWingDebris.velocity = new THREE.Vector3(-7 - Math.random() * 5, 5 + Math.random() * 5, (Math.random() - 0.5) * 5);
     leftWingDebris.angularVel = new THREE.Vector3(0.1, 0.15, 0.06);
     this.scene.add(leftWingDebris);
     this.debrisPieces.push(leftWingDebris);
 
     // 3. 우측 주익 잔해
-    const rightWingDebris = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 4), burningWingMat);
-    rightWingDebris.position.copy(pos).add(new THREE.Vector3(8, 1, 0));
+    const rightWingDebris = new THREE.Mesh(new THREE.BoxGeometry(16 * scale, 0.5 * scale, 5 * scale), burningWingMat);
+    rightWingDebris.position.copy(pos).add(new THREE.Vector3(9 * scale, 1, 0));
     rightWingDebris.velocity = new THREE.Vector3(7 + Math.random() * 5, 5 + Math.random() * 5, (Math.random() - 0.5) * 5);
     rightWingDebris.angularVel = new THREE.Vector3(-0.1, -0.15, 0.06);
     this.scene.add(rightWingDebris);
     this.debrisPieces.push(rightWingDebris);
 
     // 4. 동체 중앙 잔해
-    const fuselageDebris = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 15, 16), scorchedMat);
+    const fuselageDebris = new THREE.Mesh(new THREE.CylinderGeometry(2.8 * scale, 2.8 * scale, 18 * scale, 16), scorchedMat);
     fuselageDebris.rotation.x = Math.PI / 2;
-    fuselageDebris.position.copy(pos).add(new THREE.Vector3(0, 2, 2));
+    fuselageDebris.position.copy(pos).add(new THREE.Vector3(0, 2, 2 * scale));
     fuselageDebris.velocity = new THREE.Vector3((Math.random() - 0.5) * 4, 3 + Math.random() * 3, -3);
     fuselageDebris.angularVel = new THREE.Vector3(0.04, 0.02, 0.08);
     this.scene.add(fuselageDebris);
@@ -1143,52 +1551,103 @@
 
     // 5. 엔진 잔해들 (구르고 튕김)
     for (let e = 0; e < 2; e++) {
-      const engDebris = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 5, 12), scorchedMat);
+      const engDebris = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * scale, 1.4 * scale, 5 * scale, 12), scorchedMat);
       engDebris.rotation.x = Math.PI / 2;
-      engDebris.position.copy(pos).add(new THREE.Vector3((e === 0 ? -7 : 7), 1, 0));
+      engDebris.position.copy(pos).add(new THREE.Vector3((e === 0 ? -7 : 7) * scale, 1, 0));
       engDebris.velocity = new THREE.Vector3((e === 0 ? -9 : 9), 6, -5 + Math.random() * 3);
       engDebris.angularVel = new THREE.Vector3(0.2, 0.1, 0.15);
       this.scene.add(engDebris);
       this.debrisPieces.push(engDebris);
     }
+    return this.debrisPieces;
   },
 
-  // 거대한 다단계 화염구, 충격파, 솟구치는 짙은 연기 기둥
+  // 거대한 다단계 분홍빛 화염구, 이중 충격파, 방사형 스파크 스트릭 & 연기 기둥
   createMassiveExplosion(pos) {
-    // 1. 충격파 링 (Ground Shockwave)
+    // 1-A. 지면 방사형 충격파 링 (Ground Shockwave Ring - 로즈 화이트)
     const shockRing = new THREE.Mesh(
-      new THREE.RingGeometry(1, 4, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffedd5, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
+      new THREE.RingGeometry(1.2, 4.4, 36),
+      new THREE.MeshBasicMaterial({ color: 0xfce7f3, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
     );
     shockRing.rotation.x = -Math.PI / 2;
     shockRing.position.copy(pos);
-    shockRing.position.y = 1.0;
+    shockRing.position.y = Math.max(1.2, pos.y - 2.0);
     shockRing.isShockwave = true;
-    shockRing.life = 0.9;
+    shockRing.life = 0.92;
     this.particles.push(shockRing);
     this.scene.add(shockRing);
 
-    // 2. 다단계 화염구 (Fireball Cluster)
-    const fireGeo = new THREE.SphereGeometry(3.5, 10, 10);
-    const fireColors = [0xffffff, 0xfacc15, 0xf97316, 0xef4444];
+    // 1-B. 입체 경사 충격파 링 (3D Pressure Wave Ring - 소프트 핑크)
+    const blastRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.8, 3.0, 32),
+      new THREE.MeshBasicMaterial({ color: 0xf9a8d4, transparent: true, opacity: 0.82, side: THREE.DoubleSide })
+    );
+    blastRing.rotation.set(Math.PI / 3.2, 0, Math.PI / 6);
+    blastRing.position.copy(pos);
+    blastRing.position.y += 1.5;
+    blastRing.isShockwave = true;
+    blastRing.life = 0.72;
+    this.particles.push(blastRing);
+    this.scene.add(blastRing);
+
+    // 1-C. 중심부 섬광 코어 (Luminous Pink-White Impact Flash Core)
+    const flashCore = new THREE.Mesh(
+      new THREE.SphereGeometry(5.2, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff1f2, transparent: true, opacity: 0.92 })
+    );
+    flashCore.position.copy(pos);
+    flashCore.position.y += 1.0;
+    flashCore.isShockwave = true;
+    flashCore.life = 0.48;
+    this.particles.push(flashCore);
+    this.scene.add(flashCore);
+
+    // 2. 다단계 분홍빛 화염구 (Soft Pink-Tinted Fireball Cluster)
+    const fireGeo = new THREE.SphereGeometry(3.2, 10, 10);
+    const fireColors = [0xfff1f2, 0xfbcfe8, 0xf9a8d4, 0xf472b6, 0xfb7185, 0xfda4af];
     for (let i = 0; i < 65; i++) {
       const color = fireColors[Math.floor(Math.random() * fireColors.length)];
-      const p = new THREE.Mesh(fireGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+      const p = new THREE.Mesh(fireGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92 }));
       p.position.copy(pos);
+      const scaleJitter = 0.7 + Math.random() * 0.75;
+      p.scale.setScalar(scaleJitter);
       const angle = Math.random() * Math.PI * 2;
-      const spd = 4.0 + Math.random() * 7.5;
-      p.velocity = new THREE.Vector3(Math.cos(angle) * spd, 3.0 + Math.random() * 6.5, Math.sin(angle) * spd);
-      p.life = 0.9 + Math.random() * 0.4;
+      const spd = 3.8 + Math.random() * 7.8;
+      p.velocity = new THREE.Vector3(Math.cos(angle) * spd, 2.8 + Math.random() * 6.8, Math.sin(angle) * spd);
+      p.life = 0.85 + Math.random() * 0.45;
       this.particles.push(p);
       this.scene.add(p);
     }
 
-    // 3. 하늘로 치솟는 짙은 연기 기둥 (Rising Black Smoke Column)
+    // 3. 방사형 충격 스파크 스트릭 (High-Velocity Rose-Gold Impact Streaks)
+    const streakGeo = new THREE.BoxGeometry(0.22, 0.22, 2.1);
+    const streakColors = [0xffe4e6, 0xfda4af, 0xf9a8d4, 0xfde68a];
+    for (let k = 0; k < 36; k++) {
+      const color = streakColors[Math.floor(Math.random() * streakColors.length)];
+      const streak = new THREE.Mesh(streakGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+      streak.position.copy(pos);
+      streak.position.y += 1.0;
+      const theta = Math.random() * Math.PI * 2;
+      const elev = 0.15 + Math.random() * 0.95;
+      const spd = 8.5 + Math.random() * 9.5;
+      const vx = Math.cos(theta) * Math.cos(elev) * spd;
+      const vy = Math.sin(elev) * spd;
+      const vz = Math.sin(theta) * Math.cos(elev) * spd;
+      streak.velocity = new THREE.Vector3(vx, vy, vz);
+      if (typeof streak.lookAt === 'function') {
+        streak.lookAt(pos.x + vx, pos.y + 1.0 + vy, pos.z + vz);
+      }
+      streak.life = 0.55 + Math.random() * 0.35;
+      this.particles.push(streak);
+      this.scene.add(streak);
+    }
+
+    // 4. 하늘로 치솟는 짙은 연기 기둥 (Rising Charcoal-Plum Smoke Column)
     const smokeGeo = new THREE.DodecahedronGeometry(4.5, 1);
-    const smokeColors = [0x1e293b, 0x334155, 0x475569];
+    const smokeColors = [0x1e293b, 0x334155, 0x4c1d3d];
     for (let s = 0; s < 50; s++) {
       const color = smokeColors[Math.floor(Math.random() * smokeColors.length)];
-      const smoke = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.85, roughness: 1.0 }));
+      const smoke = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.84, roughness: 1.0 }));
       smoke.position.copy(pos);
       smoke.position.x += (Math.random() - 0.5) * 8;
       smoke.position.z += (Math.random() - 0.5) * 8;
@@ -1200,14 +1659,32 @@
   },
 
   createDentSparks(pos) {
-    const pGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const pMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+    // 충격 지점 미니 펄스 링 + 방사형 로즈골드 스파크 스트릭
+    const pulseRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.4, 1.4, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfbcfe8, transparent: true, opacity: 0.88, side: THREE.DoubleSide })
+    );
+    pulseRing.rotation.x = -Math.PI / 2;
+    pulseRing.position.copy(pos);
+    pulseRing.position.y += 1.2;
+    pulseRing.isShockwave = true;
+    pulseRing.life = 0.45;
+    this.particles.push(pulseRing);
+    this.scene.add(pulseRing);
+
+    const pGeo = new THREE.BoxGeometry(0.18, 0.18, 1.1);
+    const sparkColors = [0xffe4e6, 0xfda4af, 0xf472b6];
     for (let i = 0; i < 24; i++) {
-      const p = new THREE.Mesh(pGeo, pMat);
+      const color = sparkColors[i % sparkColors.length];
+      const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
       p.position.copy(pos);
       p.position.y += 1.2;
-      p.velocity = new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3);
-      p.life = 0.5;
+      const vx = (Math.random() - 0.5) * 5.0;
+      const vy = 0.8 + Math.random() * 3.8;
+      const vz = (Math.random() - 0.5) * 5.0;
+      p.velocity = new THREE.Vector3(vx, vy, vz);
+      if (typeof p.lookAt === 'function') p.lookAt(pos.x + vx, pos.y + 1.2 + vy, pos.z + vz);
+      p.life = 0.48 + Math.random() * 0.18;
       this.particles.push(p);
       this.scene.add(p);
     }
