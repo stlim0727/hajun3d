@@ -582,6 +582,24 @@
       return;
     }
     this.overlay.classList.add('hidden');
+    if (this.defaultGeoAnchor && this.geoAnchor && (this.geoAnchor.lat !== this.defaultGeoAnchor.lat || this.geoAnchor.lon !== this.defaultGeoAnchor.lon)) {
+      if (typeof this.retargetGeo === 'function' && (this.geoLayer || this.geoIonToken)) {
+        this.retargetGeo(this.defaultGeoAnchor, {
+          simAnchor: { x: 160, y: 0, z: 1600 },
+          flatZones: [
+            { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+            { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+          ]
+        });
+      } else {
+        Object.assign(this.geoAnchor, this.defaultGeoAnchor);
+        if (typeof window !== 'undefined' && window.GEO_ANCHOR) Object.assign(window.GEO_ANCHOR, this.defaultGeoAnchor);
+        if (typeof window !== 'undefined' && window.GEO_SIM_ANCHOR) {
+          window.GEO_SIM_ANCHOR.x = 160;
+          window.GEO_SIM_ANCHOR.z = 0;
+        }
+      }
+    }
     this.startAirbornePhase('CLIMB_CRUISE', '상공 순항 비행 (Cruise)');
     const dest = (window.AirportIndicators && window.AirportIndicators.byIcao && window.AirportIndicators.byIcao[this.selectedDestinationIcao])
       || (window.AirportIndicators && window.AirportIndicators.destination);
@@ -599,12 +617,51 @@
     const airport = (nav && nav.byIcao && nav.byIcao[icao]) || (nav && nav.destination);
     const targetLat = place ? place.lat : (airport ? airport.lat : 37.4690);
     const targetLon = place ? place.lon : (airport ? airport.lon : 126.4510);
-    const target = (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function')
-      ? window.geoLocalDelta({ lat: targetLat, lon: targetLon, old: { x: 0, z: 0 } }).local
-      : { x: 160, z: -45000 };
+    const targetElev = place ? (Number(place.elevationM) || 0) : ((airport && airport.elevationM) || 0);
+    const baseAnchor = this.defaultGeoAnchor
+      || (typeof window !== 'undefined' ? (window.DEFAULT_GEO_ANCHOR || window.GEO_ANCHOR) : null);
+    const isDefaultAirport = !place && baseAnchor
+      && Math.abs(targetLat - baseAnchor.lat) < 0.02
+      && Math.abs(targetLon - baseAnchor.lon) < 0.02;
+
+    let target = { x: 160, z: -45000 };
+    if (isDefaultAirport) {
+      target = { x: 160, z: 0 };
+    } else if (typeof window !== 'undefined' && window.Geodesy && typeof window.Geodesy.wgs84ToGame === 'function' && baseAnchor) {
+      target = window.Geodesy.wgs84ToGame(targetLat, targetLon, baseAnchor);
+    } else if (typeof window !== 'undefined' && typeof window.geoLocalDelta === 'function') {
+      target = window.geoLocalDelta({ lat: targetLat, lon: targetLon, old: { x: 0, z: 0 } }).local;
+    }
+
+    // Re-anchor 3D Tiles and terrain physics to the approach destination so the
+    // WGS84 tangent plane sits under the aircraft instead of dropping kilometres
+    // below due to Earth curvature over long distances from Gimhae.
+    let token = this.geoIonToken || (typeof window !== 'undefined' ? (window.GEO_ION_TOKEN || '') : '');
+    try { token = token || localStorage.getItem('hajun3d.ionToken') || ''; } catch (_) { /* storage disabled */ }
+    let tilesActive = Boolean(this.geoLayer);
+    if (typeof this.retargetGeo === 'function' && (token || this.geoLayer)) {
+      const retargeted = isDefaultAirport
+        ? this.retargetGeo(this.defaultGeoAnchor || baseAnchor, {
+            ionToken: token,
+            simAnchor: { x: 160, y: 0, z: 1600 },
+            flatZones: [
+              { minX: -900, maxX: 900, minZ: -2600, maxZ: 2600, height: 0, blendMargin: 500 },
+              { minX: -2400, maxX: 2200, minZ: -49500, maxZ: -40500, height: 0, blendMargin: 1400 }
+            ]
+          })
+        : this.retargetGeo(
+            { lat: targetLat, lon: targetLon, height: targetElev },
+            { ionToken: token, simAnchor: { x: target.x, y: 0, z: target.z } }
+          );
+      tilesActive = Boolean(retargeted) || Boolean(this.geoLayer);
+    }
+    if (!tilesActive && !place && icao === 'RKSI') {
+      target = { x: 160, z: -45000 };
+    }
+
     this.startAirbornePhase('FINAL_APPROACH', '착륙 접근 (Final Approach)', {
       x: target.x,
-      y: 450 + (place ? (Number(place.elevationM) || 0) : ((airport && airport.elevationM) || 0)),
+      y: 450 + targetElev,
       z: target.z + 5000,
       gearDown: true,
       flapIndex: 3
