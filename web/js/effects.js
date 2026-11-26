@@ -1378,12 +1378,12 @@
     const finMinY = localBox.max.y - height * 0.52;
 
     const sectionSpecs = {
-      leftWing:       { impulse: [-8.5, 4.8, -1.5], ang: [0.09, 0.13, 0.07] },
-      rightWing:      { impulse: [8.5, 4.8, -1.5],  ang: [-0.09, -0.13, 0.07] },
-      nose:           { impulse: [0.0, 4.0, -9.5],  ang: [0.11, 0.06, 0.09] },
-      centerFuselage: { impulse: [0.0, 2.8, -2.5],  ang: [0.05, 0.03, 0.07] },
-      tailFin:        { impulse: [1.5, 6.2, 7.5],   ang: [0.13, 0.11, 0.15] },
-      aftTail:        { impulse: [-1.5, 3.6, 6.5],  ang: [-0.08, 0.07, -0.10] }
+      leftWing:       { impulse: [-1.8, 1.4, -0.3], ang: [0.035, 0.045, 0.03] },
+      rightWing:      { impulse: [1.8, 1.4, -0.3],  ang: [-0.035, -0.045, 0.03] },
+      nose:           { impulse: [0.0, 1.3, -2.0],  ang: [0.04, 0.025, 0.035] },
+      centerFuselage: { impulse: [0.0, 0.9, -0.5],  ang: [0.02, 0.015, 0.025] },
+      tailFin:        { impulse: [0.5, 1.9, 1.7],   ang: [0.05, 0.04, 0.055] },
+      aftTail:        { impulse: [-0.5, 1.1, 1.5],  ang: [-0.03, 0.025, -0.035] }
     };
 
     const buckets = {};
@@ -1444,7 +1444,7 @@
 
     const planeQuat = this.planeGroup.quaternion ? this.planeGroup.quaternion.clone() : new THREE.Quaternion();
     const basePos = pos ? pos.clone() : this.planeGroup.position.clone();
-    const carryVel = this.velocity ? this.velocity.clone().multiplyScalar(0.03) : new THREE.Vector3();
+    const carryVel = this.velocity ? this.velocity.clone().multiplyScalar(0.008) : new THREE.Vector3();
     const spawned = [];
 
     for (const [key, bucket] of Object.entries(buckets)) {
@@ -1472,16 +1472,16 @@
       const spec = sectionSpecs[key];
       const jitter = (s) => (Math.random() - 0.5) * s;
       const localImpulse = new THREE.Vector3(
-        spec.impulse[0] + jitter(3.0),
-        spec.impulse[1] + Math.random() * 3.0,
-        spec.impulse[2] + jitter(3.0)
+        spec.impulse[0] + jitter(0.6),
+        spec.impulse[1] + Math.random() * 0.7,
+        spec.impulse[2] + jitter(0.6)
       ).applyQuaternion(planeQuat);
-      localImpulse.y = Math.max(1.8, localImpulse.y);
+      localImpulse.y = Math.max(0.6, localImpulse.y);
       chunkGroup.velocity = localImpulse.add(carryVel);
       chunkGroup.angularVel = new THREE.Vector3(
-        spec.ang[0] + jitter(0.04),
-        spec.ang[1] + jitter(0.04),
-        spec.ang[2] + jitter(0.04)
+        spec.ang[0] + jitter(0.015),
+        spec.ang[1] + jitter(0.015),
+        spec.ang[2] + jitter(0.015)
       );
 
       this.scene.add(chunkGroup);
@@ -1784,19 +1784,23 @@
     }
   },
 
-  // 잔해 조각 물리 (Debris Gravity & Ground Bounce)
+  // 잔해 조각 물리 (Debris Gravity, Air Drag & Ground Settle)
   updateDebrisPhysics(dt) {
+    const airDrag = Math.max(0.0, 1.0 - dt * 1.1);
     this.debrisPieces.forEach(p => {
       if (p.velocity) {
         p.position.add(p.velocity.clone().multiplyScalar(dt * 15));
+        p.velocity.x *= airDrag;
+        p.velocity.z *= airDrag;
         p.velocity.y -= 9.8 * dt * 2.2; // 중력
 
-        // 지면 바운스
+        // 지면 바운스 및 마찰 정착 (과도한 분산 방지)
         if (p.position.y <= 1.0) {
           p.position.y = 1.0;
-          p.velocity.y = -p.velocity.y * 0.4;
-          p.velocity.x *= 0.85;
-          p.velocity.z *= 0.85;
+          p.velocity.y = Math.abs(p.velocity.y) > 0.35 ? -p.velocity.y * 0.25 : 0;
+          p.velocity.x *= 0.62;
+          p.velocity.z *= 0.62;
+          if (p.angularVel) p.angularVel.multiplyScalar(0.75);
         }
       }
       if (p.angularVel) {
