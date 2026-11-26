@@ -881,9 +881,9 @@
     const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.planeGroup.quaternion);
 
     if (!this._dmgSparkMat) {
-      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfda4af });
-      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xf472b6 });
-      this._dmgSmokeMat = new THREE.MeshBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.72 });
+      this._dmgSparkMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+      this._dmgFireMat = new THREE.MeshBasicMaterial({ color: 0xdc2626 });
+      this._dmgSmokeMat = new THREE.MeshBasicMaterial({ color: 0x1f2937, transparent: true, opacity: 0.78 });
       this._dmgGeo = new THREE.BoxGeometry(0.45, 0.45, 1.05);
     }
 
@@ -1562,12 +1562,12 @@
     return this.debrisPieces;
   },
 
-  // 거대한 다단계 분홍빛 화염구, 이중 충격파, 방사형 스파크 스트릭 & 연기 기둥
+  // 거대한 다단계 붉은 화염구, 이중 충격파, 방사형 스파크 스트릭 & 검은 항공유 연기 기둥
   createMassiveExplosion(pos) {
-    // 1-A. 지면 방사형 충격파 링 (Ground Shockwave Ring - 로즈 화이트)
+    // 1-A. 지면 방사형 충격파 링 (Ground Shockwave Ring - 먼지/열기 링)
     const shockRing = new THREE.Mesh(
       new THREE.RingGeometry(1.2, 4.4, 36),
-      new THREE.MeshBasicMaterial({ color: 0xfce7f3, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xffedd5, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
     );
     shockRing.rotation.x = -Math.PI / 2;
     shockRing.position.copy(pos);
@@ -1577,10 +1577,10 @@
     this.particles.push(shockRing);
     this.scene.add(shockRing);
 
-    // 1-B. 입체 경사 충격파 링 (3D Pressure Wave Ring - 소프트 핑크)
+    // 1-B. 입체 경사 충격파 링 (3D Pressure Wave Ring - 붉은 열파)
     const blastRing = new THREE.Mesh(
       new THREE.RingGeometry(0.8, 3.0, 32),
-      new THREE.MeshBasicMaterial({ color: 0xf9a8d4, transparent: true, opacity: 0.82, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
     );
     blastRing.rotation.set(Math.PI / 3.2, 0, Math.PI / 6);
     blastRing.position.copy(pos);
@@ -1590,10 +1590,10 @@
     this.particles.push(blastRing);
     this.scene.add(blastRing);
 
-    // 1-C. 중심부 섬광 코어 (Luminous Pink-White Impact Flash Core)
+    // 1-C. 중심부 섬광 코어 (Incandescent Flash Core)
     const flashCore = new THREE.Mesh(
       new THREE.SphereGeometry(5.2, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0xfff1f2, transparent: true, opacity: 0.92 })
+      new THREE.MeshBasicMaterial({ color: 0xfef3c7, transparent: true, opacity: 0.92 })
     );
     flashCore.position.copy(pos);
     flashCore.position.y += 1.0;
@@ -1602,9 +1602,9 @@
     this.particles.push(flashCore);
     this.scene.add(flashCore);
 
-    // 2. 다단계 분홍빛 화염구 (Soft Pink-Tinted Fireball Cluster)
+    // 2. 다단계 실제 항공유 붉은 화염구 (Realistic Red/Crimson Aviation Fireball Cluster)
     const fireGeo = new THREE.SphereGeometry(3.2, 10, 10);
-    const fireColors = [0xfff1f2, 0xfbcfe8, 0xf9a8d4, 0xf472b6, 0xfb7185, 0xfda4af];
+    const fireColors = [0x991b1b, 0xb91c1c, 0xdc2626, 0xef4444, 0xea580c, 0xf97316];
     for (let i = 0; i < 65; i++) {
       const color = fireColors[Math.floor(Math.random() * fireColors.length)];
       const p = new THREE.Mesh(fireGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92 }));
@@ -1619,9 +1619,9 @@
       this.scene.add(p);
     }
 
-    // 3. 방사형 충격 스파크 스트릭 (High-Velocity Rose-Gold Impact Streaks)
+    // 3. 방사형 충격 불꽃 스트릭 (High-Velocity Red-Orange Ember Streaks)
     const streakGeo = new THREE.BoxGeometry(0.22, 0.22, 2.1);
-    const streakColors = [0xffe4e6, 0xfda4af, 0xf9a8d4, 0xfde68a];
+    const streakColors = [0xdc2626, 0xef4444, 0xf97316, 0xfbbf24];
     for (let k = 0; k < 36; k++) {
       const color = streakColors[Math.floor(Math.random() * streakColors.length)];
       const streak = new THREE.Mesh(streakGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
@@ -1642,12 +1642,12 @@
       this.scene.add(streak);
     }
 
-    // 4. 하늘로 치솟는 짙은 연기 기둥 (Rising Charcoal-Plum Smoke Column)
+    // 4. 하늘로 치솟는 짙은 검은 항공유 연기 기둥 (Thick Black Jet-Fuel Smoke Column)
     const smokeGeo = new THREE.DodecahedronGeometry(4.5, 1);
-    const smokeColors = [0x1e293b, 0x334155, 0x4c1d3d];
+    const smokeColors = [0x0f172a, 0x1e293b, 0x27272a];
     for (let s = 0; s < 50; s++) {
       const color = smokeColors[Math.floor(Math.random() * smokeColors.length)];
-      const smoke = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.84, roughness: 1.0 }));
+      const smoke = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.88, roughness: 1.0 }));
       smoke.position.copy(pos);
       smoke.position.x += (Math.random() - 0.5) * 8;
       smoke.position.z += (Math.random() - 0.5) * 8;
@@ -1659,10 +1659,10 @@
   },
 
   createDentSparks(pos) {
-    // 충격 지점 미니 펄스 링 + 방사형 로즈골드 스파크 스트릭
+    // 충격 지점 미니 펄스 링 + 방사형 금속 불꽃 스트릭
     const pulseRing = new THREE.Mesh(
       new THREE.RingGeometry(0.4, 1.4, 24),
-      new THREE.MeshBasicMaterial({ color: 0xfbcfe8, transparent: true, opacity: 0.88, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xfed7aa, transparent: true, opacity: 0.82, side: THREE.DoubleSide })
     );
     pulseRing.rotation.x = -Math.PI / 2;
     pulseRing.position.copy(pos);
@@ -1673,7 +1673,7 @@
     this.scene.add(pulseRing);
 
     const pGeo = new THREE.BoxGeometry(0.18, 0.18, 1.1);
-    const sparkColors = [0xffe4e6, 0xfda4af, 0xf472b6];
+    const sparkColors = [0xef4444, 0xf97316, 0xfbbf24];
     for (let i = 0; i < 24; i++) {
       const color = sparkColors[i % sparkColors.length];
       const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));

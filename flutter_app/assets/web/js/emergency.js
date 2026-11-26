@@ -487,9 +487,9 @@
     if (this.engineExhaustPoints.length === 0) return;
     const leftEnginePos = this.engineExhaustPoints[0].clone().applyQuaternion(this.planeGroup.quaternion).add(this.planeGroup.position);
 
-    // 1. 분홍빛 화염 (Soft Pink-Tinted Engine Fire)
+    // 1. 실제 항공유 붉은 화염 (Realistic Red Engine Fire)
     const fireGeo = new THREE.BoxGeometry(0.9, 0.9, 1.2);
-    const fireColors = [0xfb7185, 0xf472b6, 0xfbcfe8];
+    const fireColors = [0xb91c1c, 0xdc2626, 0xef4444, 0xf97316];
     const fireMat = new THREE.MeshBasicMaterial({
       color: fireColors[Math.floor(Math.random() * fireColors.length)],
       transparent: true,
